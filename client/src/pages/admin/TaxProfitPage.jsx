@@ -366,9 +366,11 @@ export function TaxProfitPage() {
   }
 
   function calculateFinalPrice(baseCost, profitPct, taxPct) {
-    const profitAmount = (baseCost * (profitPct || 0)) / 100
-    const taxAmount = (baseCost * (taxPct || 0)) / 100
-    return Math.round(baseCost + profitAmount + taxAmount)
+    const cost = Number(baseCost) || 0
+    const profitAmount = (cost * (profitPct || 0)) / 100
+    const subtotal = cost + profitAmount
+    const taxAmount = (subtotal * (taxPct || 0)) / 100
+    return Math.round((subtotal + taxAmount) * 100) / 100
   }
 
   async function handleExport(kind) {
@@ -640,7 +642,7 @@ export function TaxProfitPage() {
       <MotionReveal delay={0.15}>
         <SurfaceCard
           title="Catalog Pricing & Profit Margins"
-          description={`Final Price = Purchase Cost + Profit + Tax · Currency: ${currency}`}
+          description={`Final Price = (Purchase Cost + Profit) + Tax on Subtotal · Currency: ${currency}`}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {selectedIds.length > 0 && (

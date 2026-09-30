@@ -92,7 +92,7 @@ export function exportTaxProfitPdf({ items = [], currency = 'PKR' } = {}) {
   doc.setFontSize(9)
   doc.text(`Currency: ${code}  ·  Generated: ${formatDateTimeInline(new Date())}`, margin, y)
   y += 4
-  doc.text('Final Price = Purchase Cost + Profit + Tax', margin, y)
+  doc.text('Final Price = (Purchase Cost + Profit) + Tax on Subtotal', margin, y)
   y += 6
 
   const cols = [
