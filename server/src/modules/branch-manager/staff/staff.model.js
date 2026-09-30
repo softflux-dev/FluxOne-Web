@@ -6,6 +6,7 @@ import {
   STAFF_ROLE_TO_DESIGNATION,
 } from './staff.access.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
+import { displayRefSearchHex, normalizeSearchQuery } from '../../../utils/displayRef.util.js'
 
 function httpError(status, message) {
   const error = new Error(message)
@@ -57,8 +58,13 @@ export async function listStaff(tenantId, filters = {}) {
   const limit = Math.min(50, Math.max(1, Number(filters.limit) || 8))
   const offset = (page - 1) * limit
 
+  // STF-XXXXXXXX display refs are UI-only — match via compact UUID hex
+  const q = normalizeSearchQuery(filters.q) || null
+  const qHex = q ? displayRefSearchHex(q, 'STF') : null
+
   const params = [
-    filters.q || null,
+    q,
+    qHex,
     filters.designationId || null,
     filters.status || null,
     filters.branchId || null,
@@ -79,11 +85,15 @@ export async function listStaff(tenantId, filters = {}) {
           OR u.full_name ILIKE '%' || $2 || '%'
           OR u.email ILIKE '%' || $2 || '%'
           OR s.id::text ILIKE '%' || $2 || '%'
+          OR (
+            $3::text IS NOT NULL
+            AND REPLACE(LOWER(s.id::text), '-', '') ILIKE '%' || $3 || '%'
+          )
         )
-        AND ($3::uuid IS NULL OR s.designation_id = $3)
-        AND ($4::text IS NULL OR s.status = $4)
-        AND ($5::uuid IS NULL OR s.branch_id = $5)
-        AND ($6::text IS NULL OR r.slug = $6)
+        AND ($4::uuid IS NULL OR s.designation_id = $4)
+        AND ($5::text IS NULL OR s.status = $5)
+        AND ($6::uuid IS NULL OR s.branch_id = $6)
+        AND ($7::text IS NULL OR r.slug = $7)
     `,
     params,
   )
@@ -106,13 +116,17 @@ export async function listStaff(tenantId, filters = {}) {
           OR u.full_name ILIKE '%' || $2 || '%'
           OR u.email ILIKE '%' || $2 || '%'
           OR s.id::text ILIKE '%' || $2 || '%'
+          OR (
+            $3::text IS NOT NULL
+            AND REPLACE(LOWER(s.id::text), '-', '') ILIKE '%' || $3 || '%'
+          )
         )
-        AND ($3::uuid IS NULL OR s.designation_id = $3)
-        AND ($4::text IS NULL OR s.status = $4)
-        AND ($5::uuid IS NULL OR s.branch_id = $5)
-        AND ($6::text IS NULL OR r.slug = $6)
+        AND ($4::uuid IS NULL OR s.designation_id = $4)
+        AND ($5::text IS NULL OR s.status = $5)
+        AND ($6::uuid IS NULL OR s.branch_id = $6)
+        AND ($7::text IS NULL OR r.slug = $7)
       ORDER BY COALESCE(s.joined_at, s.created_at) DESC, u.full_name
-      LIMIT $7 OFFSET $8
+      LIMIT $8 OFFSET $9
     `,
     [...params, limit, offset],
   )

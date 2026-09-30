@@ -2,6 +2,17 @@ import { Clock3, Package, ShoppingBag } from 'lucide-react'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { useCurrency } from '@/hooks/useCurrency'
 import { BRAND } from '@/lib/constants'
+import { formatClockTime } from '@/lib/formatDateTime'
+
+// Peak window API is 24h ("10:00–11:00") → show 12h AM/PM
+function formatPeakWindow(peakHour) {
+  if (!peakHour || peakHour === '—') return '—'
+  const parts = String(peakHour).split(/[–-]/).map((p) => p.trim()).filter(Boolean)
+  if (parts.length < 2) return formatClockTime(peakHour) || peakHour
+  const start = formatClockTime(parts[0]) || parts[0]
+  const end = formatClockTime(parts[1]) || parts[1]
+  return `${start}–${end}`
+}
 
 export function DailySalesSummary({ summary = {}, className }) {
   const { format } = useCurrency()
@@ -19,7 +30,7 @@ export function DailySalesSummary({ summary = {}, className }) {
     },
     {
       label: 'Peak window',
-      value: summary.peakHour || '—',
+      value: formatPeakWindow(summary.peakHour),
       sub: summary.peakHourSales != null ? format(summary.peakHourSales) : null,
       icon: Clock3,
     },

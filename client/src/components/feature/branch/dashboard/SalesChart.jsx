@@ -10,6 +10,7 @@ import {
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { useCurrency } from '@/hooks/useCurrency'
 import { BRAND } from '@/lib/constants'
+import { formatClockTime } from '@/lib/formatDateTime'
 
 const CHART_H = 260
 
@@ -41,8 +42,10 @@ function formatAxisTick(value) {
 }
 
 export function SalesChart({ series, className }) {
+  // API sends 24h labels ("14:00"); convert to 12h AM/PM for display
   const data = (Array.isArray(series) ? series : []).map((row) => ({
     ...row,
+    hourLabel: formatClockTime(row.hour) || row.hour,
     chartValue: Number(row.revenue ?? row.sales ?? 0),
     txCount: Number(row.sales ?? 0),
   }))
@@ -64,7 +67,7 @@ export function SalesChart({ series, className }) {
             </defs>
             <CartesianGrid stroke="#e8edf3" />
             <XAxis
-              dataKey="hour"
+              dataKey="hourLabel"
               tick={{ fill: '#64748b', fontSize: 11 }}
               axisLine={{ stroke: '#e2e8f0' }}
               tickLine={false}

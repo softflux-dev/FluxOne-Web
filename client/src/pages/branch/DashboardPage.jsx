@@ -143,7 +143,6 @@ export function DashboardPage() {
           </MotionReveal>
           <MotionReveal delay={0.09} className="h-full">
             <ProductSalesInsights
-              productMix={data.productMix}
               topProducts={data.topProducts}
               lowProducts={data.lowProducts}
               className="h-full"
@@ -155,13 +154,13 @@ export function DashboardPage() {
           <CounterSalesCard counters={data.counters} />
         </MotionReveal>
 
-        <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2 xl:gap-6">
+        <div className="grid grid-cols-1 items-stretch">
           <MotionReveal delay={0.13} className="h-full">
             <StaffPerformanceTable staff={data.staff} className="h-full" />
           </MotionReveal>
-          <MotionReveal delay={0.16} className="h-full">
+          {/* <MotionReveal delay={0.16} className="h-full">
             <InventoryStatusChart inventory={data.inventory} className="h-full" />
-          </MotionReveal>
+          </MotionReveal> */}
         </div>
 
         {/* Phase 2 — restore when AI Business Insights ships

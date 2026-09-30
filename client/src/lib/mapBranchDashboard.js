@@ -9,13 +9,13 @@ export function emptyBranchDashboard(date = new Date().toISOString().slice(0, 10
   return {
     branchName: '',
     date,
+    // KPI shape — Profit (not Gross Profit); no Average Ticket on UI
     kpis: {
       totalSales: 0,
       profit: 0,
       saleCount: 0,
       profitChangePct: 0,
       salesChangePct: 0,
-      avgTicket: 0,
     },
     dailySummary: {
       revenue: 0,
@@ -25,7 +25,7 @@ export function emptyBranchDashboard(date = new Date().toISOString().slice(0, 10
       peakHourSales: 0,
     },
     salesByHour: [],
-    productMix: [],
+    productMix: [], // legacy empty — Mix Chart removed from UI
     topProducts: [],
     lowProducts: [],
     counters: [],

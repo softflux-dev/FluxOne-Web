@@ -1,98 +1,34 @@
-import { useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-import { TrendingUp, TrendingDown, Layers, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { useState } from 'react'
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { useCurrency } from '@/hooks/useCurrency'
 import { formatPct } from '@/lib/mapBranchDashboard'
-import { Badge } from '@/components/ui/badge'
 
-const CHART_H = 260
-const MIX_COLORS = ['#8E238F', '#412283', '#16a34a', '#2563eb', '#ea580c', '#ef4444', '#0d9488', '#db2777']
-
-function ProductTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null
-  const row = payload[0]?.payload
-  return (
-    <div className="rounded-xl border border-border bg-white px-3 py-2 text-xs shadow-lg">
-      <p className="font-semibold text-slate-800">{row.name}</p>
-      <p className="mt-1 text-slate-600">{row.units} units sold</p>
-    </div>
-  )
-}
-
-function buildMixRows(productMix, topProducts, lowProducts) {
-  if (Array.isArray(productMix) && productMix.length > 0) {
-    return productMix.map((item) => ({
-      name: item.name,
-      units: Number(item.units ?? item.sales) || 0,
-    }))
-  }
-
-  const merged = [...(topProducts || []), ...(lowProducts || [])]
-  const seen = new Set()
-  const fromParts = merged
-    .filter((item) => {
-      if (!item?.name || seen.has(item.name)) return false
-      seen.add(item.name)
-      return true
-    })
-    .map((item) => ({
-      name: item.name,
-      units: Number(item.units ?? item.sales) || 0,
-    }))
-    .sort((a, b) => b.units - a.units)
-
-  return fromParts
-}
+const LIST_MIN_H = 260
 
 export function ProductSalesInsights({
-  productMix = [],
   topProducts = [],
   lowProducts = [],
   className,
 }) {
   const { format } = useCurrency()
-  const [viewMode, setViewMode] = useState('chart') // 'chart' | 'top' | 'low'
-
-  const rows = useMemo(
-    () => buildMixRows(productMix, topProducts, lowProducts),
-    [productMix, topProducts, lowProducts],
-  )
+  // Default: Top Products (highest sales)
+  const [viewMode, setViewMode] = useState('top') // 'top' | 'low'
 
   const tops = Array.isArray(topProducts) ? topProducts : []
   const lows = Array.isArray(lowProducts) ? lowProducts : []
   const hasLowList = lows.length > 0
 
-  // If lowest tab isn't available (≤3 sold SKUs), keep user on a valid view
+  // If low list empty, stay on top tab
   const activeMode = viewMode === 'low' && !hasLowList ? 'top' : viewMode
 
   return (
     <SurfaceCard
       className={className}
-      title="Product Sales & Mix"
-      description="Higher vs lower volume products & velocity"
+      title="Product Sales"
+      description="Highest vs lowest units sold"
       actions={
         <div className="flex rounded-lg bg-slate-100 p-0.5 border border-slate-200">
-          <button
-            type="button"
-            onClick={() => setViewMode('chart')}
-            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
-              activeMode === 'chart'
-                ? 'bg-white text-purple-950 shadow-2xs font-bold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Mix Chart
-          </button>
           <button
             type="button"
             onClick={() => setViewMode('top')}
@@ -103,7 +39,7 @@ export function ProductSalesInsights({
             }`}
           >
             <TrendingUp className="size-3 text-emerald-600" />
-            Top Higher
+            Top Products
           </button>
           <button
             type="button"
@@ -111,8 +47,8 @@ export function ProductSalesInsights({
             disabled={!hasLowList}
             title={
               hasLowList
-                ? 'Lowest performers (excluding top sellers)'
-                : 'Needs more than 3 sold products to show a separate lowest list'
+                ? 'Products with the lowest sales'
+                : 'Needs more sold products to show a separate lowest list'
             }
             className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
               !hasLowList
@@ -123,48 +59,16 @@ export function ProductSalesInsights({
             }`}
           >
             <TrendingDown className="size-3 text-rose-600" />
-            Lowest Drop
+            Low Products
           </button>
         </div>
       }
     >
-      {activeMode === 'chart' && (
-        <div className="w-full" style={{ height: CHART_H, minHeight: CHART_H }}>
-          <ResponsiveContainer width="100%" height={CHART_H}>
-            <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-              <CartesianGrid stroke="#e8edf3" horizontal={false} />
-              <XAxis
-                type="number"
-                domain={[0, 'auto']}
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={{ stroke: '#e2e8f0' }}
-                tickLine={false}
-                tickCount={6}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={65}
-                tick={{ fill: '#334155', fontSize: 12, fontWeight: 500 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip content={<ProductTooltip />} cursor={{ fill: 'rgba(142,35,143,0.05)' }} />
-              <Bar dataKey="units" radius={[0, 6, 6, 0]} barSize={18}>
-                {rows.map((entry, index) => (
-                  <Cell key={entry.name} fill={MIX_COLORS[index % MIX_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
       {activeMode === 'top' && (
-        <div className="space-y-3" style={{ minHeight: CHART_H }}>
+        <div className="space-y-3" style={{ minHeight: LIST_MIN_H }}>
           <p className="text-xs font-medium text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 flex items-center gap-1.5">
             <ArrowUpRight className="size-3.5 text-emerald-600" />
-            Top products generating highest volume and revenue increases
+            Products with the highest units sold in this period
           </p>
           <div className="grid grid-cols-1 gap-2.5">
             {tops.length === 0 ? (
@@ -172,7 +76,7 @@ export function ProductSalesInsights({
             ) : (
               tops.map((item, idx) => (
                 <div
-                  key={item.name}
+                  key={item.id || item.name}
                   className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-emerald-200 transition-all"
                 >
                   <div className="flex items-center gap-3">
@@ -181,7 +85,7 @@ export function ProductSalesInsights({
                     </span>
                     <div>
                       <p className="font-bold text-xs sm:text-sm text-slate-900">{item.name}</p>
-                      <p className="text-[11px] text-slate-500">{item.units} units sold today</p>
+                      <p className="text-[11px] text-slate-500">{item.units} units sold</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -198,15 +102,15 @@ export function ProductSalesInsights({
       )}
 
       {activeMode === 'low' && hasLowList && (
-        <div className="space-y-3" style={{ minHeight: CHART_H }}>
+        <div className="space-y-3" style={{ minHeight: LIST_MIN_H }}>
           <p className="text-xs font-medium text-rose-800 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100 flex items-center gap-1.5">
             <ArrowDownRight className="size-3.5 text-rose-600" />
-            Lowest performers among products outside the top sellers
+            Products with the lowest units sold in this period
           </p>
           <div className="grid grid-cols-1 gap-2.5">
             {lows.map((item, idx) => (
               <div
-                key={item.name}
+                key={item.id || item.name}
                 className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-rose-200 transition-all"
               >
                 <div className="flex items-center gap-3">
@@ -215,7 +119,7 @@ export function ProductSalesInsights({
                   </span>
                   <div>
                     <p className="font-bold text-xs sm:text-sm text-slate-900">{item.name}</p>
-                    <p className="text-[11px] text-slate-500">{item.units} units sold today</p>
+                    <p className="text-[11px] text-slate-500">{item.units} units sold</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -232,3 +136,5 @@ export function ProductSalesInsights({
     </SurfaceCard>
   )
 }
+
+export default ProductSalesInsights

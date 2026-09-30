@@ -604,7 +604,7 @@ async function getDashboardProducts(tenantId, { from, to, branchId }) {
         AND ($3::date IS NULL OR s.sold_at::date <= $3::date)
         AND ($4::uuid IS NULL OR s.branch_id = $4)
       GROUP BY p.id, p.name
-      ORDER BY sales DESC
+      ORDER BY units DESC, sales DESC
     `,
     [from, to, branchId],
   )
@@ -718,7 +718,7 @@ export async function getFullBranchDashboard(tenantId, filters = {}) {
         AND ($3::date IS NULL OR s.sold_at::date <= $3::date)
         AND ($4::uuid IS NULL OR s.branch_id = $4)
       GROUP BY p.id, p.name
-      ORDER BY sales DESC
+      ORDER BY units DESC, sales DESC
     `
 
     // Prefer POS till name/code; fall back to hardware name/code (never raw UUID)
@@ -867,29 +867,34 @@ export async function getFullBranchDashboard(tenantId, filters = {}) {
         : `${String(peakHourNum).padStart(2, '0')}:00–${String(peakHourNum + 1).padStart(2, '0')}:00`
     const peakHourSales = peakRow ? peakRow[1].revenue : 0
 
-    const prevSalesById = new Map(
-      (prevProductsRes.rows || []).map((p) => [p.id, Number(p.sales) || 0]),
+    // Rank by units sold (quantity), not revenue — changePct also vs prior units
+    const prevUnitsById = new Map(
+      (prevProductsRes.rows || []).map((p) => [p.id, Number(p.units) || 0]),
     )
-    const soldProducts = (productsRes.rows || []).map((p) => {
-      const sales = Number(p.sales) || 0
-      return {
-        id: p.id,
-        name: p.name,
-        units: Number(p.units) || 0,
-        sales,
-        changePct: pctChange(sales, prevSalesById.get(p.id) || 0),
-      }
-    })
+    const soldProducts = (productsRes.rows || [])
+      .map((p) => {
+        const units = Number(p.units) || 0
+        const sales = Number(p.sales) || 0
+        return {
+          id: p.id,
+          name: p.name,
+          units,
+          sales,
+          changePct: pctChange(units, prevUnitsById.get(p.id) || 0),
+        }
+      })
+      .sort((a, b) => b.units - a.units || b.sales - a.sales)
 
-    const productMix = soldProducts.map((p) => ({ name: p.name, units: p.units }))
-    // Top N highest; lowest only when more than N sold SKUs so lists never overlap
+    // Top = highest units; Low = lowest units (exclude top so lists never overlap)
     const TOP_N = 3
     const LOW_N = 3
     const topProducts = soldProducts.slice(0, TOP_N)
-    const lowProducts =
-      soldProducts.length > TOP_N
-        ? soldProducts.slice(TOP_N).slice(-LOW_N).reverse()
-        : []
+    const topIds = new Set(topProducts.map((p) => p.id))
+    const lowProducts = soldProducts
+      .filter((p) => !topIds.has(p.id))
+      .slice()
+      .sort((a, b) => a.units - b.units || a.sales - b.sales)
+      .slice(0, LOW_N)
 
     const staff = (staffRes.rows || []).map((row) => {
       const rating = Number(row.rating) || 0
@@ -925,7 +930,8 @@ export async function getFullBranchDashboard(tenantId, filters = {}) {
         peakHourSales,
       },
       salesByHour,
-      productMix,
+      // Mix Chart removed from UI — keep light payload for any legacy consumers
+      productMix: soldProducts.map((p) => ({ name: p.name, units: p.units })),
       topProducts,
       lowProducts,
       counters: (countersRes.rows || []).map((c) => ({

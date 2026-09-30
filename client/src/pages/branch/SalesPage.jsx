@@ -1,22 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  Search,
-  Printer,
-  AlertTriangle,
-  Receipt,
-  CircleDollarSign,
-  CreditCard,
-  ArrowDownRight,
-  TrendingUp,
-} from 'lucide-react'
+import { Printer, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
-// import { StatCard } from '@/components/shared/StatsCards'
+import { ProductCatalogFilters } from '@/components/shared/ProductCatalogFilters'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-// import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -29,7 +17,15 @@ import {
   TableActionsCell,
   TablePagination,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogCancelButton } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogCancelButton,
+} from '@/components/ui/dialog'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -45,9 +41,9 @@ import { useCurrency } from '@/hooks/useCurrency'
 export function SalesPage() {
   const { format, currency: tenantCurrency } = useCurrency()
   const [sales, setSales] = useState([])
-  // const [kpis, setKpis] = useState({ totalSales: 0, totalRefunds: 0, transactionCount: 0, totalPaid: 0, totalReturns: 0 })
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState([])
+  const [catalogProducts, setCatalogProducts] = useState([])
   const {
     page,
     setPage,
@@ -58,18 +54,18 @@ export function SalesPage() {
     slice: pagedSales,
   } = useClientPagination(sales)
 
-  // Filters — input is instant; API uses debounced query
+  // Filters — search debounced; catalog cascade is instant
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedQ = useDebouncedValue(searchQuery, 300)
   const [filterDate, setFilterDate] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterSubcategory, setFilterSubcategory] = useState('')
+  const [filterProduct, setFilterProduct] = useState('')
+  const [filterVariant, setFilterVariant] = useState('')
   const fetchSeq = useRef(0)
 
-  // Refund dialog
   const [refundTarget, setRefundTarget] = useState(null)
   const [refunding, setRefunding] = useState(false)
-
-  // Invoice view dialog
   const [invoiceTarget, setInvoiceTarget] = useState(null)
 
   const fetchSales = async () => {
@@ -78,30 +74,17 @@ export function SalesPage() {
     const params = {}
     if (debouncedQ.trim()) params.q = debouncedQ.trim()
     if (filterDate) params.date = filterDate
-    if (filterCategory) params.categoryId = filterCategory
+    if (filterVariant) params.variantId = filterVariant
+    else if (filterProduct) params.productId = filterProduct
+    else if (filterSubcategory) params.subcategoryId = filterSubcategory
+    else if (filterCategory) params.categoryId = filterCategory
 
     const res = await apiClient.get(endpoints.branch.sales.list, params)
-    // Drop stale responses so fast typing does not flash old results
     if (seq !== fetchSeq.current) return
 
     setLoading(false)
     if (res.success && res.data) {
-      const items = res.data.items || []
-      setSales(items)
-      
-      // Calculate exact KPIs from returned items
-      const transactionCount = items.length
-      const totalSales = items.reduce((acc, s) => acc + parseFloat(s.finalAmount || 0), 0)
-      const totalPaid = items.reduce((acc, s) => acc + parseFloat(s.paidAmount || 0), 0)
-      const totalReturns = items.reduce((acc, s) => acc + parseFloat(s.returnAmount || 0), 0)
-
-      setKpis({
-        totalSales,
-        totalRefunds: items.filter((s) => s.status === 'refunded').length,
-        transactionCount,
-        totalPaid,
-        totalReturns,
-      })
+      setSales(res.data.items || [])
     }
   }
 
@@ -112,17 +95,61 @@ export function SalesPage() {
     }
   }
 
+  const fetchCatalogProducts = async () => {
+    const res = await apiClient.get('/inventory/products', { limit: 200, status: 'active' })
+    if (res.success && res.data) {
+      setCatalogProducts(res.data.items || res.data || [])
+    }
+  }
+
+  // Load variants for selected product (Variant filter only if they exist)
+  useEffect(() => {
+    if (!filterProduct) return
+    const existing = catalogProducts.find((p) => p.id === filterProduct)
+    if (existing?.variants?.length) return
+
+    let cancelled = false
+    ;(async () => {
+      const res = await apiClient.get(`/inventory/products/${filterProduct}`)
+      if (cancelled || !res.success || !res.data) return
+      const variants = res.data.variants || []
+      setCatalogProducts((prev) =>
+        prev.map((p) => (p.id === filterProduct ? { ...p, variants } : p)),
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [filterProduct])
+
   useEffect(() => {
     void fetchSales()
-  }, [debouncedQ, filterDate, filterCategory])
+  }, [debouncedQ, filterDate, filterCategory, filterSubcategory, filterProduct, filterVariant])
 
   useEffect(() => {
     void fetchCategories()
+    void fetchCatalogProducts()
   }, [])
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedQ, filterDate, filterCategory])
+  }, [debouncedQ, filterDate, filterCategory, filterSubcategory, filterProduct, filterVariant])
+
+  const handleCatalogChange = (patch = {}) => {
+    if ('categoryId' in patch) setFilterCategory(patch.categoryId || '')
+    if ('subcategoryId' in patch) setFilterSubcategory(patch.subcategoryId || '')
+    if ('productId' in patch) setFilterProduct(patch.productId || '')
+    if ('variantId' in patch) setFilterVariant(patch.variantId || '')
+  }
+
+  const handleClearFilters = () => {
+    setSearchQuery('')
+    setFilterDate('')
+    setFilterCategory('')
+    setFilterSubcategory('')
+    setFilterProduct('')
+    setFilterVariant('')
+  }
 
   const handleRefund = async () => {
     if (!refundTarget) return
@@ -157,87 +184,27 @@ export function SalesPage() {
         />
       </MotionHeader>
 
-      {/* Reusable KPI Stat Cards (4 Columns) */}
-      {/* <MotionReveal delay={0.02}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            index={0}
-            label="Transactions"
-            value={kpis.transactionCount || sales.length || 0}
-            subtitle="Total sales orders processed"
-            badge="Orders"
-            icon={Receipt}
-          />
-          <StatCard
-            index={1}
-            label="Net Sales"
-            value={`${money(kpis.totalSales)}`}
-            subtitle="Gross transaction revenue"
-            badge="Gross"
-            icon={CircleDollarSign}
-          />
-          <StatCard
-            index={2}
-            label="Paid Amount"
-            value={`${money(kpis.totalPaid)}`}
-            subtitle="Settled cash & POS cards"
-            badge="Settled"
-            icon={CreditCard}
-          />
-          <StatCard
-            index={3}
-            label="Returns & Refunds"
-            value={`${money(kpis.totalReturns)}`}
-            subtitle={`${kpis.totalRefunds || 0} refunds recorded`}
-            badge="Returns"
-            icon={ArrowDownRight}
-          />
-        </div>
-      </MotionReveal> */}
-
-      {/* Search & Filters */}
       <MotionReveal delay={0.04}>
-        <SurfaceCard padding="compact">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:items-end">
-            <div className="space-y-1.5">
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="sales-search"
-                  value={searchQuery}
-                  placeholder="Search sale ID / tracking ID"
-                  className="pl-9"
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Input
-                id="sales-date"
-                type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <NativeSelect
-                id="sales-category"
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-              >
-                <option value="">All categories</option>
-                {categories.filter((c) => !c.parentId).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-        </SurfaceCard>
+        <ProductCatalogFilters
+          searchId="sales-search"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search sale ID (SAL-INV-… or INV-…)"
+          showDate
+          dateId="sales-date"
+          dateValue={filterDate}
+          onDateChange={setFilterDate}
+          categories={categories}
+          products={catalogProducts}
+          categoryId={filterCategory}
+          subcategoryId={filterSubcategory}
+          productId={filterProduct}
+          variantId={filterVariant}
+          onChange={handleCatalogChange}
+          onClear={handleClearFilters}
+        />
       </MotionReveal>
 
-      {/* Table grid matching exactly to image, using Shadcn Table component */}
       <MotionReveal delay={0.06}>
         <SurfaceCard
           title="Sales Transactions"
@@ -256,7 +223,6 @@ export function SalesPage() {
                   const exchangeItems = (sale.items || []).filter((i) => i.isExchange)
                   const indexStr = String(sale.saleNumber || sale.id.slice(0, 4))
                   const salId = `SAL-${indexStr}`
-                  const trkId = `TRK-${indexStr}`
                   const soldAtLabel = formatDateTime(sale.soldAt)
 
                   return (
@@ -269,7 +235,6 @@ export function SalesPage() {
                           <span className="font-mono text-xs font-bold text-purple-800 select-all">
                             {salId}
                           </span>
-                          <p className="mt-0.5 font-mono text-[10px] text-slate-400">{trkId}</p>
                           <p className="mt-1 text-xs text-slate-500">{soldAtLabel}</p>
                         </div>
                         {sale.status === 'refunded' ? (
@@ -282,7 +247,10 @@ export function SalesPage() {
                         ) : null}
                       </div>
 
-                      <p className="mt-2 truncate text-sm text-slate-700" title={soldItems.map((i) => i.name).join(', ')}>
+                      <p
+                        className="mt-2 truncate text-sm text-slate-700"
+                        title={soldItems.map((i) => i.name).join(', ')}
+                      >
                         {soldItems.map((i) => i.name).join(', ') || '—'}
                       </p>
                       {exchangeItems.length > 0 ? (
@@ -294,15 +262,21 @@ export function SalesPage() {
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                         <div>
                           <span className="text-slate-400">Final</span>
-                          <p className="font-bold text-slate-900">{money(sale.finalAmount, sale.currency)}</p>
+                          <p className="font-bold text-slate-900">
+                            {money(sale.finalAmount, sale.currency)}
+                          </p>
                         </div>
                         <div>
                           <span className="text-slate-400">Paid</span>
-                          <p className="font-semibold text-slate-700">{money(sale.paidAmount, sale.currency)}</p>
+                          <p className="font-semibold text-slate-700">
+                            {money(sale.paidAmount, sale.currency)}
+                          </p>
                         </div>
                         <div>
                           <span className="text-slate-400">Tax</span>
-                          <p className="text-slate-600">{money(sale.tax_amount || sale.taxAmount, sale.currency)}</p>
+                          <p className="text-slate-600">
+                            {money(sale.tax_amount || sale.taxAmount, sale.currency)}
+                          </p>
                         </div>
                         <div>
                           <span className="text-slate-400">Discount</span>
@@ -359,7 +333,6 @@ export function SalesPage() {
                       const exchangeItems = (sale.items || []).filter((i) => i.isExchange)
                       const indexStr = String(sale.saleNumber || sale.id.slice(0, 4))
                       const salId = `SAL-${indexStr}`
-                      const trkId = `TRK-${indexStr}`
 
                       return (
                         <TableRow key={sale.id} className="group">
@@ -367,7 +340,6 @@ export function SalesPage() {
                             <span className="font-mono text-xs font-bold text-purple-800 select-all">
                               {salId}
                             </span>
-                            <div className="mt-0.5 font-mono text-[10px] text-slate-400">{trkId}</div>
                           </TableCell>
                           <TableCell className="text-slate-600">
                             <DateTimeLines value={sale.soldAt} />
@@ -447,8 +419,12 @@ export function SalesPage() {
         </SurfaceCard>
       </MotionReveal>
 
-      {/* Refund Approval Dialog */}
-      <Dialog open={Boolean(refundTarget)} onOpenChange={(open) => { if (!open) setRefundTarget(null) }}>
+      <Dialog
+        open={Boolean(refundTarget)}
+        onOpenChange={(open) => {
+          if (!open) setRefundTarget(null)
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-600">
@@ -456,14 +432,20 @@ export function SalesPage() {
               Approve Refund request?
             </DialogTitle>
             <DialogDescription>
-              This will mark the selected invoice as **Refunded** and return the full payment amount back to the customer.
+              This will mark the selected invoice as **Refunded** and return the full payment amount
+              back to the customer.
             </DialogDescription>
           </DialogHeader>
 
           {refundTarget && (
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm space-y-1">
-              <div><strong>Invoice:</strong> {refundTarget.saleNumber}</div>
-              <div><strong>Amount to Refund:</strong> {money(refundTarget.finalAmount, refundTarget.currency)}</div>
+              <div>
+                <strong>Invoice:</strong> {refundTarget.saleNumber}
+              </div>
+              <div>
+                <strong>Amount to Refund:</strong>{' '}
+                {money(refundTarget.finalAmount, refundTarget.currency)}
+              </div>
             </div>
           )}
 
@@ -481,8 +463,12 @@ export function SalesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Invoice Print Preview Dialog */}
-      <Dialog open={Boolean(invoiceTarget)} onOpenChange={(open) => { if (!open) setInvoiceTarget(null) }}>
+      <Dialog
+        open={Boolean(invoiceTarget)}
+        onOpenChange={(open) => {
+          if (!open) setInvoiceTarget(null)
+        }}
+      >
         <DialogContent className="max-w-sm p-6 bg-white font-mono text-xs border border-slate-300 rounded-none shadow-none print:p-0 print:border-none print:shadow-none">
           {invoiceTarget && (
             <div className="space-y-4">
@@ -501,7 +487,9 @@ export function SalesPage() {
                 </div>
                 {(invoiceTarget.items || []).map((i) => (
                   <div key={i.id} className="flex justify-between text-slate-600">
-                    <span>{i.name} (x{parseInt(i.quantity)})</span>
+                    <span>
+                      {i.name} (x{parseInt(i.quantity)})
+                    </span>
                     <span>{money(i.lineTotal, invoiceTarget.currency)}</span>
                   </div>
                 ))}
@@ -513,11 +501,19 @@ export function SalesPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Tax Amount</span>
-                  <span>{money(invoiceTarget.tax_amount || invoiceTarget.taxAmount, invoiceTarget.currency)}</span>
+                  <span>
+                    {money(invoiceTarget.tax_amount || invoiceTarget.taxAmount, invoiceTarget.currency)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Discount</span>
-                  <span>- {money(invoiceTarget.discount_amount || invoiceTarget.discountAmount, invoiceTarget.currency)}</span>
+                  <span>
+                    -{' '}
+                    {money(
+                      invoiceTarget.discount_amount || invoiceTarget.discountAmount,
+                      invoiceTarget.currency,
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between font-bold text-sm border-t border-dashed border-slate-400 pt-2">
                   <span>FINAL TOTAL</span>
@@ -542,4 +538,5 @@ export function SalesPage() {
     </div>
   )
 }
+
 export default SalesPage

@@ -1,6 +1,5 @@
 import { StatCard } from '@/components/shared/StatsCards'
 import {
-  Banknote,
   CircleDollarSign,
   Receipt,
   TrendingUp,
@@ -8,6 +7,7 @@ import {
 import { useCurrency } from '@/hooks/useCurrency'
 import { cn } from '@/lib/utils'
 
+// KPI cards — Total Sales, Profit, Transactions (no Average Ticket)
 const KPI_META = [
   {
     key: 'totalSales',
@@ -18,7 +18,7 @@ const KPI_META = [
   },
   {
     key: 'profit',
-    label: 'Gross Profit',
+    label: 'Profit',
     subtitle: 'Net margin earnings today',
     icon: TrendingUp,
     money: true,
@@ -30,20 +30,13 @@ const KPI_META = [
     icon: Receipt,
     money: false,
   },
-  {
-    key: 'avgTicket',
-    label: 'Average Ticket',
-    subtitle: 'Average basket size per order',
-    icon: Banknote,
-    money: true,
-  },
 ]
 
 export function BranchKpiCards({ kpis = {}, className }) {
   const { format } = useCurrency()
 
   return (
-    <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4', className)}>
+    <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3', className)}>
       {KPI_META.map((meta, index) => {
         const Icon = meta.icon
         const value = kpis[meta.key]
@@ -57,7 +50,7 @@ export function BranchKpiCards({ kpis = {}, className }) {
             index={index}
             label={meta.label}
             value={display}
-            subtitle={meta.subtitle}
+            // subtitle={meta.subtitle}
             icon={Icon}
           />
         )
