@@ -8,7 +8,8 @@ export function isEntityActive(value) {
 }
 
 //
-// Unified Open / Close (Active / Inactive) pill used across staff, products, suppliers.
+// Unified Active / Inactive pill used across staff, products, suppliers.
+// Modules may override labels (e.g. products Open/Close) but filter + badge must match.
 // interactive=false → display-only capsule (not a CTA; no click / hover lift).
 // onChange receives the next boolean (true = activate) when interactive.
 //

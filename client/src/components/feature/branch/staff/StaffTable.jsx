@@ -111,34 +111,34 @@ function AssignedHardwareCell({ row }) {
   )
 }
 
-// clean and optimized code — Block / Open live in Actions; Status is display-only
+// Status actions — Ban / Unlock; labels match Active / Inactive filter + badge
 function StaffRowActions({ row, onEdit, onDelete, onBlock, onUnblock, statusLoading }) {
-  const open = isEntityActive(row.status)
+  const active = isEntityActive(row.status)
   return (
     <RowActionButtons
       onEdit={() => onEdit?.(row)}
       onBlock={() => onBlock?.(row)}
       onUnblock={() => onUnblock?.(row)}
-      isActive={open}
+      isActive={active}
       onDelete={() => onDelete?.(row)}
       editLabel={`Edit ${row.fullName || 'staff'}`}
-      blockLabel={`Block ${row.fullName || 'staff'}`}
-      unblockLabel={`Open ${row.fullName || 'staff'}`}
+      blockLabel={`Set ${row.fullName || 'staff'} inactive`}
+      unblockLabel={`Set ${row.fullName || 'staff'} active`}
       deleteLabel={`Delete ${row.fullName || 'staff'}`}
       disabled={statusLoading}
     />
   )
 }
 
-// Open / Block capsule — showcase only (soft delete CTA is the Ban icon in Actions)
+// Active / Inactive capsule — matches Status filter; Ban/Unlock in Actions
 function StaffStatusBadge({ row, loading }) {
   return (
     <EntityStatusToggle
       status={row.status}
       loading={loading}
       interactive={false}
-      activeLabel="Open"
-      inactiveLabel="Block"
+      activeLabel="Active"
+      inactiveLabel="Inactive"
       inactiveTone="danger"
     />
   )
