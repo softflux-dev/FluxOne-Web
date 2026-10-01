@@ -5,13 +5,13 @@ import { firstValidationMessage } from '@/lib/validation/fieldErrors'
 
 // Weekday tokens — match server schedule.validation WEEK_DAYS / branches.working_days
 export const WEEK_DAY_OPTIONS = [
-  { value: 'mon', label: 'Mon' },
-  { value: 'tue', label: 'Tue' },
-  { value: 'wed', label: 'Wed' },
-  { value: 'thu', label: 'Thu' },
-  { value: 'fri', label: 'Fri' },
-  { value: 'sat', label: 'Sat' },
-  { value: 'sun', label: 'Sun' },
+  { value: 'mon', label: 'Mon', fullLabel: 'Monday' },
+  { value: 'tue', label: 'Tue', fullLabel: 'Tuesday' },
+  { value: 'wed', label: 'Wed', fullLabel: 'Wednesday' },
+  { value: 'thu', label: 'Thu', fullLabel: 'Thursday' },
+  { value: 'fri', label: 'Fri', fullLabel: 'Friday' },
+  { value: 'sat', label: 'Sat', fullLabel: 'Saturday' },
+  { value: 'sun', label: 'Sun', fullLabel: 'Sunday' },
 ]
 
 export const FULL_WEEK_DAYS = WEEK_DAY_OPTIONS.map((d) => d.value)

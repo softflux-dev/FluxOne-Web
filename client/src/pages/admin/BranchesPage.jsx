@@ -39,7 +39,6 @@ import { BRAND } from '@/lib/constants'
 import { formatDateTimeInline, formatClockTime } from '@/lib/formatDateTime'
 import { toastSuccess, toastError } from '@/lib/toast'
 import {
-  FULL_WEEK_DAYS,
   formatWorkingDaysShort,
   normalizeWorkingDays,
   validateWorkingDaysFields,
@@ -119,8 +118,8 @@ const emptyForm = {
   location: '',
   openingTime: '',
   closingTime: '',
-  // Default full week — matches migration / server omit→full week
-  workingDays: [...FULL_WEEK_DAYS],
+  // Empty until Admin picks days (dropdown multi-select)
+  workingDays: [],
   imageFile: null,
   managerImageFile: null,
   managerName: '',
@@ -364,7 +363,7 @@ export function BranchesPage() {
       location: b.location || '',
       openingTime: timeInputValue(b.openingTime),
       closingTime: timeInputValue(b.closingTime),
-      workingDays: days.length ? days : [...FULL_WEEK_DAYS],
+      workingDays: days,
       imageFile: null,
       managerImageFile: null,
       managerName: b.manager?.name || '',
@@ -1036,7 +1035,7 @@ export function BranchesPage() {
                   these hours when set.
                 </p>
 
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5">
                   <Label id="branchWorkingDays" className="text-xs">
                     Working days *
                   </Label>

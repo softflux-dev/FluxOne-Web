@@ -24,7 +24,6 @@ import {
   validateStaffFormFields,
 } from '@/lib/validation/staffSchedule'
 import {
-  FULL_WEEK_DAYS,
   HARDWARE_TYPE_OPTIONS,
   formatWorkingDaysShort,
   normalizeWorkingDays,
@@ -54,7 +53,7 @@ const EMPTY_FORM = {
   password: '',
   fullName: '',
   role: 'inventory_manager',
-  workingDays: [...FULL_WEEK_DAYS],
+  workingDays: [],
   hardwareType: '',
   hardwareDeviceId: '',
   scheduleStart: '',
@@ -90,7 +89,7 @@ function resolveRole(initialStaff) {
 }
 
 function emptyBranchContext() {
-  return { openingTime: '', closingTime: '', workingDays: [...FULL_WEEK_DAYS] }
+  return { openingTime: '', closingTime: '', workingDays: [] }
 }
 
 // Add / Edit staff modal for Branch Manager.
@@ -128,7 +127,7 @@ export function StaffFormDialog({
         nextBranch = {
           openingTime: timeInputValue(meRes.data.openingTime),
           closingTime: timeInputValue(meRes.data.closingTime),
-          workingDays: branchDays.length ? branchDays : [...FULL_WEEK_DAYS],
+          workingDays: branchDays,
         }
       }
       setBranchHours(nextBranch)
@@ -239,7 +238,7 @@ export function StaffFormDialog({
       hours = {
         openingTime: timeInputValue(meRes.data.openingTime),
         closingTime: timeInputValue(meRes.data.closingTime),
-        workingDays: branchDays.length ? branchDays : [...FULL_WEEK_DAYS],
+        workingDays: branchDays,
       }
       setBranchHours(hours)
     }
@@ -360,7 +359,7 @@ export function StaffFormDialog({
               ) : null}
             </div>
 
-            <div className="space-y-1.5 sm:col-span-2">
+            <div className="space-y-1.5">
               <Label id="staff-working-days">Working days *</Label>
               <WorkingDaysPicker
                 value={form.workingDays}

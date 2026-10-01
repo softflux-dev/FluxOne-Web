@@ -1,6 +1,5 @@
 import { formatClockTime } from '@/lib/formatDateTime'
 import {
-  FULL_WEEK_DAYS,
   normalizeWorkingDays,
 } from '@/lib/validation/branchForms'
 
@@ -165,9 +164,7 @@ export function validateStaffForm(fields, opts = {}) {
   return Object.values(errors)[0] || null
 }
 
-// Default staff days: intersection with branch calendar, or full week
-export function defaultStaffWorkingDays(branchWorkingDays) {
-  const branchDays = normalizeWorkingDays(branchWorkingDays)
-  if (branchDays.length) return branchDays
-  return [...FULL_WEEK_DAYS]
+// Default staff days: empty — user picks from branch calendar
+export function defaultStaffWorkingDays(_branchWorkingDays) {
+  return []
 }
