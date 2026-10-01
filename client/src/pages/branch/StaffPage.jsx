@@ -257,10 +257,14 @@ export function StaffPage() {
               q={localQ}
               status={filters.status || ''}
               role={filters.role || ''}
+              hardwareType={filters.hardwareType || ''}
               onChange={(patch) => {
                 if (patch.q !== undefined) onSearchChange(patch.q)
                 if (patch.status !== undefined) updateFilters({ status: patch.status })
                 if (patch.role !== undefined) updateFilters({ role: patch.role })
+                if (patch.hardwareType !== undefined) {
+                  updateFilters({ hardwareType: patch.hardwareType })
+                }
               }}
             />
           </MotionReveal>
@@ -274,7 +278,8 @@ export function StaffPage() {
               onPageSizeChange={(limit) => updateFilters({ limit })}
               onEdit={openEdit}
               onDelete={setDeleteTarget}
-              onStatusChange={handleStatusChange}
+              onBlock={(row) => handleStatusChange(row, false)}
+              onUnblock={(row) => handleStatusChange(row, true)}
               statusUpdatingId={statusUpdatingId}
             />
           </MotionReveal>

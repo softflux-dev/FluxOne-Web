@@ -1,5 +1,13 @@
 // Add Item wizard constants + combination builder (API-backed create).
-import { formatMoneyInput, roundMoney } from '@/lib/money'
+import { roundMoney } from '@/lib/money'
+
+// Form display for prices — whole units only (10, not 10.01)
+function formatPriceInput(value) {
+  if (value === '' || value == null) return ''
+  const n = Number(value)
+  if (!Number.isFinite(n)) return ''
+  return String(Math.round(n))
+}
 
 export const ADD_ITEM_TABS = [
   { id: 'basic', label: 'Basic Info' },
@@ -242,9 +250,9 @@ export function variantsToCombinationRows(variants = []) {
       parts,
       sku: v.itemCode || '',
       barcode: v.barcode || '',
-      // Format for MoneyInput — 80.00 → "80", keep real cents like "2.87"
-      purchasePrice: formatMoneyInput(v.purchasePrice),
-      sellingPrice: formatMoneyInput(v.sellingPrice),
+      // Whole-unit prices for spinner / typing (10 → 11, never 10.01)
+      purchasePrice: formatPriceInput(v.purchasePrice),
+      sellingPrice: formatPriceInput(v.sellingPrice),
       openingStock: String(v.quantity ?? 0),
       lowStockThreshold:
         v.reorderPoint === 0 || v.reorderPoint ? String(v.reorderPoint) : '',
@@ -345,7 +353,7 @@ export function buildEditItemApiPayload({
       description,
       categoryId,
       subcategoryId,
-      type: 'single',
+      // type omitted — locked after create (API rejects type changes)
       scale: 'unit',
       ...(itemCode ? { itemCode } : {}),
       ...(barcode ? { barcode } : {}),
@@ -399,7 +407,7 @@ export function buildEditItemApiPayload({
     description,
     categoryId,
     subcategoryId,
-    type: 'variant',
+    // type omitted — locked after create (API rejects type changes)
     scale: 'unit',
     status: form.status === 'inactive' ? 'inactive' : 'active',
     variants,

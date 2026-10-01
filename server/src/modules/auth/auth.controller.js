@@ -44,6 +44,7 @@ function publicUser(user) {
     branchName: user.branchName || null,
     openingTime: user.openingTime || null,
     closingTime: user.closingTime || null,
+    workingDays: Array.isArray(user.workingDays) ? user.workingDays : [],
     imageUrl: user.imageUrl || null,
   }
 }

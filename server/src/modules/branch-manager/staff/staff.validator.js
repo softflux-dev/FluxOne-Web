@@ -8,7 +8,7 @@ import {
   optionalUuid,
   paginationQuery,
 } from '../shared.validator.js'
-import { refineStaffSchedule } from './schedule.validation.js'
+import { refineStaffSchedule, workingDaysFieldSchema } from './schedule.validation.js'
 
 const staffRoleEnum = z.enum([
   'inventory_manager',
@@ -16,6 +16,14 @@ const staffRoleEnum = z.enum([
   'production_staff',
   'delivery_staff',
   'website_manager',
+])
+
+const hardwareTypeEnum = z.enum([
+  'Computers',
+  'Scanners',
+  'Printers',
+  'Telephone',
+  'Other',
 ])
 
 const staffStatusEnum = z
@@ -47,6 +55,9 @@ export const listStaffSchema = z.object({
     status: staffStatusEnum.optional(),
     branchId: optionalUuid,
     role: staffRoleEnum.optional(),
+    // Filter staff by assigned hardware type
+    hardwareType: hardwareTypeEnum.optional(),
+    type: hardwareTypeEnum.optional(),
   }),
 })
 
@@ -69,6 +80,7 @@ export const createStaffSchema = z
       scheduleBreakStart: optionalTime,
       scheduleBreakEnd: optionalTime,
       scheduleEnd: optionalTime,
+      workingDays: workingDaysFieldSchema,
     }),
     query: empty,
     params: empty,
@@ -93,6 +105,7 @@ export const updateStaffSchema = z
       scheduleBreakStart: optionalTime,
       scheduleBreakEnd: optionalTime,
       scheduleEnd: optionalTime,
+      workingDays: workingDaysFieldSchema,
       password: z.string().min(8).optional(),
     }),
     query: empty,

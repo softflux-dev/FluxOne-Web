@@ -64,17 +64,22 @@ export async function createStaff(req, res) {
   const hoursError = await rejectIfShiftOutsideBranchHours(res, req.tenantId, branchId, body)
   if (hoursError) return hoursError
 
-  const passwordHash = await bcrypt.hash(body.password, BCRYPT_COST)
-  const created = await createStaffUser(req.tenantId, {
-    ...body,
-    role: body.role,
-    roleId: ROLE_IDS[body.role],
-    passwordHash,
-    createdBy: req.user.id,
-    branchId,
-    imageUrl: resolveUploadUrl(req.file, req),
-  })
-  return success(res, created, 201)
+  try {
+    const passwordHash = await bcrypt.hash(body.password, BCRYPT_COST)
+    const created = await createStaffUser(req.tenantId, {
+      ...body,
+      role: body.role,
+      roleId: ROLE_IDS[body.role],
+      passwordHash,
+      createdBy: req.user.id,
+      branchId,
+      imageUrl: resolveUploadUrl(req.file, req),
+    })
+    return success(res, created, 201)
+  } catch (err) {
+    if (err.status) return fail(res, err.message, err.status)
+    throw err
+  }
 }
 
 export async function staffDetail(req, res) {
@@ -125,11 +130,16 @@ export async function patchStaff(req, res) {
     if (hoursError) return hoursError
   }
 
-  const row = await updateStaff(req.tenantId, req.validated.params.id, body, {
-    branchId: bmBranchFilter(req),
-  })
-  if (!row) return fail(res, 'Staff not found', 404)
-  return success(res, row)
+  try {
+    const row = await updateStaff(req.tenantId, req.validated.params.id, body, {
+      branchId: bmBranchFilter(req),
+    })
+    if (!row) return fail(res, 'Staff not found', 404)
+    return success(res, row)
+  } catch (err) {
+    if (err.status) return fail(res, err.message, err.status)
+    throw err
+  }
 }
 
 export async function patchStaffStatus(req, res) {

@@ -17,8 +17,13 @@ export function buildStaffPayload(fields) {
     scheduleBreakStart,
     scheduleBreakEnd,
     scheduleEnd,
+    workingDays,
     image,
   } = fields
+
+  const days = Array.isArray(workingDays)
+    ? workingDays.map((d) => String(d).trim().toLowerCase()).filter(Boolean)
+    : undefined
 
   const base = {
     fullName: String(fullName || '').trim(),
@@ -30,6 +35,7 @@ export function buildStaffPayload(fields) {
     scheduleBreakStart: scheduleBreakStart || undefined,
     scheduleBreakEnd: scheduleBreakEnd || undefined,
     scheduleEnd: scheduleEnd || undefined,
+    ...(days !== undefined ? { workingDays: days } : {}),
   }
 
   if (password) base.password = password
@@ -39,6 +45,10 @@ export function buildStaffPayload(fields) {
     Object.entries(base).forEach(([key, value]) => {
       if (key === 'hardwareDeviceId') {
         form.append(key, value || '')
+        return
+      }
+      if (key === 'workingDays') {
+        form.append(key, JSON.stringify(value || []))
         return
       }
       if (value !== undefined && value !== null && value !== '') {
@@ -56,6 +66,8 @@ function defaultFilters(overrides = {}) {
   return {
     q: '',
     status: '',
+    role: '',
+    hardwareType: '',
     page: 1,
     limit: STAFF_PAGE_SIZE,
     ...overrides,
@@ -86,6 +98,9 @@ export const fetchBranchStaff = createAsyncThunk(
       q: next.q || undefined,
       status: next.status || undefined,
       role: next.role || undefined,
+      // Server accepts hardwareType | type
+      hardwareType: next.hardwareType || undefined,
+      type: next.hardwareType || undefined,
     })
     if (!result.success) {
       return rejectWithValue(result.error || 'Failed to load staff')
@@ -162,6 +177,7 @@ const branchStaffSlice = createSlice({
         patch.q !== undefined ||
         patch.status !== undefined ||
         patch.role !== undefined ||
+        patch.hardwareType !== undefined ||
         patch.limit !== undefined
       ) {
         next.page = patch.page ?? 1

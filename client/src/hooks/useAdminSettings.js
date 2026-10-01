@@ -9,6 +9,7 @@ export function useAdminDevices({
   q = '',
   status = 'all',
   branchId = 'all',
+  type = 'all',
   page = 1,
   limit = ADMIN_DEVICES_PAGE_SIZE,
 } = {}) {
@@ -31,6 +32,7 @@ export function useAdminDevices({
       q: q?.trim() || undefined,
       status: status && status !== 'all' ? status : undefined,
       branchId: branchId && branchId !== 'all' ? branchId : undefined,
+      type: type && type !== 'all' ? type : undefined,
       page,
       limit,
     })
@@ -58,7 +60,7 @@ export function useAdminDevices({
     )
     setLoading(false)
     return result
-  }, [q, status, branchId, page, limit])
+  }, [q, status, branchId, type, page, limit])
 
   useEffect(() => {
     void load()
@@ -99,6 +101,7 @@ export async function changeAdminPassword({ currentPassword, newPassword }) {
 // Admin Settings → Currency (tenant default display currency)
 export function useAdminCurrency() {
   const [defaultCurrency, setDefaultCurrency] = useState('PKR')
+  const [currencyLocked, setCurrencyLocked] = useState(false)
   const [options, setOptions] = useState([])
   const [ratesToPkr, setRatesToPkr] = useState({ PKR: 1 })
   const [loading, setLoading] = useState(true)
@@ -115,6 +118,7 @@ export function useAdminCurrency() {
       return result
     }
     setDefaultCurrency(result.data?.defaultCurrency || 'PKR')
+    setCurrencyLocked(Boolean(result.data?.currencyLocked))
     setOptions(result.data?.options || [])
     setRatesToPkr(result.data?.ratesToPkr || { PKR: 1 })
     setLoading(false)
@@ -135,6 +139,7 @@ export function useAdminCurrency() {
     setSaving(false)
     if (result.success) {
       setDefaultCurrency(result.data?.defaultCurrency || nextCurrency)
+      setCurrencyLocked(Boolean(result.data?.currencyLocked ?? true))
       if (result.data?.options?.length) setOptions(result.data.options)
       if (result.data?.ratesToPkr) setRatesToPkr(result.data.ratesToPkr)
     }
@@ -143,6 +148,7 @@ export function useAdminCurrency() {
 
   return {
     defaultCurrency,
+    currencyLocked,
     options,
     ratesToPkr,
     loading,

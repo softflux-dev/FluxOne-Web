@@ -1,60 +1,9 @@
-import { Input } from '@/components/ui/input'
-import {
-  formatMoneyInput,
-  normalizeMoneyInput,
-  sanitizeMoneyInput,
-} from '@/lib/money'
-import { cn } from '@/lib/utils'
+import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 
-// Number input for currency — up to 2 decimal places (matches NUMERIC(12,2)).
-export function MoneyInput({
-  value,
-  onChange,
-  onBlur,
-  min = 0,
-  max,
-  allowEmpty = true,
-  className,
-  ...props
-}) {
-  const handleChange = (event) => {
-    const cleaned = sanitizeMoneyInput(event.target.value)
-    onChange?.({
-      ...event,
-      target: { ...event.target, value: cleaned },
-    })
-  }
-
-  const handleBlur = (event) => {
-    const next = normalizeMoneyInput(event.target.value, {
-      min,
-      max: max != null ? Number(max) : null,
-      allowEmpty,
-      emptyAs: allowEmpty ? '' : formatMoneyInput(min),
-    })
-    if (next !== String(value ?? '')) {
-      onChange?.({
-        ...event,
-        target: { ...event.target, value: next },
-      })
-    }
-    onBlur?.(event)
-  }
-
-  return (
-    <Input
-      type="number"
-      inputMode="decimal"
-      step={0.01}
-      min={min}
-      max={max}
-      value={value ?? ''}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      className={cn(className)}
-      {...props}
-    />
-  )
+// Price / money fields use whole units (10 → 11 → 12), not 0.01 steps.
+// Kept as an alias so older imports stay valid.
+export function MoneyInput(props) {
+  return <WholeNumberInput {...props} />
 }
 
 export default MoneyInput

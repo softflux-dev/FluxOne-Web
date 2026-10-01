@@ -1,5 +1,9 @@
 import { tenantQuery } from '../../../config/db.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
+import {
+  normalizeWorkingDays,
+  schedulesConflict,
+} from '../staff/schedule.validation.js'
 
 const HARDWARE_TYPES = new Set(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
 const HARDWARE_STATUSES = new Set(['New', 'Used', 'Good', 'Poor'])
@@ -12,6 +16,7 @@ const hardwareSelect = `
   h.type,
   h.status,
   h.access_status AS "accessStatus",
+  COALESCE(h.is_active, true) AS "isActive",
   h.image_url AS "imageUrl",
   h.created_at AS "createdAt",
   h.branch_id AS "branchId",
@@ -30,6 +35,8 @@ function mapHardware(row) {
     status: row.status,
     // System Access: active | blocked (Admin + BM can toggle)
     accessStatus: row.accessStatus === 'blocked' ? 'blocked' : 'active',
+    // Soft delete — directory visibility
+    isActive: row.isActive !== false,
     image: normalizeImageUrl(row.imageUrl) || '',
     imageUrl: normalizeImageUrl(row.imageUrl) || '',
     createdAt: row.createdAt,
@@ -87,8 +94,28 @@ export function assertHardwareStatus(status) {
   }
 }
 
-export async function listHardware(tenantId, { branchId, type, q } = {}) {
+// active defaults to true (hide soft-deleted). Pass active: null for all rows.
+// Optional availability: scheduleStart/End + workingDays → hide devices with overlapping staff.
+export async function listHardware(
+  tenantId,
+  {
+    branchId,
+    type,
+    q,
+    active = true,
+    scheduleStart = null,
+    scheduleEnd = null,
+    workingDays = null,
+    excludeStaffId = null,
+  } = {},
+) {
   const search = q ? String(q).trim() : null
+  const activeFilter = active === null || active === undefined ? null : Boolean(active)
+  const days = normalizeWorkingDays(workingDays)
+  const checkAvailability = Boolean(
+    days.length || (scheduleStart && scheduleEnd),
+  )
+
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -97,23 +124,65 @@ export async function listHardware(tenantId, { branchId, type, q } = {}) {
       LEFT JOIN staff s
         ON s.tenant_id = h.tenant_id
        AND s.hardware_device_id = h.id::text
+       AND s.status NOT IN ('inactive', 'blocked')
       LEFT JOIN users u
         ON u.id = s.user_id
        AND u.tenant_id = s.tenant_id
       WHERE h.tenant_id = $1
         AND ($2::uuid IS NULL OR h.branch_id = $2)
         AND ($3::text IS NULL OR h.type = $3)
+        AND ($4::boolean IS NULL OR COALESCE(h.is_active, true) = $4)
         AND (
-          $4::text IS NULL
-          OR h.name ILIKE '%' || $4 || '%'
-          OR h.code ILIKE '%' || $4 || '%'
-          OR h.company_name ILIKE '%' || $4 || '%'
+          $5::text IS NULL
+          OR h.name ILIKE '%' || $5 || '%'
+          OR h.code ILIKE '%' || $5 || '%'
+          OR h.company_name ILIKE '%' || $5 || '%'
         )
       ORDER BY h.created_at DESC
     `,
-    [branchId || null, type || null, search],
+    [branchId || null, type || null, activeFilter, search],
   )
-  return rows.map(mapHardware)
+
+  const mapped = rows.map(mapHardware)
+  if (!checkAvailability) return mapped
+
+  // Load all active assignments for these devices in one pass
+  const deviceIds = mapped.map((h) => h.id)
+  if (!deviceIds.length) return mapped
+
+  const { rows: holders } = await tenantQuery(
+    tenantId,
+    `
+      SELECT
+        s.id AS "staffId",
+        s.hardware_device_id AS "hardwareDeviceId",
+        s.schedule_start AS "scheduleStart",
+        s.schedule_end AS "scheduleEnd",
+        COALESCE(s.working_days, ARRAY[]::text[]) AS "workingDays"
+      FROM staff s
+      WHERE s.tenant_id = $1
+        AND ($2::uuid IS NULL OR s.branch_id = $2)
+        AND s.hardware_device_id = ANY($3::text[])
+        AND s.status NOT IN ('inactive', 'blocked')
+        AND ($4::uuid IS NULL OR s.id <> $4)
+    `,
+    [branchId || null, deviceIds.map(String), excludeStaffId || null],
+  )
+
+  const candidate = {
+    workingDays: days,
+    scheduleStart,
+    scheduleEnd,
+  }
+
+  const busy = new Set()
+  for (const holder of holders) {
+    if (schedulesConflict(candidate, holder)) {
+      busy.add(String(holder.hardwareDeviceId))
+    }
+  }
+
+  return mapped.filter((h) => !busy.has(String(h.id)))
 }
 
 export async function getHardwareById(tenantId, id, { branchId } = {}) {
@@ -159,9 +228,9 @@ export async function createHardware(tenantId, payload) {
         tenantId,
         `
           INSERT INTO branch_hardware (
-            tenant_id, branch_id, code, name, company_name, type, status, image_url
+            tenant_id, branch_id, code, name, company_name, type, status, image_url, is_active
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
           RETURNING id
         `,
         [branchId, code, name, companyName, type, status, imageUrl || null],
@@ -225,22 +294,28 @@ export async function updateHardware(tenantId, id, payload, { branchId } = {}) {
   return getHardwareById(tenantId, id, { branchId })
 }
 
+// Soft-deactivate hardware (replaces hard delete for client UX).
 export async function deleteHardware(tenantId, id, { branchId } = {}) {
   const existing = await getHardwareById(tenantId, id, { branchId })
   if (!existing) return null
 
   if (existing.assignedToStaffId) {
-    throw httpError(409, 'Cannot delete hardware. It is currently assigned to a staff member.')
+    throw httpError(
+      409,
+      'Cannot deactivate hardware. It is currently assigned to a staff member. Unassign it first.',
+    )
   }
 
   const { rowCount } = await tenantQuery(
     tenantId,
     `
-      DELETE FROM branch_hardware
+      UPDATE branch_hardware
+      SET is_active = false
       WHERE tenant_id = $1 AND id = $2
         AND ($3::uuid IS NULL OR branch_id = $3)
+        AND COALESCE(is_active, true) = true
     `,
     [id, branchId || null],
   )
-  return rowCount > 0 ? existing : null
+  return rowCount > 0 ? { ...existing, isActive: false } : null
 }

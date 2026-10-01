@@ -5,6 +5,7 @@ import {
   SUPPORTED_CURRENCIES,
 } from '../../../utils/currency.util.js'
 import { conversionFactor } from '../../../utils/fx.util.js'
+import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 
 // Map assigned BM hardware → Admin System Access row
 function mapDeviceRow(row) {
@@ -13,9 +14,13 @@ function mapDeviceRow(row) {
     id: row.id,
     deviceName: row.deviceName || '',
     hardwareCode: row.hardwareCode || '',
+    hardwareType: row.hardwareType || '',
+    imageUrl: normalizeImageUrl(row.imageUrl) || null,
     // hardwareSignature removed — Hardware ID (HW-xxx) is the system identity
     userId: row.userEmail || '',
     userName: row.userName || 'Unassigned',
+    employeeImageUrl: normalizeImageUrl(row.employeeImageUrl) || null,
+    designation: row.designation || null,
     staffId: row.staffId || null,
     branchId: row.branchId || null,
     branch: row.branchName || 'Unassigned',
@@ -34,6 +39,9 @@ const ASSIGNED_HARDWARE_FROM = `
   INNER JOIN users u
     ON u.id = s.user_id
    AND u.tenant_id = s.tenant_id
+  LEFT JOIN designations d
+    ON d.id = s.designation_id
+   AND d.tenant_id = s.tenant_id
   LEFT JOIN branches b
     ON b.id = h.branch_id
    AND b.tenant_id = h.tenant_id
@@ -43,9 +51,13 @@ const ASSIGNED_HARDWARE_SELECT = `
   h.id,
   h.name AS "deviceName",
   h.code AS "hardwareCode",
+  h.type AS "hardwareType",
+  h.image_url AS "imageUrl",
   h.branch_id AS "branchId",
   b.name AS "branchName",
   s.id AS "staffId",
+  s.image_url AS "employeeImageUrl",
+  COALESCE(d.name, s.designation) AS "designation",
   u.email AS "userEmail",
   u.full_name AS "userName",
   h.access_status AS status,
@@ -61,6 +73,8 @@ export async function listDevices(tenantId, filters = {}) {
   const status =
     filters.status && filters.status !== 'all' ? filters.status : null
   const branchId = filters.branchId || null
+  const hardwareType =
+    filters.type && filters.type !== 'all' ? String(filters.type).trim() : null
 
   // Stats mirror list scope (branch filter applies when set)
   const { rows: statsRows } = await tenantQuery(
@@ -73,19 +87,24 @@ export async function listDevices(tenantId, filters = {}) {
       ${ASSIGNED_HARDWARE_FROM}
       WHERE h.tenant_id = $1
         AND ($2::uuid IS NULL OR h.branch_id = $2)
+        AND COALESCE(h.is_active, true) = true
     `,
     [branchId],
   )
 
+  // clean and optimized code — search + status + hardware type filters
   const searchAndStatus = `
+    AND COALESCE(h.is_active, true) = true
     AND ($3::text IS NULL OR h.access_status = $3)
+    AND ($4::text IS NULL OR h.type = $4)
     AND (
-      $4::text IS NULL
-      OR h.name ILIKE '%' || $4 || '%'
-      OR h.code ILIKE '%' || $4 || '%'
-      OR COALESCE(b.name, '') ILIKE '%' || $4 || '%'
-      OR COALESCE(u.full_name, '') ILIKE '%' || $4 || '%'
-      OR COALESCE(u.email, '') ILIKE '%' || $4 || '%'
+      $5::text IS NULL
+      OR h.name ILIKE '%' || $5 || '%'
+      OR h.code ILIKE '%' || $5 || '%'
+      OR h.type ILIKE '%' || $5 || '%'
+      OR COALESCE(b.name, '') ILIKE '%' || $5 || '%'
+      OR COALESCE(u.full_name, '') ILIKE '%' || $5 || '%'
+      OR COALESCE(u.email, '') ILIKE '%' || $5 || '%'
     )
   `
 
@@ -98,7 +117,7 @@ export async function listDevices(tenantId, filters = {}) {
         AND ($2::uuid IS NULL OR h.branch_id = $2)
         ${searchAndStatus}
     `,
-    [branchId, status, q],
+    [branchId, status, hardwareType, q],
   )
 
   const { rows } = await tenantQuery(
@@ -113,9 +132,9 @@ export async function listDevices(tenantId, filters = {}) {
         CASE WHEN h.access_status = 'active' THEN 0 ELSE 1 END,
         h.created_at DESC,
         h.name ASC
-      LIMIT $5 OFFSET $6
+      LIMIT $6 OFFSET $7
     `,
-    [branchId, status, q, limit, offset],
+    [branchId, status, hardwareType, q, limit, offset],
   )
 
   const stats = statsRows[0] || { total: 0, active: 0, blocked: 0 }
@@ -171,9 +190,13 @@ export async function updateDeviceStatus(tenantId, id, status) {
         h.id,
         h.name AS "deviceName",
         h.code AS "hardwareCode",
+        h.type AS "hardwareType",
+        h.image_url AS "imageUrl",
         h.branch_id AS "branchId",
         b.name AS "branchName",
         NULL::uuid AS "staffId",
+        NULL::text AS "employeeImageUrl",
+        NULL::text AS "designation",
         NULL::text AS "userEmail",
         'Unassigned'::text AS "userName",
         h.access_status AS status,
@@ -260,7 +283,9 @@ export async function getCurrencySettings(tenantId) {
     tenantQuery(
       tenantId,
       `
-        SELECT COALESCE(default_currency, $2) AS "defaultCurrency"
+        SELECT
+          COALESCE(default_currency, $2) AS "defaultCurrency",
+          COALESCE(currency_locked, false) AS "currencyLocked"
         FROM tenants
         WHERE id = $1
         LIMIT 1
@@ -272,6 +297,7 @@ export async function getCurrencySettings(tenantId) {
 
   return {
     defaultCurrency: normalizeCurrency(rows[0]?.defaultCurrency || DEFAULT_CURRENCY),
+    currencyLocked: Boolean(rows[0]?.currencyLocked),
     options: SUPPORTED_CURRENCIES,
     ratesToPkr,
   }
@@ -281,6 +307,15 @@ export async function updateCurrencySettings(tenantId, { defaultCurrency, rateTo
   const next = normalizeCurrency(defaultCurrency)
   const current = await getCurrencySettings(tenantId)
   const from = current.defaultCurrency
+
+  // After first save, currency settings are immutable via API (Supabase-only for now)
+  if (current.currencyLocked) {
+    const error = new Error(
+      'Currency settings are locked after the first save. Contact support or update via database if a change is required.',
+    )
+    error.status = 403
+    throw error
+  }
 
   // Persist latest rate for the selected currency (1 USD = rateToPkr PKR)
   const resolvedRate =
@@ -332,6 +367,19 @@ export async function updateCurrencySettings(tenantId, { defaultCurrency, rateTo
         VALUES ($1, $2, $3, $4, $5, $6)
       `,
       [from, next, ratesToPkr[next] ?? resolvedRate, productsConverted, userId],
+    )
+  }
+
+  // First successful Admin Save locks default currency permanently (API)
+  if (!current.currencyLocked) {
+    await tenantQuery(
+      tenantId,
+      `
+        UPDATE tenants
+        SET currency_locked = true
+        WHERE id = $1
+      `,
+      [],
     )
   }
 

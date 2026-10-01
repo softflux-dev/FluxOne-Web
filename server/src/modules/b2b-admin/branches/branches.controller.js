@@ -101,6 +101,7 @@ export async function createBranch(req, res) {
       status: body.status,
       openingTime: body.openingTime,
       closingTime: body.closingTime,
+      workingDays: body.workingDays,
       manager: {
         ...manager,
         ...(managerProfileImage ? { profileImage: managerProfileImage } : {}),
@@ -160,6 +161,7 @@ export async function patchBranch(req, res) {
       ...(uploadedBranchImage ? { image: uploadedBranchImage } : {}),
       ...(body.openingTime !== undefined ? { openingTime: body.openingTime || null } : {}),
       ...(body.closingTime !== undefined ? { closingTime: body.closingTime || null } : {}),
+      ...(body.workingDays !== undefined ? { workingDays: body.workingDays } : {}),
       manager: managerPayload,
     })
   } catch (err) {

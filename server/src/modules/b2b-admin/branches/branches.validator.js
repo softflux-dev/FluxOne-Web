@@ -48,6 +48,43 @@ const branchHourTime = z.preprocess((value) => {
   return value
 }, z.union([timeString, z.null()]).optional())
 
+// Branch calendar days — same tokens as staff.working_days
+const WEEK_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+
+// Accepts: ["mon","tue"] | '["mon","tue"]' | "mon,tue" | omit (DB default = full week)
+const workingDaysSchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === '') return undefined
+    if (Array.isArray(value)) {
+      return value.map((d) => String(d).trim().toLowerCase()).filter(Boolean)
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return undefined
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) {
+          return parsed.map((d) => String(d).trim().toLowerCase()).filter(Boolean)
+        }
+      } catch {
+        // comma-separated fallback for form-data
+      }
+      return trimmed
+        .split(',')
+        .map((d) => d.trim().toLowerCase())
+        .filter(Boolean)
+    }
+    return value
+  },
+  z
+    .array(z.enum(WEEK_DAYS))
+    .min(1, 'Select at least one working day')
+    .refine((days) => new Set(days).size === days.length, {
+      message: 'Duplicate working days are not allowed',
+    })
+    .optional(),
+)
+
 const genderSchema = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : value),
   z.enum(['Male', 'Female', 'Other']).optional(),
@@ -192,6 +229,7 @@ export const createBranchSchema = z
       status: z.enum([BRANCH_STATUS.OPEN, BRANCH_STATUS.BLOCKED]).optional(),
       openingTime: branchHourTime,
       closingTime: branchHourTime,
+      workingDays: workingDaysSchema,
       // Nested manager, or flat manager* fields accepted in controller normalize.
       manager: managerCreateSchema.optional(),
       managerName: optionalString,
@@ -220,6 +258,7 @@ export const updateBranchSchema = z
       imageUrl: optionalString,
       openingTime: branchHourTime,
       closingTime: branchHourTime,
+      workingDays: workingDaysSchema,
       manager: managerUpdateSchema.optional(),
       managerName: optionalString,
       managerEmail: z.preprocess(

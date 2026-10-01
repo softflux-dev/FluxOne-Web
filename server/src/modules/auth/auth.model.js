@@ -21,6 +21,7 @@ const AUTH_USER_SELECT = `
     b.status AS "branchStatus",
     to_char(b.opening_time, 'HH24:MI') AS "openingTime",
     to_char(b.closing_time, 'HH24:MI') AS "closingTime",
+    COALESCE(b.working_days, ARRAY[]::text[]) AS "workingDays",
     COALESCE(u.image_url, s.image_url) AS "imageUrl"
   FROM users u
   JOIN roles r ON r.id = u.role_id
@@ -48,6 +49,7 @@ function mapAuthUser(row) {
     ...row,
     openingTime: formatTimeValue(row.openingTime),
     closingTime: formatTimeValue(row.closingTime),
+    workingDays: Array.isArray(row.workingDays) ? row.workingDays : [],
     imageUrl: normalizeImageUrl(row.imageUrl),
   }
 }

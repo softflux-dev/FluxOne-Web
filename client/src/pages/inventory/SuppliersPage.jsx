@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Ban, Plus, Trash2 } from 'lucide-react'
+import { SupplierDetailDialog } from '@/components/feature/suppliers/SupplierDetailDialog'
 import { SupplierFilters } from '@/components/feature/suppliers/SupplierFilters'
 import { SupplierFormDialog } from '@/components/feature/suppliers/SupplierFormDialog'
 import { SupplierTable } from '@/components/feature/suppliers/SupplierTable'
-import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useSuppliers } from '@/hooks/useSuppliers'
@@ -22,13 +23,16 @@ export function SuppliersPage() {
     setPage,
     createSupplier,
     updateSupplier,
+    deleteSupplier,
     setSupplierActive,
   } = useSuppliers()
 
   const [formOpen, setFormOpen] = useState(false)
   const [formMode, setFormMode] = useState('create')
   const [editing, setEditing] = useState(null)
+  const [viewTarget, setViewTarget] = useState(null)
   const [statusTarget, setStatusTarget] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
 
   function openCreate() {
@@ -56,6 +60,7 @@ export function SuppliersPage() {
     return result
   }
 
+  // clean and optimized code — soft status updates (deactivate / activate)
   async function applySupplierStatus(row, isActive) {
     if (!row?.id) return
     setStatusUpdatingId(row.id)
@@ -68,12 +73,13 @@ export function SuppliersPage() {
     }
   }
 
-  function handleStatusChange(row, isActive) {
-    if (!row?.id || row.isActive === isActive) return
-    if (!isActive) {
-      setStatusTarget(row)
-      return
-    }
+  function handleDeactivate(row) {
+    if (!row?.id || row.isActive === false) return
+    setStatusTarget(row)
+  }
+
+  function handleActivate(row) {
+    if (!row?.id || row.isActive !== false) return
     void applySupplierStatus(row, true)
   }
 
@@ -83,6 +89,15 @@ export function SuppliersPage() {
     setStatusTarget(null)
   }
 
+  // Delete uses soft-remove API (keeps purchase history); same outcome as deactivate
+  async function handleConfirmDelete() {
+    if (!deleteTarget?.id) return
+    const result = await deleteSupplier(deleteTarget.id)
+    setDeleteTarget(null)
+    if (result.success) toastSuccess('Supplier removed from active directory')
+    else toastError(result.error || 'Delete failed')
+  }
+
   return (
     <div className="space-y-5 pb-8 sm:space-y-6">
       <MotionHeader>
@@ -90,11 +105,7 @@ export function SuppliersPage() {
           title="Supplier Management"
           description="Vendor directory — deactivate instead of delete so purchase history stays intact"
           actions={
-            <Button
-              type="button"
-              variant="brand"
-              onClick={openCreate}
-            >
+            <Button type="button" variant="brand" onClick={openCreate}>
               <Plus className="size-4" />
               Add supplier
             </Button>
@@ -124,8 +135,11 @@ export function SuppliersPage() {
           pagination={pagination}
           onPageChange={setPage}
           onPageSizeChange={(limit) => updateFilters({ limit })}
+          onView={setViewTarget}
           onEdit={openEdit}
-          onStatusChange={handleStatusChange}
+          onDeactivate={handleDeactivate}
+          onActivate={handleActivate}
+          onDelete={setDeleteTarget}
           statusUpdatingId={statusUpdatingId}
         />
       </MotionReveal>
@@ -137,6 +151,14 @@ export function SuppliersPage() {
         initialSupplier={editing}
         loading={mutating}
         onSubmit={handleSubmit}
+      />
+
+      <SupplierDetailDialog
+        open={Boolean(viewTarget)}
+        onOpenChange={(open) => {
+          if (!open) setViewTarget(null)
+        }}
+        supplier={viewTarget}
       />
 
       <ConfirmDialog
@@ -151,8 +173,29 @@ export function SuppliersPage() {
             : undefined
         }
         confirmLabel="Deactivate"
+        icon={Ban}
+        variant="destructive"
         loading={mutating}
         onConfirm={handleConfirmDeactivate}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title="Remove supplier?"
+        description={
+          deleteTarget
+            ? `${deleteTarget.companyName || 'This supplier'} will be hidden from new orders. Purchase history stays intact — prefer Deactivate when you only need a temporary pause.`
+            : undefined
+        }
+        warning="Permanent wipe is not available for suppliers so purchase history stays intact."
+        confirmLabel="Remove"
+        icon={Trash2}
+        variant="destructive"
+        loading={mutating}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   )

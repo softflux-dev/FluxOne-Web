@@ -1557,6 +1557,16 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         throw httpError(400, 'Edit the parent variant product to update this SKU')
       }
 
+      // Product type is locked after create (Normal ↔ Variant blocked)
+      if (payload.type != null && payload.type !== existing.type) {
+        throw httpError(
+          400,
+          'Product type cannot be changed after creation. Deactivate this product and create a new one.',
+        )
+      }
+      // Ignore type on update so clients cannot mutate it via UPDATABLE_COLUMNS later
+      if ('type' in payload) delete payload.type
+
       const effectiveBranchId = existing.branchId || branchId
       const hasCategoryPatch = 'categoryId' in payload || 'subcategoryId' in payload
 

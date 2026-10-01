@@ -1,4 +1,8 @@
 import { formatClockTime } from '@/lib/formatDateTime'
+import {
+  FULL_WEEK_DAYS,
+  normalizeWorkingDays,
+} from '@/lib/validation/branchForms'
 
 // Parse HH:MM or HH:MM:SS to minutes since midnight; returns null if empty/invalid.
 export function parseTimeToMinutes(value) {
@@ -22,11 +26,32 @@ function hasValue(value) {
   return value != null && String(value).trim() !== ''
 }
 
+function isSubsetOfDays(staffDays, branchDays) {
+  const branch = new Set(normalizeWorkingDays(branchDays))
+  if (!branch.size) return true
+  return normalizeWorkingDays(staffDays).every((d) => branch.has(d))
+}
+
 // Soft UI note when admin has not configured branch hours yet.
 export function getBranchHoursSoftWarning(branchHours) {
   if (!branchHours) return null
   if (hasValue(branchHours.openingTime) && hasValue(branchHours.closingTime)) return null
   return 'Branch opening hours are not set — shift is not limited to a branch window.'
+}
+
+// Validate staff working days ⊆ branch calendar
+export function validateStaffWorkingDaysFields(fields, branchHours = null) {
+  const errors = {}
+  const days = normalizeWorkingDays(fields.workingDays)
+  if (!days.length) {
+    errors.workingDays = 'Select at least one working day'
+    return errors
+  }
+  const branchDays = normalizeWorkingDays(branchHours?.workingDays)
+  if (branchDays.length && !isSubsetOfDays(days, branchDays)) {
+    errors.workingDays = `Working days must be within branch days (${branchDays.join(', ')})`
+  }
+  return errors
 }
 
 // Validate staff shift + break window → field map
@@ -82,7 +107,10 @@ export function validateStaffScheduleFields(fields, branchHours = null) {
 }
 
 export function validateStaffSchedule(fields, branchHours = null) {
-  const errors = validateStaffScheduleFields(fields, branchHours)
+  const errors = {
+    ...validateStaffWorkingDaysFields(fields, branchHours),
+    ...validateStaffScheduleFields(fields, branchHours),
+  }
   return Object.values(errors)[0] || null
 }
 
@@ -91,10 +119,13 @@ export const STAFF_FIELD_ORDER = [
   'email',
   'password',
   'role',
+  'workingDays',
   'scheduleStart',
   'scheduleEnd',
   'scheduleBreakStart',
   'scheduleBreakEnd',
+  'hardwareType',
+  'hardwareDeviceId',
 ]
 
 // Staff create/edit → field map
@@ -119,7 +150,11 @@ export function validateStaffFormFields(fields, { isEdit = false, branchHours = 
     errors.password = 'Password must be at least 8 characters'
   }
 
-  return { ...errors, ...validateStaffScheduleFields(fields, branchHours) }
+  return {
+    ...errors,
+    ...validateStaffWorkingDaysFields(fields, branchHours),
+    ...validateStaffScheduleFields(fields, branchHours),
+  }
 }
 
 export function validateStaffForm(fields, opts = {}) {
@@ -128,4 +163,11 @@ export function validateStaffForm(fields, opts = {}) {
     if (errors[key]) return errors[key]
   }
   return Object.values(errors)[0] || null
+}
+
+// Default staff days: intersection with branch calendar, or full week
+export function defaultStaffWorkingDays(branchWorkingDays) {
+  const branchDays = normalizeWorkingDays(branchWorkingDays)
+  if (branchDays.length) return branchDays
+  return [...FULL_WEEK_DAYS]
 }

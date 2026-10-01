@@ -16,12 +16,19 @@ const looseUuid = z
     'Invalid device id',
   )
 
+const HARDWARE_TYPES = ['Computers', 'Scanners', 'Printers', 'Telephone', 'Other']
+
 export const listDevicesQuerySchema = z.object({
   body: empty,
   params: empty,
   query: paginationQuery.extend({
     q: optionalString,
     branchId: optionalUuid,
+    // Hardware type filter (matches branch_hardware.type)
+    type: z.preprocess(
+      (value) => (value === '' || value === null || value === undefined ? 'all' : value),
+      z.enum(['all', ...HARDWARE_TYPES]).default('all'),
+    ),
     status: z.preprocess(
       (value) => (value === '' || value === null || value === undefined ? 'all' : value),
       z.enum(['all', 'active', 'blocked']).default('all'),

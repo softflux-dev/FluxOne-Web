@@ -15,12 +15,20 @@ import { NativeSelect } from '@/components/ui/select'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
 import { FieldError } from '@/components/shared/FieldError'
 import { TimePicker } from '@/components/shared/TimePicker'
+import { WorkingDaysPicker } from '@/components/shared/WorkingDaysPicker'
 import { formatClockTime } from '@/lib/formatDateTime'
 import {
+  defaultStaffWorkingDays,
   getBranchHoursSoftWarning,
   STAFF_FIELD_ORDER,
   validateStaffFormFields,
 } from '@/lib/validation/staffSchedule'
+import {
+  FULL_WEEK_DAYS,
+  HARDWARE_TYPE_OPTIONS,
+  formatWorkingDaysShort,
+  normalizeWorkingDays,
+} from '@/lib/validation/branchForms'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
 import { apiClient } from '@/api/api'
@@ -32,10 +40,13 @@ const FIELD_IDS = {
   password: 'staff-password',
   fullName: 'staff-name',
   role: 'staff-role',
+  workingDays: 'staff-working-days',
   scheduleStart: 'staff-start',
   scheduleEnd: 'staff-end',
   scheduleBreakStart: 'staff-break-start',
   scheduleBreakEnd: 'staff-break-end',
+  hardwareType: 'staff-hardware-type',
+  hardwareDeviceId: 'staff-hardware',
 }
 
 const EMPTY_FORM = {
@@ -43,6 +54,8 @@ const EMPTY_FORM = {
   password: '',
   fullName: '',
   role: 'inventory_manager',
+  workingDays: [...FULL_WEEK_DAYS],
+  hardwareType: '',
   hardwareDeviceId: '',
   scheduleStart: '',
   scheduleBreakStart: '',
@@ -76,6 +89,10 @@ function resolveRole(initialStaff) {
   return 'inventory_manager'
 }
 
+function emptyBranchContext() {
+  return { openingTime: '', closingTime: '', workingDays: [...FULL_WEEK_DAYS] }
+}
+
 // Add / Edit staff modal for Branch Manager.
 // Does not send branchId — server scopes from JWT.
 // System role drives designation automatically (no custom designation picker).
@@ -88,62 +105,124 @@ export function StaffFormDialog({
   loading = false,
 }) {
   const isEdit = mode === 'edit'
-  const [branchHours, setBranchHours] = useState({ openingTime: '', closingTime: '' })
+  const [branchHours, setBranchHours] = useState(emptyBranchContext)
   const hoursWarning = getBranchHoursSoftWarning(branchHours)
   const [form, setForm] = useState(EMPTY_FORM)
   const [hardwareOptions, setHardwareOptions] = useState([])
+  const [hardwareLoading, setHardwareLoading] = useState(false)
   const { fieldErrors, formError, setFormError, resetErrors, clearField, applyErrors } =
     useFieldErrors()
   const { captureBaseline, isDirty } = useFormBaseline(open)
 
+  // Hydrate form + branch calendar when dialog opens
   useEffect(() => {
     if (!open) return
     resetErrors()
 
-    async function loadBranchHours() {
-      const res = await apiClient.get(endpoints.auth.me)
-      if (res.success && res.data) {
-        setBranchHours({
-          openingTime: timeInputValue(res.data.openingTime),
-          closingTime: timeInputValue(res.data.closingTime),
-        })
+    async function bootstrap() {
+      setHardwareOptions([])
+      let nextBranch = emptyBranchContext()
+      const meRes = await apiClient.get(endpoints.auth.me)
+      if (meRes.success && meRes.data) {
+        const branchDays = normalizeWorkingDays(meRes.data.workingDays)
+        nextBranch = {
+          openingTime: timeInputValue(meRes.data.openingTime),
+          closingTime: timeInputValue(meRes.data.closingTime),
+          workingDays: branchDays.length ? branchDays : [...FULL_WEEK_DAYS],
+        }
+      }
+      setBranchHours(nextBranch)
+
+      if (isEdit && initialStaff) {
+        const staffDays = normalizeWorkingDays(initialStaff.workingDays)
+        const nextForm = {
+          email: initialStaff.email || '',
+          password: '',
+          fullName: initialStaff.fullName || '',
+          role: resolveRole(initialStaff),
+          workingDays: staffDays.length
+            ? staffDays
+            : defaultStaffWorkingDays(nextBranch.workingDays),
+          hardwareType: initialStaff.hardwareType || '',
+          hardwareDeviceId: initialStaff.hardwareDeviceId || '',
+          scheduleStart: timeInputValue(initialStaff.scheduleStart),
+          scheduleBreakStart: timeInputValue(initialStaff.scheduleBreakStart),
+          scheduleBreakEnd: timeInputValue(initialStaff.scheduleBreakEnd),
+          scheduleEnd: timeInputValue(initialStaff.scheduleEnd),
+          image: null,
+        }
+        setForm(nextForm)
+        captureBaseline(nextForm)
       } else {
-        setBranchHours({ openingTime: '', closingTime: '' })
+        const nextForm = {
+          ...EMPTY_FORM,
+          workingDays: defaultStaffWorkingDays(nextBranch.workingDays),
+        }
+        setForm(nextForm)
+        captureBaseline(nextForm)
       }
     }
 
+    void bootstrap()
+  }, [open, isEdit, initialStaff, captureBaseline, resetErrors])
+
+  // Reload free hardware when type / shift / working days change
+  useEffect(() => {
+    if (!open) return
+
+    const hasShift =
+      Boolean(String(form.scheduleStart || '').trim()) &&
+      Boolean(String(form.scheduleEnd || '').trim())
+    const days = normalizeWorkingDays(form.workingDays)
+    const canQueryAvailability = hasShift && days.length > 0
+
+    let cancelled = false
+
     async function loadHardwareOptions() {
-      const res = await apiClient.get(endpoints.branch.resources.hardware.list)
+      setHardwareLoading(true)
+      const params = {}
+      if (form.hardwareType) params.type = form.hardwareType
+      if (canQueryAvailability) {
+        params.scheduleStart = form.scheduleStart
+        params.scheduleEnd = form.scheduleEnd
+        // Comma list — toQuery stringifies arrays as "mon,tue"
+        params.workingDays = days.join(',')
+        if (isEdit && initialStaff?.id) params.excludeStaffId = initialStaff.id
+      }
+
+      const res = await apiClient.get(endpoints.branch.resources.hardware.list, params)
+      if (cancelled) return
+
       if (res.success) {
-        setHardwareOptions(res.data || [])
+        const list = Array.isArray(res.data) ? res.data : res.data?.items || []
+        setHardwareOptions(list)
+        // Drop selection only when availability filter is active and device no longer free
+        setForm((prev) => {
+          if (!prev.hardwareDeviceId) return prev
+          const stillThere = list.some((hw) => hw.id === prev.hardwareDeviceId)
+          if (stillThere) return prev
+          if (!canQueryAvailability) return prev
+          return { ...prev, hardwareDeviceId: '' }
+        })
       } else {
         setHardwareOptions([])
       }
+      setHardwareLoading(false)
     }
 
-    void loadBranchHours()
     void loadHardwareOptions()
-
-    if (isEdit && initialStaff) {
-      const nextForm = {
-        email: initialStaff.email || '',
-        password: '',
-        fullName: initialStaff.fullName || '',
-        role: resolveRole(initialStaff),
-        hardwareDeviceId: initialStaff.hardwareDeviceId || '',
-        scheduleStart: timeInputValue(initialStaff.scheduleStart),
-        scheduleBreakStart: timeInputValue(initialStaff.scheduleBreakStart),
-        scheduleBreakEnd: timeInputValue(initialStaff.scheduleBreakEnd),
-        scheduleEnd: timeInputValue(initialStaff.scheduleEnd),
-        image: null,
-      }
-      setForm(nextForm)
-      captureBaseline(nextForm)
-    } else {
-      setForm(EMPTY_FORM)
-      captureBaseline(EMPTY_FORM)
+    return () => {
+      cancelled = true
     }
-  }, [open, isEdit, initialStaff, captureBaseline, resetErrors])
+  }, [
+    open,
+    form.hardwareType,
+    form.scheduleStart,
+    form.scheduleEnd,
+    form.workingDays,
+    isEdit,
+    initialStaff?.id,
+  ])
 
   function patch(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -156,9 +235,11 @@ export function StaffFormDialog({
     let hours = branchHours
     const meRes = await apiClient.get(endpoints.auth.me)
     if (meRes.success && meRes.data) {
+      const branchDays = normalizeWorkingDays(meRes.data.workingDays)
       hours = {
         openingTime: timeInputValue(meRes.data.openingTime),
         closingTime: timeInputValue(meRes.data.closingTime),
+        workingDays: branchDays.length ? branchDays : [...FULL_WEEK_DAYS],
       }
       setBranchHours(hours)
     }
@@ -171,8 +252,12 @@ export function StaffFormDialog({
 
     resetErrors()
     try {
-      const result = await onSubmit?.(form)
+      const result = await onSubmit?.({
+        ...form,
+        workingDays: normalizeWorkingDays(form.workingDays),
+      })
       if (result && result.success === false) {
+        // Surface hardware conflict (409) and other server messages
         setFormError(result.error || 'Save failed. Please try again.')
         return
       }
@@ -181,6 +266,11 @@ export function StaffFormDialog({
       setFormError(err?.message || 'Save failed. Please try again.')
     }
   }
+
+  const branchDaysLabel = formatWorkingDaysShort(branchHours.workingDays)
+  const hasShiftWindow =
+    Boolean(String(form.scheduleStart || '').trim()) &&
+    Boolean(String(form.scheduleEnd || '').trim())
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} dirty={isDirty(form)}>
@@ -247,7 +337,7 @@ export function StaffFormDialog({
               <FieldError message={fieldErrors.fullName} />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="staff-role">System Role</Label>
               <NativeSelect
                 id="staff-role"
@@ -263,34 +353,24 @@ export function StaffFormDialog({
                 ))}
               </NativeSelect>
               <FieldError message={fieldErrors.role} />
+              {form.role === 'inventory_manager' ? (
+                <p className="text-xs text-slate-500">
+                  Only one Inventory Manager is allowed per branch.
+                </p>
+              ) : null}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="staff-hardware">Hardware</Label>
-              <NativeSelect
-                id="staff-hardware"
-                value={form.hardwareDeviceId || ''}
-                onChange={(e) => patch('hardwareDeviceId', e.target.value)}
-              >
-                <option value="">No hardware assigned</option>
-                {hardwareOptions
-                  .filter((hw) => {
-                    const assignedToOther =
-                      hw.assignedToStaffId &&
-                      hw.assignedToStaffId !== initialStaff?.id
-                    return !assignedToOther || hw.id === form.hardwareDeviceId
-                  })
-                  .map((hw) => (
-                    <option key={hw.id} value={hw.id}>
-                      {hw.name}
-                      {hw.code ? ` (${hw.code})` : ''}
-                      {hw.type ? ` · ${hw.type}` : ''}
-                    </option>
-                  ))}
-              </NativeSelect>
-              {hardwareOptions.length === 0 ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label id="staff-working-days">Working days *</Label>
+              <WorkingDaysPicker
+                value={form.workingDays}
+                allowedDays={branchHours.workingDays}
+                onChange={(days) => patch('workingDays', days)}
+              />
+              <FieldError message={fieldErrors.workingDays} />
+              {branchDaysLabel ? (
                 <p className="text-xs text-slate-500">
-                  No hardware registered yet. Add devices under Resources.
+                  Branch calendar: {branchDaysLabel}. Staff days must stay within it.
                 </p>
               ) : null}
             </div>
@@ -319,6 +399,17 @@ export function StaffFormDialog({
             </div>
 
             <div className="space-y-1.5">
+              <Label htmlFor="staff-end">End Time</Label>
+              <TimePicker
+                id="staff-end"
+                value={form.scheduleEnd}
+                onChange={(e) => patch('scheduleEnd', e.target.value)}
+                className={fieldErrorClass(fieldErrors.scheduleEnd)}
+              />
+              <FieldError message={fieldErrors.scheduleEnd} />
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="staff-break-start">Break from</Label>
               <TimePicker
                 id="staff-break-start"
@@ -340,15 +431,68 @@ export function StaffFormDialog({
               <FieldError message={fieldErrors.scheduleBreakEnd} />
             </div>
 
+            {/* Hardware type + device — after shift / working days for availability */}
             <div className="space-y-1.5">
-              <Label htmlFor="staff-end">End Time</Label>
-              <TimePicker
-                id="staff-end"
-                value={form.scheduleEnd}
-                onChange={(e) => patch('scheduleEnd', e.target.value)}
-                className={fieldErrorClass(fieldErrors.scheduleEnd)}
-              />
-              <FieldError message={fieldErrors.scheduleEnd} />
+              <Label htmlFor="staff-hardware-type">Hardware type</Label>
+              <NativeSelect
+                id="staff-hardware-type"
+                value={form.hardwareType || ''}
+                onChange={(e) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    hardwareType: e.target.value,
+                    hardwareDeviceId: '',
+                  }))
+                  clearField('hardwareType')
+                  clearField('hardwareDeviceId')
+                }}
+              >
+                <option value="">All types</option>
+                {HARDWARE_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="staff-hardware">Hardware</Label>
+              <NativeSelect
+                id="staff-hardware"
+                value={form.hardwareDeviceId || ''}
+                onChange={(e) => patch('hardwareDeviceId', e.target.value)}
+                disabled={hardwareLoading}
+                aria-invalid={Boolean(fieldErrors.hardwareDeviceId)}
+                className={fieldErrorClass(fieldErrors.hardwareDeviceId)}
+              >
+                <option value="">No hardware assigned</option>
+                {hardwareOptions.map((hw) => (
+                  <option key={hw.id} value={hw.id}>
+                    {hw.name}
+                    {hw.code ? ` (${hw.code})` : ''}
+                    {hw.type ? ` · ${hw.type}` : ''}
+                  </option>
+                ))}
+              </NativeSelect>
+              <FieldError message={fieldErrors.hardwareDeviceId} />
+              {hardwareLoading ? (
+                <p className="text-xs text-slate-500">Checking device availability…</p>
+              ) : !hasShiftWindow || !normalizeWorkingDays(form.workingDays).length ? (
+                <p className="text-xs text-slate-500">
+                  Set working days and shift start/end to filter free devices for that slot.
+                </p>
+              ) : hardwareOptions.length === 0 ? (
+                <p className="text-xs text-amber-700">
+                  No free devices for this type / slot. Adjust days, shift, or type — or leave
+                  unassigned.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Showing devices free for the selected days and shift
+                  {isEdit ? ' (current assignment kept if still free)' : ''}.
+                </p>
+              )}
             </div>
 
             <ImageUploadField
