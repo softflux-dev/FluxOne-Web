@@ -125,13 +125,26 @@ export const STAFF_FIELD_ORDER = [
   'scheduleBreakEnd',
   'hardwareType',
   'hardwareDeviceId',
+  'hardwareSlotKey',
 ]
+
+// True when working days + shift are complete enough to query hardware availability.
+export function isStaffScheduleReadyForHardware(fields) {
+  const days = normalizeWorkingDays(fields?.workingDays)
+  const hasStart = hasValue(fields?.scheduleStart)
+  const hasEnd = hasValue(fields?.scheduleEnd)
+  if (!days.length || !hasStart || !hasEnd) return false
+  const start = parseTimeToMinutes(fields.scheduleStart)
+  const end = parseTimeToMinutes(fields.scheduleEnd)
+  return start != null && end != null && start < end
+}
 
 // Staff create/edit → field map
 export function validateStaffFormFields(fields, { isEdit = false, branchHours = null } = {}) {
   const errors = {}
   const fullName = String(fields.fullName || '').trim()
   const loginId = String(fields.email || '').trim()
+  const hasHardware = Boolean(String(fields.hardwareDeviceId || '').trim())
 
   if (!fullName) errors.fullName = 'Name is required'
   else if (fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
@@ -149,10 +162,26 @@ export function validateStaffFormFields(fields, { isEdit = false, branchHours = 
     errors.password = 'Password must be at least 8 characters'
   }
 
-  return {
-    ...errors,
+  const scheduleErrors = {
     ...validateStaffWorkingDaysFields(fields, branchHours),
     ...validateStaffScheduleFields(fields, branchHours),
+  }
+
+  // Hardware assignment requires a valid schedule first (all roles)
+  if (hasHardware && !isStaffScheduleReadyForHardware(fields)) {
+    if (!normalizeWorkingDays(fields.workingDays).length) {
+      scheduleErrors.workingDays =
+        scheduleErrors.workingDays || 'Select working days before assigning hardware'
+    }
+    if (!hasValue(fields.scheduleStart) || !hasValue(fields.scheduleEnd)) {
+      scheduleErrors.scheduleEnd =
+        scheduleErrors.scheduleEnd || 'Set shift start and end before assigning hardware'
+    }
+  }
+
+  return {
+    ...errors,
+    ...scheduleErrors,
   }
 }
 

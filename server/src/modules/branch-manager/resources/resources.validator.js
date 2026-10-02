@@ -18,6 +18,21 @@ const optionalWorkingDaysQuery = z.preprocess((value) => {
   return days.length ? days : undefined
 }, z.array(z.enum(WEEK_DAYS)).min(1).optional())
 
+const optionalBooleanQuery = z.preprocess((value) => {
+  if (value === undefined || value === null || value === '') return undefined
+  if (value === true || value === 'true' || value === '1') return true
+  if (value === false || value === 'false' || value === '0') return false
+  return undefined
+}, z.boolean().optional())
+
+const staffRoleForHardwareEnum = z.enum([
+  'inventory_manager',
+  'cashier',
+  'production_staff',
+  'delivery_staff',
+  'website_manager',
+])
+
 export const listHardwareSchema = z.object({
   body: empty,
   params: empty,
@@ -30,6 +45,8 @@ export const listHardwareSchema = z.object({
     scheduleEnd: optionalTime,
     workingDays: optionalWorkingDaysQuery,
     excludeStaffId: optionalUuid,
+    includeBusy: optionalBooleanQuery,
+    forRole: staffRoleForHardwareEnum.optional(),
   }),
 })
 

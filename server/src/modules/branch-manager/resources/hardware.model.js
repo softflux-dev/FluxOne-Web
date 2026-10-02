@@ -1,9 +1,11 @@
 import { tenantQuery } from '../../../config/db.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
+import { ROLES } from '../../../config/constants.js'
+import { normalizeWorkingDays } from '../staff/schedule.validation.js'
 import {
-  normalizeWorkingDays,
-  schedulesConflict,
-} from '../staff/schedule.validation.js'
+  classifyDeviceAvailability,
+  listActiveAllocationsForDevices,
+} from '../staff/hardwareAllocation.model.js'
 
 const HARDWARE_TYPES = new Set(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
 const HARDWARE_STATUSES = new Set(['New', 'Used', 'Good', 'Poor'])
@@ -19,12 +21,10 @@ const hardwareSelect = `
   COALESCE(h.is_active, true) AS "isActive",
   h.image_url AS "imageUrl",
   h.created_at AS "createdAt",
-  h.branch_id AS "branchId",
-  u.full_name AS "assignedToName",
-  s.id AS "assignedToStaffId"
+  h.branch_id AS "branchId"
 `
 
-function mapHardware(row) {
+function mapHardware(row, availability = null) {
   if (!row) return null
   return {
     id: row.id,
@@ -41,8 +41,13 @@ function mapHardware(row) {
     imageUrl: normalizeImageUrl(row.imageUrl) || '',
     createdAt: row.createdAt,
     branchId: row.branchId,
-    assignedToName: row.assignedToName || null,
+    assignedToName: availability?.occupiedBy || row.assignedToName || null,
     assignedToStaffId: row.assignedToStaffId || null,
+    // Availability metadata (set when schedule window is provided)
+    availability: availability?.availability || null,
+    available: availability ? availability.available : null,
+    occupiedSlot: availability?.occupiedSlot || null,
+    lockMode: availability?.mode || null,
   }
 }
 
@@ -94,8 +99,8 @@ export function assertHardwareStatus(status) {
   }
 }
 
-// active defaults to true (hide soft-deleted). Pass active: null for all rows.
-// Optional availability: scheduleStart/End + workingDays → hide devices with overlapping staff.
+// Optional availability: scheduleStart/End + workingDays.
+// Returns free devices by default (filterBusy). Pass includeBusy for full board later.
 export async function listHardware(
   tenantId,
   {
@@ -107,27 +112,20 @@ export async function listHardware(
     scheduleEnd = null,
     workingDays = null,
     excludeStaffId = null,
+    includeBusy = false,
+    forRole = null,
   } = {},
 ) {
   const search = q ? String(q).trim() : null
   const activeFilter = active === null || active === undefined ? null : Boolean(active)
   const days = normalizeWorkingDays(workingDays)
-  const checkAvailability = Boolean(
-    days.length || (scheduleStart && scheduleEnd),
-  )
+  const checkAvailability = Boolean(days.length && scheduleStart && scheduleEnd)
 
   const { rows } = await tenantQuery(
     tenantId,
     `
       SELECT ${hardwareSelect}
       FROM branch_hardware h
-      LEFT JOIN staff s
-        ON s.tenant_id = h.tenant_id
-       AND s.hardware_device_id = h.id::text
-       AND s.status NOT IN ('inactive', 'blocked')
-      LEFT JOIN users u
-        ON u.id = s.user_id
-       AND u.tenant_id = s.tenant_id
       WHERE h.tenant_id = $1
         AND ($2::uuid IS NULL OR h.branch_id = $2)
         AND ($3::text IS NULL OR h.type = $3)
@@ -143,31 +141,24 @@ export async function listHardware(
     [branchId || null, type || null, activeFilter, search],
   )
 
-  const mapped = rows.map(mapHardware)
-  if (!checkAvailability) return mapped
+  const mapped = rows.map((row) => mapHardware(row))
+  if (!checkAvailability || !branchId) return mapped
 
-  // Load all active assignments for these devices in one pass
   const deviceIds = mapped.map((h) => h.id)
   if (!deviceIds.length) return mapped
 
-  const { rows: holders } = await tenantQuery(
-    tenantId,
-    `
-      SELECT
-        s.id AS "staffId",
-        s.hardware_device_id AS "hardwareDeviceId",
-        s.schedule_start AS "scheduleStart",
-        s.schedule_end AS "scheduleEnd",
-        COALESCE(s.working_days, ARRAY[]::text[]) AS "workingDays"
-      FROM staff s
-      WHERE s.tenant_id = $1
-        AND ($2::uuid IS NULL OR s.branch_id = $2)
-        AND s.hardware_device_id = ANY($3::text[])
-        AND s.status NOT IN ('inactive', 'blocked')
-        AND ($4::uuid IS NULL OR s.id <> $4)
-    `,
-    [branchId || null, deviceIds.map(String), excludeStaffId || null],
-  )
+  const holders = await listActiveAllocationsForDevices(tenantId, {
+    branchId,
+    hardwareIds: deviceIds,
+    excludeStaffId,
+  })
+
+  const byDevice = new Map()
+  for (const holder of holders) {
+    const key = String(holder.hardwareId)
+    if (!byDevice.has(key)) byDevice.set(key, [])
+    byDevice.get(key).push(holder)
+  }
 
   const candidate = {
     workingDays: days,
@@ -175,25 +166,56 @@ export async function listHardware(
     scheduleEnd,
   }
 
-  const busy = new Set()
-  for (const holder of holders) {
-    if (schedulesConflict(candidate, holder)) {
-      busy.add(String(holder.hardwareDeviceId))
-    }
-  }
+  const withAvailability = mapped.map((hw) => {
+    const deviceHolders = byDevice.get(String(hw.id)) || []
+    let availability = classifyDeviceAvailability(candidate, deviceHolders)
 
-  return mapped.filter((h) => !busy.has(String(h.id)))
+    // IM: device is selectable only when nothing is allocated (exclusive lock).
+    if (forRole === ROLES.INVENTORY_MANAGER) {
+      const imFree = deviceHolders.length === 0
+      availability = {
+        ...availability,
+        available: imFree,
+        availability: imFree ? 'available' : 'locked_exclusive',
+        freeSlots: imFree
+          ? [{ start: scheduleStart, end: scheduleEnd }]
+          : [],
+        occupiedBy: imFree ? null : availability.occupiedBy || deviceHolders[0]?.staffName,
+      }
+    }
+
+    return {
+      ...hw,
+      assignedToName: availability.occupiedBy,
+      availability: availability.availability,
+      available: availability.available,
+      occupiedSlot: availability.occupiedSlot,
+      lockMode: availability.mode,
+      freeSlots: availability.freeSlots || [],
+      occupiedIntervals: availability.occupiedIntervals || [],
+    }
+  })
+
+  // Staff picker: return full board when includeBusy; else only devices with a free slot
+  if (includeBusy) return withAvailability
+  return withAvailability.filter(
+    (h) => h.available || (Array.isArray(h.freeSlots) && h.freeSlots.length > 0),
+  )
 }
 
 export async function getHardwareById(tenantId, id, { branchId } = {}) {
   const { rows } = await tenantQuery(
     tenantId,
     `
-      SELECT ${hardwareSelect}
+      SELECT
+        ${hardwareSelect},
+        u.full_name AS "assignedToName",
+        s.id AS "assignedToStaffId"
       FROM branch_hardware h
       LEFT JOIN staff s
         ON s.tenant_id = h.tenant_id
        AND s.hardware_device_id = h.id::text
+       AND s.status NOT IN ('inactive', 'blocked')
       LEFT JOIN users u
         ON u.id = s.user_id
        AND u.tenant_id = s.tenant_id
@@ -299,7 +321,20 @@ export async function deleteHardware(tenantId, id, { branchId } = {}) {
   const existing = await getHardwareById(tenantId, id, { branchId })
   if (!existing) return null
 
-  if (existing.assignedToStaffId) {
+  // Block deactivate while any active allocation exists
+  const { rows: allocRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT id
+      FROM hardware_allocations
+      WHERE tenant_id = $1
+        AND hardware_id = $2::uuid
+        AND status = 'active'
+      LIMIT 1
+    `,
+    [id],
+  )
+  if (allocRows[0] || existing.assignedToStaffId) {
     throw httpError(
       409,
       'Cannot deactivate hardware. It is currently assigned to a staff member. Unassign it first.',

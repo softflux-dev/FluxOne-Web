@@ -13,6 +13,8 @@ export function buildStaffPayload(fields) {
     password,
     role,
     hardwareDeviceId,
+    hardwareAllocationStart,
+    hardwareAllocationEnd,
     scheduleStart,
     scheduleBreakStart,
     scheduleBreakEnd,
@@ -31,6 +33,8 @@ export function buildStaffPayload(fields) {
     role,
     // Always send so BM can clear an assignment (null = unassigned).
     hardwareDeviceId: String(hardwareDeviceId || '').trim() || null,
+    hardwareAllocationStart: hardwareAllocationStart || undefined,
+    hardwareAllocationEnd: hardwareAllocationEnd || undefined,
     scheduleStart: scheduleStart || undefined,
     scheduleBreakStart: scheduleBreakStart || undefined,
     scheduleBreakEnd: scheduleBreakEnd || undefined,

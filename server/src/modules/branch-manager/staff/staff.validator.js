@@ -81,12 +81,15 @@ export const createStaffSchema = z
       scheduleBreakEnd: optionalTime,
       scheduleEnd: optionalTime,
       workingDays: workingDaysFieldSchema,
+      hardwareAllocationStart: optionalTime,
+      hardwareAllocationEnd: optionalTime,
     }),
     query: empty,
     params: empty,
   })
   .superRefine(({ body }, ctx) => {
     refineStaffSchedule(body, ctx)
+    refineCashierHardwareAllocation(body, ctx)
   })
 
 export const updateStaffSchema = z
@@ -106,6 +109,8 @@ export const updateStaffSchema = z
       scheduleBreakEnd: optionalTime,
       scheduleEnd: optionalTime,
       workingDays: workingDaysFieldSchema,
+      hardwareAllocationStart: optionalTime,
+      hardwareAllocationEnd: optionalTime,
       password: z.string().min(8).optional(),
     }),
     query: empty,
@@ -113,7 +118,32 @@ export const updateStaffSchema = z
   })
   .superRefine(({ body }, ctx) => {
     refineStaffSchedule(body, ctx)
+    refineCashierHardwareAllocation(body, ctx)
   })
+
+// Cashier + device → both allocation bounds required (full shift or partial slot).
+function refineCashierHardwareAllocation(body, ctx) {
+  const role = body.role
+  const hasDevice =
+    body.hardwareDeviceId != null && String(body.hardwareDeviceId).trim() !== ''
+  if (!hasDevice) return
+  if (role !== 'cashier') return
+
+  const hasStart =
+    body.hardwareAllocationStart != null &&
+    String(body.hardwareAllocationStart).trim() !== ''
+  const hasEnd =
+    body.hardwareAllocationEnd != null &&
+    String(body.hardwareAllocationEnd).trim() !== ''
+  if (hasStart && hasEnd) return
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message:
+      'Cashier hardware assignment requires hardwareAllocationStart and hardwareAllocationEnd',
+    path: ['body', 'hardwareAllocationStart'],
+  })
+}
 
 export const staffIdParamsSchema = z.object({
   body: empty,

@@ -37,6 +37,8 @@ export async function hardwareList(req, res) {
       scheduleEnd: req.validated.query.scheduleEnd || null,
       workingDays: req.validated.query.workingDays || null,
       excludeStaffId: req.validated.query.excludeStaffId || null,
+      includeBusy: req.validated.query.includeBusy ?? false,
+      forRole: req.validated.query.forRole || null,
     })
     return success(res, rows)
   } catch (err) {

@@ -1,5 +1,5 @@
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
-import { ROLE_IDS, ROLES } from '../../../config/constants.js'
+import { ROLE_IDS, ROLES, STAFF_STATUS } from '../../../config/constants.js'
 import {
   CREATABLE_STAFF_ROLES,
   CREATABLE_STAFF_ROLE_SQL,
@@ -11,9 +11,13 @@ import { getBranchHours } from '../../b2b-admin/branches/branches.model.js'
 import {
   formatAllocatedSlot,
   normalizeWorkingDays,
-  schedulesConflict,
   validateWorkingDaysAgainstBranch,
 } from './schedule.validation.js'
+import {
+  assertHardwareAllocationAvailable,
+  releaseActiveAllocationsForStaff,
+  upsertStaffHardwareAllocation,
+} from './hardwareAllocation.model.js'
 
 function httpError(status, message) {
   const error = new Error(message)
@@ -73,6 +77,8 @@ const staffSelect = `
   s.schedule_break_end AS "scheduleBreakEnd",
   s.schedule_end AS "scheduleEnd",
   COALESCE(s.working_days, ARRAY[]::text[]) AS "workingDays",
+  ha.start_time AS "hardwareAllocationStart",
+  ha.end_time AS "hardwareAllocationEnd",
   s.branch_id AS "branchId",
   s.user_id AS "userId",
   u.full_name AS "fullName",
@@ -80,6 +86,19 @@ const staffSelect = `
   u.phone,
   u.is_active AS "isActive",
   r.slug AS role
+`
+
+// Active hardware allocation window (may be a cashier sub-slot).
+const staffAllocationJoin = `
+  LEFT JOIN LATERAL (
+    SELECT start_time, end_time
+    FROM hardware_allocations ha0
+    WHERE ha0.tenant_id = s.tenant_id
+      AND ha0.staff_id = s.id
+      AND ha0.status = 'active'
+    ORDER BY ha0.created_at DESC
+    LIMIT 1
+  ) ha ON true
 `
 
 function mapStaffRow(row) {
@@ -94,57 +113,10 @@ function mapStaffRow(row) {
     hardwareAllocatedSlot: row.hardwareDeviceId
       ? formatAllocatedSlot({
           workingDays,
-          scheduleStart: row.scheduleStart,
-          scheduleEnd: row.scheduleEnd,
+          scheduleStart: row.hardwareAllocationStart || row.scheduleStart,
+          scheduleEnd: row.hardwareAllocationEnd || row.scheduleEnd,
         })
       : null,
-  }
-}
-
-// Reject hardware if another active staff overlaps on days + shift.
-async function assertHardwareAvailable(
-  client,
-  tenantId,
-  {
-    branchId,
-    hardwareDeviceId,
-    workingDays,
-    scheduleStart,
-    scheduleEnd,
-    excludeStaffId = null,
-  },
-) {
-  if (!hardwareDeviceId) return
-
-  const { rows } = await tenantClientQuery(
-    client,
-    tenantId,
-    `
-      SELECT
-        s.id,
-        u.full_name AS "fullName",
-        s.schedule_start AS "scheduleStart",
-        s.schedule_end AS "scheduleEnd",
-        COALESCE(s.working_days, ARRAY[]::text[]) AS "workingDays"
-      FROM staff s
-      JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
-      WHERE s.tenant_id = $1
-        AND s.branch_id = $2
-        AND s.hardware_device_id = $3
-        AND s.status NOT IN ('inactive', 'blocked')
-        AND ($4::uuid IS NULL OR s.id <> $4)
-    `,
-    [branchId, String(hardwareDeviceId), excludeStaffId],
-  )
-
-  const candidate = { workingDays, scheduleStart, scheduleEnd }
-  for (const other of rows) {
-    if (schedulesConflict(candidate, other)) {
-      throw httpError(
-        409,
-        `Hardware is already allocated to ${other.fullName || 'another staff member'} for an overlapping shift/working days`,
-      )
-    }
   }
 }
 
@@ -173,6 +145,12 @@ function mapPgUniqueViolation(err, message) {
       throw httpError(
         409,
         'This branch already has an Inventory Manager. Only one Inventory Manager is allowed per branch.',
+      )
+    }
+    if (constraint.includes('uq_hw_alloc_exclusive_device')) {
+      throw httpError(
+        409,
+        'This hardware slot is no longer available. Please select another available slot.',
       )
     }
     throw httpError(409, message)
@@ -242,6 +220,7 @@ export async function listStaff(tenantId, filters = {}) {
       LEFT JOIN branch_hardware hw
         ON hw.tenant_id = s.tenant_id
        AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
       WHERE s.tenant_id = $1
         AND r.slug IN (${CREATABLE_STAFF_ROLE_SQL})
         AND (
@@ -280,6 +259,7 @@ export async function getStaffById(tenantId, id, { branchId } = {}) {
       LEFT JOIN branch_hardware hw
         ON hw.tenant_id = s.tenant_id
        AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
       WHERE s.tenant_id = $1
         AND s.id = $2
         AND ($3::uuid IS NULL OR s.branch_id = $3)
@@ -402,12 +382,16 @@ export async function createStaffUser(tenantId, payload) {
       const workingDays = normalizeWorkingDays(payload.workingDays)
       await assertStaffDaysWithinBranch(tenantId, payload.branchId, workingDays)
 
-      await assertHardwareAvailable(client, tenantId, {
+      // Schedule + role policy before insert (IM exclusive / Cashier shared)
+      await assertHardwareAllocationAvailable(client, tenantId, {
         branchId: payload.branchId,
         hardwareDeviceId: payload.hardwareDeviceId || null,
+        role: roleSlug,
         workingDays,
         scheduleStart: payload.scheduleStart || null,
         scheduleEnd: payload.scheduleEnd || null,
+        allocationStart: payload.hardwareAllocationStart || null,
+        allocationEnd: payload.hardwareAllocationEnd || null,
       })
 
       const resolved = await resolveStaffDesignation(client, tenantId, {
@@ -472,7 +456,22 @@ export async function createStaffUser(tenantId, payload) {
         ],
       )
 
-      return getStaffByIdInTx(client, tenantId, staffRows[0].id)
+      const staffId = staffRows[0].id
+
+      // Persist allocation row (source of truth for conflicts / IM lock)
+      await upsertStaffHardwareAllocation(client, tenantId, {
+        branchId: payload.branchId,
+        staffId,
+        role: roleSlug,
+        hardwareDeviceId: payload.hardwareDeviceId || null,
+        workingDays,
+        scheduleStart: payload.scheduleStart || null,
+        scheduleEnd: payload.scheduleEnd || null,
+        allocationStart: payload.hardwareAllocationStart || null,
+        allocationEnd: payload.hardwareAllocationEnd || null,
+      })
+
+      return getStaffByIdInTx(client, tenantId, staffId)
     })
   } catch (err) {
     mapPgUniqueViolation(err, 'A user with this email already exists')
@@ -492,6 +491,7 @@ async function getStaffByIdInTx(client, tenantId, id, { branchId } = {}) {
       LEFT JOIN branch_hardware hw
         ON hw.tenant_id = s.tenant_id
        AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
       WHERE s.tenant_id = $1
         AND s.id = $2
         AND ($3::uuid IS NULL OR s.branch_id = $3)
@@ -535,17 +535,82 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
           ? payload.hardwareDeviceId || null
           : existing.hardwareDeviceId || null
 
+      // Status → inactive/blocked: release hardware claim (history kept as released)
+      const nextStatus = payload.status !== undefined ? payload.status : existing.status
+      const becomingInactive =
+        payload.status !== undefined &&
+        (payload.status === STAFF_STATUS.INACTIVE || payload.status === 'blocked') &&
+        existing.status !== STAFF_STATUS.INACTIVE &&
+        existing.status !== 'blocked'
+
+      if (becomingInactive) {
+        await releaseActiveAllocationsForStaff(client, tenantId, existing.id)
+        await tenantClientQuery(
+          client,
+          tenantId,
+          `
+            UPDATE users
+            SET
+              full_name = COALESCE($2, full_name),
+              email = COALESCE($3, email),
+              phone = COALESCE($4, phone),
+              branch_id = COALESCE($5, branch_id),
+              role_id = COALESCE($6, role_id),
+              password_hash = COALESCE($7, password_hash),
+              is_active = false
+            WHERE tenant_id = $1 AND id = $8
+          `,
+          [
+            payload.fullName || null,
+            payload.email || null,
+            payload.phone !== undefined ? payload.phone : null,
+            nextBranchId,
+            payload.role ? ROLE_IDS[payload.role] : null,
+            payload.passwordHash || null,
+            existing.userId,
+          ],
+        )
+        await tenantClientQuery(
+          client,
+          tenantId,
+          `
+            UPDATE staff
+            SET
+              status = $2,
+              hardware_device_id = NULL,
+              branch_id = COALESCE($3, branch_id)
+            WHERE tenant_id = $1 AND id = $4
+          `,
+          [nextStatus, nextBranchId, id],
+        )
+        return getStaffByIdInTx(client, tenantId, id, { branchId })
+      }
+
       await assertStaffDaysWithinBranch(tenantId, nextBranchId, nextWorkingDays, {
         // Legacy rows may have empty days until edited; require when assigning hardware or patching days
         requireDays:
           Boolean(nextHardwareId) || payload.workingDays !== undefined,
       })
-      await assertHardwareAvailable(client, tenantId, {
+
+      // Re-validate merged schedule + allocation (reject invalid keep on schedule edit)
+      const nextAllocationStart =
+        payload.hardwareAllocationStart !== undefined
+          ? payload.hardwareAllocationStart
+          : existing.hardwareAllocationStart
+      const nextAllocationEnd =
+        payload.hardwareAllocationEnd !== undefined
+          ? payload.hardwareAllocationEnd
+          : existing.hardwareAllocationEnd
+
+      await assertHardwareAllocationAvailable(client, tenantId, {
         branchId: nextBranchId,
         hardwareDeviceId: nextHardwareId,
+        role: nextRole,
         workingDays: nextWorkingDays,
         scheduleStart: nextScheduleStart,
         scheduleEnd: nextScheduleEnd,
+        allocationStart: nextAllocationStart,
+        allocationEnd: nextAllocationEnd,
         excludeStaffId: existing.id,
       })
 
@@ -637,6 +702,31 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
         ],
       )
 
+      // Keep allocation row in sync with staff schedule / device
+      const shouldRefreshAllocation =
+        payload.hardwareDeviceId !== undefined ||
+        payload.workingDays !== undefined ||
+        payload.scheduleStart !== undefined ||
+        payload.scheduleEnd !== undefined ||
+        payload.hardwareAllocationStart !== undefined ||
+        payload.hardwareAllocationEnd !== undefined ||
+        payload.role !== undefined ||
+        payload.branchId !== undefined
+
+      if (shouldRefreshAllocation) {
+        await upsertStaffHardwareAllocation(client, tenantId, {
+          branchId: nextBranchId,
+          staffId: existing.id,
+          role: nextRole,
+          hardwareDeviceId: nextHardwareId,
+          workingDays: nextWorkingDays,
+          scheduleStart: nextScheduleStart,
+          scheduleEnd: nextScheduleEnd,
+          allocationStart: nextAllocationStart,
+          allocationEnd: nextAllocationEnd,
+        })
+      }
+
       return getStaffByIdInTx(client, tenantId, id, { branchId })
     })
   } catch (err) {
@@ -670,6 +760,21 @@ export async function setStaffStatus(tenantId, id, status, { branchId } = {}) {
       `,
       [status, existing.userId],
     )
+
+    // Deactivate → release future hardware claim (history rows stay as released)
+    if (status === STAFF_STATUS.INACTIVE || status === 'blocked') {
+      await releaseActiveAllocationsForStaff(client, tenantId, id)
+      await tenantClientQuery(
+        client,
+        tenantId,
+        `
+          UPDATE staff
+          SET hardware_device_id = NULL
+          WHERE tenant_id = $1 AND id = $2
+        `,
+        [id],
+      )
+    }
 
     return getStaffByIdInTx(client, tenantId, id, { branchId })
   })
