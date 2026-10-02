@@ -65,3 +65,59 @@ export async function clearHolidayAttendanceByDate(tenantId, { workDate, note })
   )
   return { rowCount: rowCount || 0 }
 }
+
+//
+// Batch clear — one DELETE for all dates in a holiday range (avoids N round-trips).
+//
+export async function clearHolidayAttendanceByDates(tenantId, { dates, note }) {
+  const list = Array.isArray(dates) ? dates.filter(Boolean) : []
+  if (!list.length) return { rowCount: 0 }
+
+  const { rowCount } = await tenantQuery(
+    tenantId,
+    `
+      DELETE FROM attendance
+      WHERE tenant_id = $1
+        AND status = 'holiday'
+        AND work_date = ANY($2::date[])
+        AND ($3::text IS NULL OR note = $3)
+    `,
+    [list, note || null],
+  )
+  return { rowCount: rowCount || 0 }
+}
+
+//
+// Batch upsert holiday marks — staff_ids × dates in one INSERT (CROSS JOIN unnest).
+//
+export async function batchUpsertHolidayAttendance(
+  tenantId,
+  { staffIds, dates, note, createdBy },
+) {
+  const staffList = Array.isArray(staffIds) ? [...new Set(staffIds.filter(Boolean))] : []
+  const dateList = Array.isArray(dates) ? dates.filter(Boolean) : []
+  if (!staffList.length || !dateList.length) return { rowCount: 0 }
+
+  const { rowCount } = await tenantQuery(
+    tenantId,
+    `
+      INSERT INTO attendance (tenant_id, staff_id, work_date, status, note, created_by)
+      SELECT
+        $1,
+        s.staff_id,
+        d.work_date,
+        'holiday',
+        $2,
+        $3
+      FROM unnest($4::uuid[]) AS s(staff_id)
+      CROSS JOIN unnest($5::date[]) AS d(work_date)
+      ON CONFLICT (tenant_id, staff_id, work_date)
+      DO UPDATE SET
+        status = EXCLUDED.status,
+        note = EXCLUDED.note,
+        created_by = COALESCE(EXCLUDED.created_by, attendance.created_by)
+    `,
+    [note || null, createdBy || null, staffList, dateList],
+  )
+  return { rowCount: rowCount || 0 }
+}

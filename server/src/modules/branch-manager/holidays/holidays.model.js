@@ -22,7 +22,7 @@ function formatDate(val) {
 }
 
 export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
-  // 1. Get total active staff count in this branch/tenant
+  // 1. Active staff count (for "All Employees" display)
   const { rows: staffCountRows } = await tenantQuery(
     tenantId,
     `
@@ -38,7 +38,7 @@ export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
   )
   const totalActiveStaff = staffCountRows[0]?.totalStaff || 0
 
-  // 2. Fetch all holiday schedules with assigned employees
+  // 2. Schedules + employee id list only (no per-row staff name join — UI resolves names)
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -52,28 +52,12 @@ export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
         hs.branch_id AS "branchId",
         hs.created_at AS "createdAt",
         COALESCE(
-          json_agg(
-            json_build_object(
-              'id', s.id,
-              'fullName', u.full_name,
-              'designation', COALESCE(d.name, s.designation, 'Staff')
-            )
-          ) FILTER (WHERE s.id IS NOT NULL),
-          '[]'::json
-        ) AS "assignedEmployees",
-        COALESCE(
           array_agg(hss.staff_id) FILTER (WHERE hss.staff_id IS NOT NULL),
           ARRAY[]::uuid[]
         ) AS "employeeIds"
       FROM holiday_schedules hs
       LEFT JOIN holiday_schedule_staff hss
         ON hss.holiday_schedule_id = hs.id AND hss.tenant_id = hs.tenant_id
-      LEFT JOIN staff s
-        ON s.id = hss.staff_id AND s.tenant_id = hs.tenant_id
-      LEFT JOIN users u
-        ON u.id = s.user_id AND u.tenant_id = s.tenant_id
-      LEFT JOIN designations d
-        ON d.id = s.designation_id AND d.tenant_id = s.tenant_id
       WHERE hs.tenant_id = $1
         AND ($2::uuid IS NULL OR hs.branch_id IS NULL OR hs.branch_id = $2)
       GROUP BY hs.id
@@ -86,24 +70,23 @@ export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
     const sDate = formatDate(row.startDate)
     const eDate = formatDate(row.endDate)
     const noOfDays = calculateDays(sDate, eDate)
-    const noOfEmployees = row.isAllEmployees
-      ? totalActiveStaff
-      : (row.employeeIds?.length || 0)
+    const employeeIds = row.employeeIds || []
+    const noOfEmployees = row.isAllEmployees ? totalActiveStaff : employeeIds.length
 
     return {
       id: row.id,
       name: row.name,
       startDate: sDate,
       endDate: eDate,
-      holidayDate: sDate, // Backward compat
+      holidayDate: sDate,
       noOfDays,
       isAllEmployees: row.isAllEmployees,
       noOfEmployees,
       totalActiveStaff,
       status: row.status || 'active',
       branchId: row.branchId,
-      assignedEmployees: row.assignedEmployees || [],
-      employeeIds: row.employeeIds || [],
+      assignedEmployees: [],
+      employeeIds,
       createdAt: row.createdAt,
     }
   })
@@ -218,12 +201,31 @@ export async function updateHolidaySchedule(
   { name, startDate, endDate, isAllEmployees, employeeIds, status, branchId = null },
 ) {
   return withTransaction(async (client) => {
-    const existing = await getHolidayScheduleById(tenantId, id)
+    // Light read inside the same transaction (avoid second heavy join round-trip)
+    const { rows: existingRows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT
+          id,
+          name,
+          start_date AS "startDate",
+          end_date AS "endDate",
+          is_all_employees AS "isAllEmployees",
+          status,
+          branch_id AS "branchId"
+        FROM holiday_schedules
+        WHERE tenant_id = $1 AND id = $2
+        LIMIT 1
+      `,
+      [id],
+    )
+    const existing = existingRows[0]
     if (!existing) throw httpError(404, 'Holiday schedule not found')
 
     const nextName = name !== undefined ? name.trim() : existing.name
-    const nextStart = startDate !== undefined ? formatDate(startDate) : existing.startDate
-    const nextEnd = endDate !== undefined ? formatDate(endDate) : existing.endDate
+    const nextStart = startDate !== undefined ? formatDate(startDate) : formatDate(existing.startDate)
+    const nextEnd = endDate !== undefined ? formatDate(endDate) : formatDate(existing.endDate)
     const nextAll = isAllEmployees !== undefined ? Boolean(isAllEmployees) : existing.isAllEmployees
     const nextStatus = status !== undefined ? status : existing.status
 
@@ -244,6 +246,7 @@ export async function updateHolidaySchedule(
       [nextName, nextStart, nextEnd, nextAll, nextStatus, id],
     )
 
+    let nextEmployeeIds = []
     if (employeeIds !== undefined || isAllEmployees !== undefined) {
       await tenantClientQuery(
         client,
@@ -265,10 +268,35 @@ export async function updateHolidaySchedule(
           `,
           [id, uniqueIds],
         )
+        nextEmployeeIds = uniqueIds
       }
+    } else if (!nextAll) {
+      const { rows: idRows } = await tenantClientQuery(
+        client,
+        tenantId,
+        `
+          SELECT staff_id AS id
+          FROM holiday_schedule_staff
+          WHERE tenant_id = $1 AND holiday_schedule_id = $2
+        `,
+        [id],
+      )
+      nextEmployeeIds = idRows.map((r) => r.id)
     }
 
-    return getHolidayScheduleById(tenantId, id)
+    return {
+      id,
+      name: nextName,
+      startDate: nextStart,
+      endDate: nextEnd,
+      holidayDate: nextStart,
+      noOfDays: calculateDays(nextStart, nextEnd),
+      isAllEmployees: nextAll,
+      status: nextStatus || 'active',
+      branchId: existing.branchId ?? branchId,
+      assignedEmployees: [],
+      employeeIds: nextAll ? [] : nextEmployeeIds,
+    }
   })
 }
 
