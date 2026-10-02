@@ -1,18 +1,30 @@
 import { useMemo, useState } from 'react'
-import { FolderTree, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FolderTree } from 'lucide-react'
 import { CategoryDialog } from '@/components/feature/products/CategoryDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { EntityStatusToggle } from '@/components/shared/EntityStatusToggle'
 import { DeleteEntityDialog } from '@/components/shared/DeleteEntityDialog'
-import { MotionHeader } from '@/components/shared/MotionReveal'
+import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { ParentChildTreePanel } from '@/components/shared/ParentChildTreePanel'
-import { Button } from '@/components/ui/button'
+import { ParentChildManagementLayout } from '@/components/shared/parent-child/ParentChildManagementLayout'
+import {
+  ChildEntityTable,
+  ParentEntityTable,
+} from '@/components/shared/parent-child/ParentChildEntityTables'
 import { useClientPagination } from '@/hooks/useClientPagination'
 import { useProducts } from '@/hooks/useProducts'
-import { filterParentChildRows } from '@/lib/filterParentChildRows'
+import {
+  filterFlatChildRows,
+  filterParentChildRows,
+  flattenParentChildRows,
+} from '@/lib/filterParentChildRows'
 import { TABLE_PAGE_SIZE } from '@/lib/tablePagination'
 import { toastError, toastSuccess } from '@/lib/toast'
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+]
 
 export function CategoriesPage() {
   const {
@@ -25,25 +37,22 @@ export function CategoriesPage() {
     setCategoryActive,
   } = useProducts({}, { skipList: true, categoryActive: 'all' })
 
-  // Default Active so soft-deleted categories disappear from the main list
+  const [activeTab, setActiveTab] = useState('parents')
   const [statusFilter, setStatusFilter] = useState('active')
   const [query, setQuery] = useState('')
-  // Parents the user has expanded via chevron
-  const [openIds, setOpenIds] = useState(() => new Set())
+  const [parentFilterId, setParentFilterId] = useState('all')
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState('create')
   const [dialogKind, setDialogKind] = useState('category')
   const [editing, setEditing] = useState(null)
   const [parentForSub, setParentForSub] = useState(null)
-  // Toolbar "Add Sub Category" asks for a parent inside the dialog
   const [pickParent, setPickParent] = useState(false)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  // Normalize catalog → shared tree row shape
   const treeRows = useMemo(() => {
     return (catalog.parents || []).map((parent) => {
       const children = catalog.childrenByParent.get(parent.id) || []
@@ -60,35 +69,42 @@ export function CategoriesPage() {
           imageUrl: child.imageUrl,
           parentId: child.parentId,
         })),
-        // Keep raw refs for dialogs / status handlers
         _raw: parent,
-        _rawChildren: children,
       }
     })
   }, [catalog])
 
-  const rows = useMemo(
+  const parentRows = useMemo(
     () => filterParentChildRows(treeRows, statusFilter, query),
     [treeRows, statusFilter, query],
   )
 
-  const {
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-    pageCount,
-    total,
-    slice: pageRows,
-  } = useClientPagination(rows, TABLE_PAGE_SIZE)
+  const flatChildren = useMemo(() => flattenParentChildRows(treeRows), [treeRows])
 
-  function toggleParent(parentId) {
-    setOpenIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(parentId)) next.delete(parentId)
-      else next.add(parentId)
-      return next
-    })
+  const childRows = useMemo(
+    () => filterFlatChildRows(flatChildren, statusFilter, query, parentFilterId),
+    [flatChildren, statusFilter, query, parentFilterId],
+  )
+
+  const parentCount = treeRows.length
+  const childCount = flatChildren.length
+
+  const parentPaging = useClientPagination(parentRows, TABLE_PAGE_SIZE)
+  const childPaging = useClientPagination(childRows, TABLE_PAGE_SIZE)
+
+  const parentFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All Categories' },
+      ...treeRows.map((row) => ({ value: String(row.id), label: row.name })),
+    ],
+    [treeRows],
+  )
+
+  const hasActiveParent = (catalog.parents || []).some((row) => row.isActive !== false)
+
+  function resetPageOnFilter() {
+    parentPaging.setPage(1)
+    childPaging.setPage(1)
   }
 
   function openCreateCategory() {
@@ -101,7 +117,6 @@ export function CategoriesPage() {
   }
 
   function openCreateSub(parent) {
-    // Toolbar add needs at least one active parent
     if (!parent) {
       const choices = (catalog.parents || []).filter((row) => row.isActive !== false)
       if (!choices.length) {
@@ -233,6 +248,33 @@ export function CategoriesPage() {
 
   const deleteCategoryIsActive = deleteTarget?.isActive !== false
 
+  const emptyParentTitle = query.trim()
+    ? 'No categories match that search.'
+    : statusFilter === 'all'
+      ? 'No categories yet. Create a parent category first.'
+      : statusFilter === 'active'
+        ? 'No active categories.'
+        : 'No inactive categories.'
+
+  const emptyChildTitle =
+    query.trim() || statusFilter !== 'active' || parentFilterId !== 'all'
+      ? 'No sub categories match your filters.'
+      : 'No sub categories yet. Add one from a category or use Add Sub Category.'
+
+  function categoryAvatar(row) {
+    if (!row.imageUrl) return null
+    return (
+      <img src={row.imageUrl} alt="" className="size-10 shrink-0 rounded-lg object-cover" />
+    )
+  }
+
+  function subAvatar(row) {
+    if (!row.imageUrl) return null
+    return (
+      <img src={row.imageUrl} alt="" className="size-7 shrink-0 rounded object-cover" />
+    )
+  }
+
   return (
     <div className="space-y-5 pb-8 sm:space-y-6">
       <MotionHeader>
@@ -242,152 +284,102 @@ export function CategoriesPage() {
         />
       </MotionHeader>
 
-      <ParentChildTreePanel
-        search={query}
-        onSearchChange={(value) => {
-          setQuery(value)
-          setPage(1)
-        }}
-        searchId="category-search"
-        searchPlaceholder="Search category, sub category or keyword..."
-        status={statusFilter}
-        onStatusChange={(value) => {
-          setStatusFilter(value)
-          setPage(1)
-        }}
-        statusId="category-status-filter"
-        toolbarActions={
-          <>
-            <Button type="button" variant="outline" onClick={openCreateCategory}>
-              <Plus className="size-4" />
-              Add Category
-            </Button>
-            <Button type="button" variant="brand" onClick={() => openCreateSub(null)}>
-              <Plus className="size-4" />
-              Add Sub Category
-            </Button>
-          </>
-        }
-        title="Category tree"
-        description="Parent categories and sub categories"
-        countLabel={`${rows.length} parent${rows.length === 1 ? '' : 's'}${
-          statusFilter !== 'all' ? ` · ${statusFilter}` : ''
-        }`}
-        emptyIcon={FolderTree}
-        emptyTitle={
-          query.trim()
-            ? 'No categories match that search.'
-            : statusFilter === 'all'
-              ? 'No categories yet. Create a parent category first.'
-              : statusFilter === 'active'
-                ? 'No active categories.'
-                : 'No inactive categories.'
-        }
-        loading={catalogLoading}
-        rows={pageRows}
-        openIds={openIds}
-        onToggleParent={toggleParent}
-        renderParentMeta={(_parent, children) => (
-          <p className="text-xs text-slate-400">
-            {children.length} sub categor{children.length === 1 ? 'y' : 'ies'}
-          </p>
-        )}
-        renderParentActions={(parent) => (
-          <>
-            {/* Active / Inactive — not Open/Close (product availability wording) */}
-            <EntityStatusToggle
-              status={parent.isActive === false ? 'inactive' : 'active'}
-              loading={statusUpdatingId === parent.id}
-              onChange={(nextActive) => handleStatusChange(parent, nextActive)}
+      <MotionReveal delay={0.02}>
+        <ParentChildManagementLayout
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setActiveTab(tab)
+            resetPageOnFilter()
+          }}
+          parentTabLabel="Categories"
+          childTabLabel="Sub Categories"
+          parentCount={parentCount}
+          childCount={childCount}
+          primaryActionLabel={
+            activeTab === 'parents' ? 'Add Category' : 'Add Sub Category'
+          }
+          primaryActionDisabled={activeTab === 'children' && !hasActiveParent}
+          onPrimaryAction={() =>
+            activeTab === 'parents' ? openCreateCategory() : openCreateSub(null)
+          }
+          search={query}
+          onSearchChange={(value) => {
+            setQuery(value)
+            resetPageOnFilter()
+          }}
+          searchPlaceholder="Search category or sub category…"
+          status={statusFilter}
+          onStatusChange={(value) => {
+            setStatusFilter(value)
+            resetPageOnFilter()
+          }}
+          statusOptions={STATUS_OPTIONS}
+          showParentFilter={activeTab === 'children'}
+          parentFilterId={parentFilterId}
+          onParentFilterChange={(value) => {
+            setParentFilterId(value)
+            childPaging.setPage(1)
+          }}
+          parentFilterOptions={parentFilterOptions}
+          parentFilterLabel="Category"
+        >
+          {activeTab === 'parents' ? (
+            <ParentEntityTable
+              rows={parentPaging.slice}
+              loading={catalogLoading}
+              emptyIcon={FolderTree}
+              emptyTitle={emptyParentTitle}
+              countSuffix=""
+              labels={{
+                name: 'Category Name',
+                count: 'Sub Categories',
+                parentSummaryEmpty: 'No sub categories yet',
+              }}
+              statusUpdatingId={statusUpdatingId}
+              renderNameLeading={categoryAvatar}
+              onEdit={(row) => openEdit(row, 'category')}
+              onToggleActive={handleStatusChange}
+              onDelete={(row) => setDeleteTarget(row._raw || row)}
+              onAddChild={openCreateSub}
+              addChildLabel="Add Sub Category"
+              pagination={{
+                page: parentPaging.page,
+                pageCount: parentPaging.pageCount,
+                total: parentPaging.total,
+                pageSize: parentPaging.pageSize,
+                loading: catalogLoading,
+                onPageChange: parentPaging.setPage,
+                onPageSizeChange: parentPaging.setPageSize,
+              }}
             />
-            {parent.isActive !== false ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => openCreateSub(parent)}
-              >
-                <Plus className="size-3.5" />
-                Sub category
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="cursor-pointer text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110"
-              title="Edit"
-              onClick={() => openEdit(parent, 'category')}
-            >
-              <Pencil className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="cursor-pointer text-slate-500 hover:bg-rose-50 hover:text-rose-700 hover:scale-110"
-              title="Delete"
-              aria-label={`Delete ${parent.name || 'category'}`}
-              onClick={() => setDeleteTarget(parent._raw || parent)}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </>
-        )}
-        renderChild={(child) => (
-          <>
-            <div className="flex min-w-0 items-center gap-2">
-              {child.imageUrl ? (
-                <img
-                  src={child.imageUrl}
-                  alt=""
-                  className="size-7 rounded object-cover"
-                />
-              ) : null}
-              <span className="truncate text-sm font-medium text-slate-800">
-                {child.name}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <EntityStatusToggle
-                status={child.isActive === false ? 'inactive' : 'active'}
-                loading={statusUpdatingId === child.id}
-                onChange={(nextActive) => handleStatusChange(child, nextActive)}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110"
-                title="Edit"
-                onClick={() => openEdit(child, 'subcategory')}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer text-slate-500 hover:bg-rose-50 hover:text-rose-700 hover:scale-110"
-                title="Delete"
-                aria-label={`Delete ${child.name || 'sub category'}`}
-                onClick={() => setDeleteTarget(child)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          </>
-        )}
-        pagination={{
-          page,
-          pageCount,
-          total,
-          pageSize,
-          onPageChange: setPage,
-          onPageSizeChange: setPageSize,
-        }}
-      />
+          ) : (
+            <ChildEntityTable
+              rows={childPaging.slice}
+              loading={catalogLoading}
+              emptyIcon={FolderTree}
+              emptyTitle={emptyChildTitle}
+              labels={{
+                name: 'Sub Category Name',
+                parent: 'Category',
+              }}
+              statusUpdatingId={statusUpdatingId}
+              renderNameLeading={subAvatar}
+              onEdit={(row) => openEdit(row, 'subcategory')}
+              onToggleActive={handleStatusChange}
+              onDelete={(row) => setDeleteTarget(row)}
+              pagination={{
+                page: childPaging.page,
+                pageCount: childPaging.pageCount,
+                total: childPaging.total,
+                pageSize: childPaging.pageSize,
+                loading: catalogLoading,
+                onPageChange: childPaging.setPage,
+                onPageSizeChange: childPaging.setPageSize,
+              }}
+            />
+          )}
+        </ParentChildManagementLayout>
+      </MotionReveal>
 
       <CategoryDialog
         open={dialogOpen}

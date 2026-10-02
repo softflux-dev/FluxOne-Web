@@ -52,3 +52,62 @@ export function filterParentChildRows(rows, statusFilter = 'all', query = '') {
     })
     .filter(Boolean)
 }
+
+//
+// Flatten parent rows → child rows for the “children” tab table.
+//
+export function flattenParentChildRows(parentRows) {
+  const list = Array.isArray(parentRows) ? parentRows : []
+  const flat = []
+  for (const parent of list) {
+    for (const child of parent.children || []) {
+      flat.push({
+        ...child,
+        parentId: child.parentId ?? parent.id,
+        parentName: parent.name,
+        parentIsActive: parent.isActive,
+        _rawParent: parent._raw ?? parent,
+      })
+    }
+  }
+  return flat
+}
+
+//
+// Filter flat child rows (status, search, optional parent id).
+//
+export function filterFlatChildRows(
+  flatRows,
+  statusFilter = 'all',
+  query = '',
+  parentFilterId = 'all',
+) {
+  let next = Array.isArray(flatRows) ? flatRows : []
+
+  if (parentFilterId && parentFilterId !== 'all') {
+    next = next.filter(
+      (row) => String(row.parentId) === String(parentFilterId),
+    )
+  }
+
+  if (statusFilter === 'active') {
+    next = next.filter((row) => row.isActive !== false)
+  } else if (statusFilter === 'inactive') {
+    next = next.filter((row) => row.isActive === false)
+  }
+
+  const needle = String(query || '')
+    .trim()
+    .toLowerCase()
+  if (!needle) return next
+
+  return next.filter((row) => {
+    const nameHit = String(row.name || '')
+      .toLowerCase()
+      .includes(needle)
+    const parentHit = String(row.parentName || '')
+      .toLowerCase()
+      .includes(needle)
+    return nameHit || parentHit
+  })
+}
