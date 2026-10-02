@@ -16,8 +16,8 @@ export function HolidaysPage() {
   const loadData = async () => {
     setLoading(true)
     const [resDesig, resStaff] = await Promise.all([
-      apiClient.get(endpoints.branch.designations.list, { limit: 100 }),
-      apiClient.get(endpoints.branch.staff.list, { limit: 100, status: 'active' }),
+      apiClient.get(endpoints.branch.designations.list, { limit: 200 }),
+      apiClient.get(endpoints.branch.staff.list, { limit: 500, status: 'active' }),
     ])
     setLoading(false)
 
