@@ -6,6 +6,9 @@
 //
 // FluxOne-POS offline login:
 // See ./posOfflineAuth.contract.js + POS_OFFLINE_AUTH_REPORT.md
+//
+// Product / variant catalog:
+// See ./posProductCatalog.contract.js
 
 import {
   POS_SLIP_POLICY_FIELDS,
@@ -48,6 +51,10 @@ function mapProduct(product) {
     price: product.sellingPrice,
     currency: product.priceCurrency || product.currency || null,
     isActive,
+    // Variant fields — additive; see posProductCatalog.contract.js
+    parentId: product.parentId ?? null,
+    variantLabel: product.variantLabel ?? null,
+    variantOptions: Array.isArray(product.variantOptions) ? product.variantOptions : [],
   }
 }
 

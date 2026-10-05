@@ -823,7 +823,7 @@ export async function ingestSyncEvent(tenantId, event, userId) {
   })
 }
 
-export async function listSyncEvents(tenantId, { since } = {}) {
+export async function listSyncEvents(tenantId, { since, branchId } = {}) {
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -832,13 +832,15 @@ export async function listSyncEvents(tenantId, { since } = {}) {
         event_type AS "eventType",
         payload,
         client_event_id AS "clientEventId",
+        branch_id AS "branchId",
         created_at AS "createdAt"
       FROM pos_sync_events
       WHERE tenant_id = $1
         AND ($2::timestamptz IS NULL OR created_at > $2::timestamptz)
+        AND ($3::uuid IS NULL OR branch_id = $3::uuid)
       ORDER BY created_at ASC
     `,
-    [since || null],
+    [since || null, branchId || null],
   )
   return rows
 }
@@ -1112,6 +1114,8 @@ async function fetchBootstrapProducts(tenantId, branchId, since = null) {
         p.category_id AS "categoryId",
         p.subcategory_id AS "subcategoryId",
         p.branch_id AS "branchId",
+        p.parent_id AS "parentId",
+        p.variant_label AS "variantLabel",
         p.offer_id AS "offerId",
         p.updated_at AS "updatedAt"
       FROM products p
@@ -1176,18 +1180,55 @@ async function fetchBundleItemsMap(tenantId, bundleIds) {
   return map
 }
 
+// Variant child SKUs: combination parts from product_variant_options (POS catalog).
+async function fetchProductVariantOptionsMap(tenantId, productIds) {
+  if (!productIds.length) return new Map()
+
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT
+        product_id AS "productId",
+        sort_order AS "sortOrder",
+        type_name AS "typeName",
+        value_name AS "valueName",
+        is_custom_type AS "isCustomType",
+        is_custom_value AS "isCustomValue"
+      FROM product_variant_options
+      WHERE tenant_id = $1 AND product_id = ANY($2::uuid[])
+      ORDER BY product_id, sort_order ASC
+    `,
+    [productIds],
+  )
+
+  const map = new Map()
+  for (const row of rows) {
+    if (!map.has(row.productId)) map.set(row.productId, [])
+    map.get(row.productId).push({
+      typeName: row.typeName,
+      valueName: row.valueName,
+      sortOrder: row.sortOrder,
+      isCustomType: row.isCustomType,
+      isCustomValue: row.isCustomValue,
+    })
+  }
+  return map
+}
+
 async function attachProductExtras(tenantId, products) {
   const productIds = products.map((p) => p.id)
   const bundleIds = products.filter((p) => p.type === 'bundle').map((p) => p.id)
-  const [taxMap, bundleMap] = await Promise.all([
+  const [taxMap, bundleMap, variantOptionsMap] = await Promise.all([
     fetchProductTaxMap(tenantId, productIds),
     fetchBundleItemsMap(tenantId, bundleIds),
+    fetchProductVariantOptionsMap(tenantId, productIds),
   ])
 
   return products.map((p) => ({
     ...p,
     taxIds: taxMap.get(p.id) || [],
     bundleItems: bundleMap.get(p.id) || [],
+    variantOptions: variantOptionsMap.get(p.id) || [],
   }))
 }
 

@@ -673,13 +673,13 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
             hardware_device_id = $4,
             image_url = COALESCE($5, image_url),
             status = COALESCE($6, status),
-            schedule_start = COALESCE($7, schedule_start),
-            schedule_break_start = COALESCE($8, schedule_break_start),
-            schedule_break_end = COALESCE($9, schedule_break_end),
-            schedule_end = COALESCE($10, schedule_end),
-            working_days = CASE WHEN $11::boolean THEN $12::text[] ELSE working_days END,
-            branch_id = COALESCE($13, branch_id)
-          WHERE tenant_id = $1 AND id = $14
+            schedule_start = CASE WHEN $7::boolean THEN $8::time ELSE schedule_start END,
+            schedule_break_start = CASE WHEN $9::boolean THEN $10::time ELSE schedule_break_start END,
+            schedule_break_end = CASE WHEN $11::boolean THEN $12::time ELSE schedule_break_end END,
+            schedule_end = CASE WHEN $13::boolean THEN $14::time ELSE schedule_end END,
+            working_days = CASE WHEN $15::boolean THEN $16::text[] ELSE working_days END,
+            branch_id = COALESCE($17, branch_id)
+          WHERE tenant_id = $1 AND id = $18
         `,
         [
           designationName,
@@ -691,9 +691,13 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
           nextHardwareId,
           payload.imageUrl || null,
           payload.status || null,
+          payload.scheduleStart !== undefined,
           payload.scheduleStart !== undefined ? payload.scheduleStart : null,
+          payload.scheduleBreakStart !== undefined,
           payload.scheduleBreakStart !== undefined ? payload.scheduleBreakStart : null,
+          payload.scheduleBreakEnd !== undefined,
           payload.scheduleBreakEnd !== undefined ? payload.scheduleBreakEnd : null,
+          payload.scheduleEnd !== undefined,
           payload.scheduleEnd !== undefined ? payload.scheduleEnd : null,
           payload.workingDays !== undefined,
           payload.workingDays !== undefined ? nextWorkingDays : null,

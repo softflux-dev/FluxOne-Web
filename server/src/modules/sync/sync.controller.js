@@ -13,10 +13,30 @@ import {
   pushBodySchema,
   salesPullQuerySchema,
 } from './sync.validator.js'
-import { resolveSyncPullBranchId, resolveSyncPushBranchId } from './sync.access.js'
+import {
+  resolveSyncEventsBranchFilter,
+  resolveSyncPullBranchId,
+  resolveSyncPushBranchId,
+} from './sync.access.js'
 import { mapSnapshotForPos } from './sync.mapper.js'
 import { success } from '../../utils/response.util.js'
 import { paginatedResult } from '../../utils/pagination.util.js'
+
+// Avoid logging full sale/refund payloads (PII + line items).
+function summarizeRejectedPushPayload(eventType, payload) {
+  if (!payload || typeof payload !== 'object') return null
+
+  if (eventType === 'sale' || eventType === 'refund') {
+    const lines = payload.lines || payload.items
+    return {
+      saleNumber: payload.saleNumber ?? payload.invoiceId ?? null,
+      lineCount: Array.isArray(lines) ? lines.length : 0,
+    }
+  }
+
+  const keys = Object.keys(payload)
+  return { keyCount: keys.length, keys: keys.slice(0, 12) }
+}
 
 export async function push(req, res) {
   const parsed = parseSchemaOrThrow(pushBodySchema, req.body, 'Push body')
@@ -51,7 +71,7 @@ export async function push(req, res) {
         eventType: event.eventType,
         reason: err.message || 'Event rejected',
         details: err.details || null,
-        payload: normalized.payload,
+        payloadSummary: summarizeRejectedPushPayload(event.eventType, normalized.payload),
       })
       rejected.push({
         clientEventId: event.clientEventId,
@@ -101,7 +121,11 @@ export async function sales(req, res) {
 
 // Cloud pos_sync_events audit log — not POS catalog.
 export async function events(req, res) {
-  const rows = await listSyncEvents(req.tenantId, { since: req.query.since })
+  const branchId = resolveSyncEventsBranchFilter(req, req.query.branchId)
+  const rows = await listSyncEvents(req.tenantId, {
+    since: req.query.since,
+    branchId,
+  })
   return success(res, rows)
 }
 

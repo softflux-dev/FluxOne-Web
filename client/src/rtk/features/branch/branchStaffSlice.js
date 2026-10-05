@@ -35,10 +35,11 @@ export function buildStaffPayload(fields) {
     hardwareDeviceId: String(hardwareDeviceId || '').trim() || null,
     hardwareAllocationStart: hardwareAllocationStart || undefined,
     hardwareAllocationEnd: hardwareAllocationEnd || undefined,
-    scheduleStart: scheduleStart || undefined,
-    scheduleBreakStart: scheduleBreakStart || undefined,
-    scheduleBreakEnd: scheduleBreakEnd || undefined,
-    scheduleEnd: scheduleEnd || undefined,
+    // Always send schedule fields so Edit can clear (empty → null).
+    scheduleStart: scheduleStart ? String(scheduleStart).trim() : null,
+    scheduleBreakStart: scheduleBreakStart ? String(scheduleBreakStart).trim() : null,
+    scheduleBreakEnd: scheduleBreakEnd ? String(scheduleBreakEnd).trim() : null,
+    scheduleEnd: scheduleEnd ? String(scheduleEnd).trim() : null,
     ...(days !== undefined ? { workingDays: days } : {}),
   }
 
@@ -46,6 +47,12 @@ export function buildStaffPayload(fields) {
 
   if (image instanceof File && image.size > 0) {
     const form = new FormData()
+    const scheduleKeys = new Set([
+      'scheduleStart',
+      'scheduleEnd',
+      'scheduleBreakStart',
+      'scheduleBreakEnd',
+    ])
     Object.entries(base).forEach(([key, value]) => {
       if (key === 'hardwareDeviceId') {
         form.append(key, value || '')
@@ -53,6 +60,11 @@ export function buildStaffPayload(fields) {
       }
       if (key === 'workingDays') {
         form.append(key, JSON.stringify(value || []))
+        return
+      }
+      // Clears must travel as empty string (validator maps '' → null).
+      if (scheduleKeys.has(key)) {
+        form.append(key, value == null ? '' : String(value))
         return
       }
       if (value !== undefined && value !== null && value !== '') {

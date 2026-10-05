@@ -17,10 +17,11 @@ export const timeString = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Invalid time (HH:MM or HH:MM:SS)')
 
-export const optionalTime = z.preprocess(
-  (value) => (value === '' || value === null || value === undefined ? undefined : value),
-  timeString.optional(),
-)
+export const optionalTime = z.preprocess((value) => {
+  if (value === undefined) return undefined // omit → no change on PATCH
+  if (value === '' || value === null) return null // clear
+  return value
+}, z.union([timeString, z.null()]).optional())
 
 export const paginationQuery = z.object({
   page: z.coerce.number().int().min(1).default(DEFAULT_PAGE),
