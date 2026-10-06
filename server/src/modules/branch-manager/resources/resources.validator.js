@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { empty, idParams, optionalString, optionalUuid } from '../shared.validator.js'
+import { empty, idParams, optionalString, optionalTime, optionalUuid } from '../shared.validator.js'
+import { normalizeWorkingDays, WEEK_DAYS } from '../staff/schedule.validation.js'
 
 const hardwareType = z.enum(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
 const hardwareStatus = z.enum(['New', 'Used', 'Good', 'Poor'])
@@ -10,6 +11,28 @@ const optionalImageUrl = z.preprocess(
   z.string().max(500).optional(),
 )
 
+// workingDays query: "mon,tue" | JSON array string
+const optionalWorkingDaysQuery = z.preprocess((value) => {
+  if (value === undefined || value === null || value === '') return undefined
+  const days = normalizeWorkingDays(value)
+  return days.length ? days : undefined
+}, z.array(z.enum(WEEK_DAYS)).min(1).optional())
+
+const optionalBooleanQuery = z.preprocess((value) => {
+  if (value === undefined || value === null || value === '') return undefined
+  if (value === true || value === 'true' || value === '1') return true
+  if (value === false || value === 'false' || value === '0') return false
+  return undefined
+}, z.boolean().optional())
+
+const staffRoleForHardwareEnum = z.enum([
+  'inventory_manager',
+  'cashier',
+  'production_staff',
+  'delivery_staff',
+  'website_manager',
+])
+
 export const listHardwareSchema = z.object({
   body: empty,
   params: empty,
@@ -17,6 +40,13 @@ export const listHardwareSchema = z.object({
     branchId: optionalUuid,
     type: hardwareType.optional(),
     q: optionalString,
+    // Availability window — when set, only return free devices for this slot
+    scheduleStart: optionalTime,
+    scheduleEnd: optionalTime,
+    workingDays: optionalWorkingDaysQuery,
+    excludeStaffId: optionalUuid,
+    includeBusy: optionalBooleanQuery,
+    forRole: staffRoleForHardwareEnum.optional(),
   }),
 })
 

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
+import { ProductCatalogFilters } from '@/components/shared/ProductCatalogFilters'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 import {
@@ -23,6 +22,7 @@ import { apiClient } from '@/api/api'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useClientPagination } from '@/hooks/useClientPagination'
 import { BRAND } from '@/lib/constants'
+import { formatMoney } from '@/lib/currency'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { CategoryLines } from '@/components/shared/CategoryLines'
 import { toastError, toastSuccess } from '@/lib/toast'
@@ -32,6 +32,7 @@ import { filterActiveCategories } from '@/lib/mapProduct'
 export function BranchInventoryPage() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
+  const [catalogProducts, setCatalogProducts] = useState([])
   const [loading, setLoading] = useState(false)
   const {
     page,
@@ -43,33 +44,44 @@ export function BranchInventoryPage() {
     slice: pagedProducts,
   } = useClientPagination(products)
 
-  // Filters — input instant; list fetch after debounce
+  // Filters — search debounced; catalog cascade instant
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedQ = useDebouncedValue(searchQuery, 300)
   const [filterCategory, setFilterCategory] = useState('')
   const [filterSubcategory, setFilterSubcategory] = useState('')
+  const [filterProduct, setFilterProduct] = useState('')
+  const [filterVariant, setFilterVariant] = useState('')
   const fetchSeq = useRef(0)
 
-  // Derived: top-level categories (no parentId) and subcategories (has parentId)
-  const topCategories = categories.filter((c) => !c.parentId)
+  // Subcategories live in the same categories list (rows with parentId)
   const subcategories = categories.filter((c) => !!c.parentId)
-  const visibleSubcategories = filterCategory
-    ? subcategories.filter((s) => s.parentId === filterCategory)
-    : subcategories
 
-  // Stock Request Dialog
+  // Stock request dialog state
   const [requestTarget, setRequestTarget] = useState(null)
-  const [requestKind, setRequestKind] = useState('request') // 'alert' | 'request'
   const [requiredQty, setRequiredQty] = useState(1)
   const [submitting, setSubmitting] = useState(false)
 
   const fetchInventory = async () => {
     const seq = ++fetchSeq.current
     setLoading(true)
+
+    // Variant selected → load that SKU directly
+    if (filterVariant) {
+      const res = await apiClient.get(`/inventory/products/${filterVariant}`)
+      if (seq !== fetchSeq.current) return
+      setLoading(false)
+      if (res.success && res.data) {
+        setProducts([res.data])
+      } else {
+        setProducts([])
+      }
+      return
+    }
+
     const params = { limit: 100 }
     if (debouncedQ.trim()) params.q = debouncedQ.trim()
     if (filterSubcategory) {
-      params.categoryId = filterSubcategory
+      params.subcategoryId = filterSubcategory
     } else if (filterCategory) {
       params.categoryId = filterCategory
     }
@@ -79,7 +91,12 @@ export function BranchInventoryPage() {
 
     setLoading(false)
     if (res.success && res.data) {
-      setProducts(res.data.items || res.data || [])
+      let items = res.data.items || res.data || []
+      // Product filter (parent) — client-side on returned parents
+      if (filterProduct) {
+        items = items.filter((p) => p.id === filterProduct)
+      }
+      setProducts(items)
     }
   }
 
@@ -90,27 +107,70 @@ export function BranchInventoryPage() {
     }
   }
 
+  const fetchCatalogProducts = async () => {
+    const res = await apiClient.get('/inventory/products', { limit: 200, status: 'active' })
+    if (res.success && res.data) {
+      setCatalogProducts(res.data.items || res.data || [])
+    }
+  }
+
+  // Load variants when a product is selected
+  useEffect(() => {
+    if (!filterProduct) return
+    const existing = catalogProducts.find((p) => p.id === filterProduct)
+    if (existing?.variants?.length) return
+
+    let cancelled = false
+    ;(async () => {
+      const res = await apiClient.get(`/inventory/products/${filterProduct}`)
+      if (cancelled || !res.success || !res.data) return
+      const variants = res.data.variants || []
+      setCatalogProducts((prev) =>
+        prev.map((p) => (p.id === filterProduct ? { ...p, variants } : p)),
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [filterProduct])
+
   useEffect(() => {
     void fetchInventory()
-  }, [debouncedQ, filterCategory, filterSubcategory])
+  }, [debouncedQ, filterCategory, filterSubcategory, filterProduct, filterVariant])
 
   useEffect(() => {
     void fetchCategories()
+    void fetchCatalogProducts()
   }, [])
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedQ, filterCategory, filterSubcategory])
+  }, [debouncedQ, filterCategory, filterSubcategory, filterProduct, filterVariant])
 
+  const handleCatalogChange = (patch = {}) => {
+    if ('categoryId' in patch) setFilterCategory(patch.categoryId || '')
+    if ('subcategoryId' in patch) setFilterSubcategory(patch.subcategoryId || '')
+    if ('productId' in patch) setFilterProduct(patch.productId || '')
+    if ('variantId' in patch) setFilterVariant(patch.variantId || '')
+  }
+
+  const handleClearFilters = () => {
+    setSearchQuery('')
+    setFilterCategory('')
+    setFilterSubcategory('')
+    setFilterProduct('')
+    setFilterVariant('')
+  }
+
+  // Open dialog — suggest qty as gap to reorder point (min 1)
   const handleOpenRequest = (prod) => {
     setRequestTarget(prod)
-    setRequestKind('request')
-    // Suggested fill qty: gap to reorder point (whole units), minimum 1
     const current = Math.max(0, Math.floor(Number(prod.quantity) || 0))
     const reorder = Math.max(0, Math.ceil(Number(prod.reorderPoint) || 0))
     setRequiredQty(Math.max(1, reorder > current ? reorder - current : 1))
   }
 
+  // POST stock request (kind fixed to replenishment)
   const handleSendRequest = async (e) => {
     e.preventDefault()
     if (!requestTarget) return
@@ -124,7 +184,7 @@ export function BranchInventoryPage() {
     setSubmitting(true)
     const res = await apiClient.post('/branch/stock-requests', {
       productId: requestTarget.id,
-      kind: requestKind,
+      kind: 'request',
       remainingQuantity: qty,
     })
     setSubmitting(false)
@@ -136,6 +196,15 @@ export function BranchInventoryPage() {
       toastError(res.error || 'Failed to send stock request')
     }
   }
+
+  // Resolve optional product price (final → selling); hide when missing / zero
+  const resolveProductPrice = (prod) => {
+    if (!prod) return null
+    const price = Number(prod.finalPrice ?? prod.sellingPrice ?? 0)
+    return Number.isFinite(price) && price > 0 ? price : null
+  }
+
+  const requestProductPrice = resolveProductPrice(requestTarget)
 
   // Stock Level Status Indicators mapped to Shadcn Badge variants
   const getStockStatus = (qty, reorderPoint) => {
@@ -172,55 +241,22 @@ export function BranchInventoryPage() {
         />
       </MotionHeader>
 
-      {/* Filters */}
+      {/* Category → Sub Category → Product → Variant → Clear Filters */}
       <MotionReveal delay={0.02}>
-        <SurfaceCard padding="compact">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
-            <div className="space-y-1.5">
-              <Label htmlFor="stock-search">Search Item</Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="stock-search"
-                  value={searchQuery}
-                  placeholder="Item name or item code…"
-                  className="pl-9"
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Filter Category</Label>
-              <NativeSelect
-                value={filterCategory}
-                onChange={(e) => {
-                  setFilterCategory(e.target.value)
-                  setFilterSubcategory('') // reset subcategory when category changes
-                }}
-              >
-                <option value="">All Categories</option>
-                {topCategories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </NativeSelect>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Filter Subcategory</Label>
-              <NativeSelect
-                value={filterSubcategory}
-                onChange={(e) => setFilterSubcategory(e.target.value)}
-                disabled={visibleSubcategories.length === 0}
-              >
-                <option value="">All Subcategories</option>
-                {visibleSubcategories.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </NativeSelect>
-            </div>
-          </div>
-        </SurfaceCard>
+        <ProductCatalogFilters
+          searchId="stock-search"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Item name or item code…"
+          categories={categories}
+          products={catalogProducts}
+          categoryId={filterCategory}
+          subcategoryId={filterSubcategory}
+          productId={filterProduct}
+          variantId={filterVariant}
+          onChange={handleCatalogChange}
+          onClear={handleClearFilters}
+        />
       </MotionReveal>
 
       {/* Grid List using Shadcn Table component */}
@@ -406,35 +442,45 @@ export function BranchInventoryPage() {
         </SurfaceCard>
       </MotionReveal>
 
-      {/* Stock Request Dialog */}
+      {/* Send Stock Report dialog */}
       <Dialog open={Boolean(requestTarget)} onOpenChange={(open) => { if (!open) setRequestTarget(null) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Send Replenishment Request</DialogTitle>
+            <DialogTitle>Send Stock Report</DialogTitle>
             <DialogDescription>
-              Submit a stock request to the central Inventory Manager for this branch product.
+              Request replenishment from Inventory Management for this shelf item.
             </DialogDescription>
           </DialogHeader>
 
-          {requestTarget && (
+          {requestTarget ? (
             <form className="space-y-4" onSubmit={handleSendRequest}>
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
-                <div><strong>Product:</strong> {requestTarget.name}</div>
-                <div><strong>Current Stock:</strong> {parseFloat(requestTarget.quantity || 0)} {requestTarget.scale}</div>
-                <div><strong>Reorder point:</strong> {parseFloat(requestTarget.reorderPoint || 0)} {requestTarget.scale}</div>
+              {/* Product summary */}
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="shrink-0 text-slate-500">Product</span>
+                  <span className="text-right font-medium text-slate-900">{requestTarget.name}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="shrink-0 text-slate-500">Current Stock</span>
+                  <span className="text-right font-mono font-medium text-slate-900">
+                    {parseFloat(requestTarget.quantity || 0).toLocaleString()}{' '}
+                    <span className="font-sans text-xs font-normal text-slate-400">
+                      {requestTarget.scale || 'pcs'}
+                    </span>
+                  </span>
+                </div>
+                {/* Product Price — only when available */}
+                {requestProductPrice != null ? (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="shrink-0 text-slate-500">Product Price</span>
+                    <span className="text-right font-medium text-slate-900">
+                      {formatMoney(requestProductPrice)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="space-y-1.5">
-                <Label>Request Type</Label>
-                <NativeSelect
-                  value={requestKind}
-                  onChange={(e) => setRequestKind(e.target.value)}
-                >
-                  <option value="request">Replenishment request (Demand supply)</option>
-                  <option value="alert">Low stock alert notification</option>
-                </NativeSelect>
-              </div>
-
+              {/* Required quantity only */}
               <div className="space-y-1.5">
                 <Label htmlFor="request-qty">Required Quantity</Label>
                 <WholeNumberInput
@@ -451,14 +497,14 @@ export function BranchInventoryPage() {
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="text-white w-full sm:w-auto"
+                  className="w-full text-white sm:w-auto"
                   style={{ backgroundColor: BRAND.purple }}
                 >
                   {submitting ? 'Sending…' : 'Send Request'}
                 </Button>
               </DialogFooter>
             </form>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

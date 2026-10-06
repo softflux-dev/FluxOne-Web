@@ -26,7 +26,6 @@ import {
   variantsToCombinationRows,
 } from '@/lib/addItem'
 import { PRODUCT_TYPES } from '@/lib/mapProduct'
-import { formatMoneyInput } from '@/lib/money'
 import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
@@ -186,8 +185,14 @@ export function EditItemPage() {
         productKind: kind,
         sku: product.itemCode || '',
         barcode: product.barcode || '',
-        purchasePrice: formatMoneyInput(product.purchasePrice),
-        sellingPrice: formatMoneyInput(product.sellingPrice),
+        purchasePrice:
+          product.purchasePrice === '' || product.purchasePrice == null
+            ? ''
+            : String(Math.round(Number(product.purchasePrice) || 0)),
+        sellingPrice:
+          product.sellingPrice === '' || product.sellingPrice == null
+            ? ''
+            : String(Math.round(Number(product.sellingPrice) || 0)),
         openingStock: String(product.quantity ?? 0),
         lowStockThreshold:
           product.reorderPoint === 0 || product.reorderPoint
@@ -489,7 +494,7 @@ export function EditItemPage() {
             tab === 'basic'
               ? 'Shared parent fields.'
               : tab === 'type'
-                ? 'Product type is fixed after create.'
+                ? 'Product type cannot be changed after creation. To change the product type, deactivate this product and create a new one.'
                 : tab === 'variantTypes'
                   ? 'Adjust types or add custom — new value picks create new SKU rows.'
                   : tab === 'values'
@@ -599,7 +604,9 @@ export function EditItemPage() {
                     </p>
                     {active ? (
                       <p className="mt-2 text-[11px] text-white/70">Locked for this product</p>
-                    ) : null}
+                    ) : (
+                      <p className="mt-2 text-[11px]">Unavailable after create</p>
+                    )}
                   </div>
                 )
               })}

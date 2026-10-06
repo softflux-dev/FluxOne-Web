@@ -39,7 +39,7 @@ import {
   sumScalePoints,
 } from '@/lib/performanceScales'
 import { BRAND } from '@/lib/constants'
-import { displayStaffRef } from '@/lib/formatDisplayId'
+import { displayStaffRef, matchesDisplayRef } from '@/lib/formatDisplayId'
 import { toastError, toastSuccess } from '@/lib/toast'
 
 export function StaffPerformanceTab({
@@ -96,11 +96,11 @@ export function StaffPerformanceTab({
   const filteredRoster = roster.filter((emp) => {
     if (filterDesignation && emp.designationId !== filterDesignation) return false
     if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const matchesName = String(emp.fullName || '').toLowerCase().includes(q)
-      const staffRef = displayStaffRef(emp).toLowerCase()
-      const matchesId =
-        staffRef.includes(q) || String(emp.staffId || '').toLowerCase().includes(q)
+      const matchesName = String(emp.fullName || '')
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase())
+      // STF-XXXXXXXX or bare hex both match via display-ref helper
+      const matchesId = matchesDisplayRef(emp.id || emp.staffId, searchQuery, 'STF')
       if (!matchesName && !matchesId) return false
     }
     return true

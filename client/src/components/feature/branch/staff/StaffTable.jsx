@@ -1,10 +1,9 @@
-import { Users } from 'lucide-react'
+import { MonitorOff, Users } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { EntityStatusToggle } from '@/components/shared/EntityStatusToggle'
+import { EntityStatusToggle, isEntityActive } from '@/components/shared/EntityStatusToggle'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { UserAvatar } from '@/components/shared/UserAvatar'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableHeader,
@@ -20,6 +19,8 @@ import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { displayStaffRef } from '@/lib/formatDisplayId'
 import { formatDateTime, formatClockTime } from '@/lib/formatDateTime'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
+import { formatWorkingDaysShort } from '@/lib/validation/branchForms'
+import { BRAND } from '@/lib/constants'
 
 // Joining Date/Time — date top / 12h AM/PM time bottom in tables
 function formatJoinedDateTime(value) {
@@ -52,32 +53,92 @@ function ScheduleBlock({ row }) {
           {row.scheduleBreakEnd ? ` – ${formatTime(row.scheduleBreakEnd)}` : ''}
         </span>
       ) : null}
+      {Array.isArray(row.workingDays) && row.workingDays.length ? (
+        <span className="mt-0.5 block text-slate-400">
+          {formatWorkingDaysShort(row.workingDays)}
+        </span>
+      ) : null}
     </>
   )
 }
 
-function StaffRowActions({ row, onEdit, onDelete }) {
+// clean and optimized code — device profile for Assigned hardware column
+function AssignedHardwareCell({ row }) {
+  const hasHardware = Boolean(row.hardwareName || row.hardwareCode || row.hardwareDeviceId)
+  if (!hasHardware) {
+    return (
+      <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-400">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400 ring-1 ring-border">
+          <MonitorOff className="size-4" />
+        </span>
+        <span>Not Assigned</span>
+      </div>
+    )
+  }
+
+  // Allocated slot from API (shift + working days) when present
+  const slotLabel = row.hardwareAllocatedSlot || null
+
+  return (
+    <div className="flex min-w-0 items-start gap-2.5">
+      {row.hardwareImageUrl ? (
+        <img
+          src={row.hardwareImageUrl}
+          alt=""
+          className="size-9 shrink-0 rounded-lg object-cover ring-1 ring-border"
+        />
+      ) : (
+        <div
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-white"
+          style={{ background: `linear-gradient(145deg, ${BRAND.purple}, ${BRAND.deep})` }}
+        >
+          {(row.hardwareName || 'HW').slice(0, 1).toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-900">
+          {row.hardwareName || 'Hardware'}
+        </p>
+        <p className="truncate font-mono text-[11px] text-slate-500">
+          {row.hardwareCode || '—'}
+          {row.hardwareType ? ` · ${row.hardwareType}` : ''}
+        </p>
+        {slotLabel ? (
+          <p className="mt-0.5 text-[11px] text-slate-400">Allocated: {slotLabel}</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+// Status actions — Ban / Unlock; labels match Active / Inactive filter + badge
+function StaffRowActions({ row, onEdit, onDelete, onBlock, onUnblock, statusLoading }) {
+  const active = isEntityActive(row.status)
   return (
     <RowActionButtons
       onEdit={() => onEdit?.(row)}
+      onBlock={() => onBlock?.(row)}
+      onUnblock={() => onUnblock?.(row)}
+      isActive={active}
       onDelete={() => onDelete?.(row)}
       editLabel={`Edit ${row.fullName || 'staff'}`}
+      blockLabel={`Set ${row.fullName || 'staff'} inactive`}
+      unblockLabel={`Set ${row.fullName || 'staff'} active`}
       deleteLabel={`Delete ${row.fullName || 'staff'}`}
+      disabled={statusLoading}
     />
   )
 }
 
-// Open/Block control (Doc v4); maps to active / inactive on the API
-function StaffStatusToggle({ row, loading, onChange }) {
+// Active / Inactive capsule — matches Status filter; Ban/Unlock in Actions
+function StaffStatusBadge({ row, loading }) {
   return (
     <EntityStatusToggle
       status={row.status}
       loading={loading}
-      onChange={(nextActive) => onChange?.(row, nextActive)}
-      activeLabel="Open"
-      inactiveLabel="Block"
-      activeTitle="Click to block"
-      inactiveTitle="Click to open"
+      interactive={false}
+      activeLabel="Active"
+      inactiveLabel="Inactive"
       inactiveTone="danger"
     />
   )
@@ -92,7 +153,8 @@ export function StaffTable({
   onPageSizeChange,
   onEdit,
   onDelete,
-  onStatusChange,
+  onBlock,
+  onUnblock,
   statusUpdatingId = null,
   className,
 }) {
@@ -168,10 +230,9 @@ export function StaffTable({
                             {row.email || '—'}
                           </p>
                         </div>
-                        <StaffStatusToggle
+                        <StaffStatusBadge
                           row={row}
                           loading={statusUpdatingId === row.id}
-                          onChange={onStatusChange}
                         />
                       </div>
                       <p className="mt-1 text-xs text-slate-600">{designationLabel(row)}</p>
@@ -180,17 +241,19 @@ export function StaffTable({
                         <p className="text-slate-600">
                           <ScheduleBlock row={row} />
                         </p>
-                        {row.hardwareName || row.hardwareCode || row.hardwareDeviceId ? (
-                          <p className="truncate">
-                            {row.hardwareName || row.hardwareCode || row.hardwareDeviceId}
-                            {row.hardwareName && row.hardwareCode ? (
-                              <span className="text-slate-400"> · {row.hardwareCode}</span>
-                            ) : null}
-                          </p>
-                        ) : null}
+                        <div className="pt-1">
+                          <AssignedHardwareCell row={row} />
+                        </div>
                       </div>
                       <div className="mt-3 flex justify-end">
-                        <StaffRowActions row={row} onEdit={onEdit} onDelete={onDelete} />
+                        <StaffRowActions
+                          row={row}
+                          onEdit={onEdit}
+                          onDelete={onDelete}
+                          onBlock={onBlock}
+                          onUnblock={onUnblock}
+                          statusLoading={statusUpdatingId === row.id}
+                        />
                       </div>
                     </div>
                   </div>
@@ -254,28 +317,23 @@ export function StaffTable({
                         <ScheduleBlock row={row} />
                       </TableCell>
                       <TableCell className="px-2 py-3 align-middle text-slate-600">
-                        {row.hardwareName ? (
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-slate-800">{row.hardwareName}</p>
-                            {row.hardwareCode ? (
-                              <p className="truncate font-mono text-[11px] text-slate-400">
-                                {row.hardwareCode}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : (
-                          row.hardwareCode || row.hardwareDeviceId || '—'
-                        )}
+                        <AssignedHardwareCell row={row} />
                       </TableCell>
                       <TableCell className="px-2 py-3 align-middle">
-                        <StaffStatusToggle
+                        <StaffStatusBadge
                           row={row}
                           loading={statusUpdatingId === row.id}
-                          onChange={onStatusChange}
                         />
                       </TableCell>
                       <TableActionsCell>
-                        <StaffRowActions row={row} onEdit={onEdit} onDelete={onDelete} />
+                        <StaffRowActions
+                          row={row}
+                          onEdit={onEdit}
+                          onDelete={onDelete}
+                          onBlock={onBlock}
+                          onUnblock={onUnblock}
+                          statusLoading={statusUpdatingId === row.id}
+                        />
                       </TableActionsCell>
                     </TableRow>
                   )

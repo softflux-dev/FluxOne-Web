@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-//True when status string or boolean represents an active/open entity.
+// True when status string or boolean represents an active/open entity.
 export function isEntityActive(value) {
   if (typeof value === 'boolean') return value
   const status = String(value || '').toLowerCase()
@@ -8,8 +8,10 @@ export function isEntityActive(value) {
 }
 
 //
-// Unified Active / Inactive pill used across staff, products, categories, suppliers.
-// onChange receives the next boolean (true = activate).
+// Unified Active / Inactive pill used across staff, products, suppliers.
+// Modules may override labels (e.g. products Open/Close) but filter + badge must match.
+// interactive=false → display-only capsule (not a CTA; no click / hover lift).
+// onChange receives the next boolean (true = activate) when interactive.
 //
 export function EntityStatusToggle({
   active,
@@ -17,6 +19,7 @@ export function EntityStatusToggle({
   loading = false,
   onChange,
   className,
+  interactive = true,
   activeLabel = 'Active',
   inactiveLabel = 'Inactive',
   activeTitle = 'Click to deactivate',
@@ -25,6 +28,34 @@ export function EntityStatusToggle({
 }) {
   const isActive = active != null ? Boolean(active) : isEntityActive(status)
   const inactiveIsDanger = inactiveTone === 'danger'
+  const label = `${isActive ? activeLabel : inactiveLabel}${loading ? '…' : ''}`
+
+  const toneClass = isActive
+    ? 'bg-emerald-50 text-emerald-800 ring-emerald-100'
+    : inactiveIsDanger
+      ? 'bg-rose-50 text-rose-700 ring-rose-200'
+      : 'bg-slate-100 text-slate-600 ring-slate-200'
+
+  const dotColor = isActive ? '#22c55e' : inactiveIsDanger ? '#e11d48' : '#94a3b8'
+
+  // clean and optimized code — status is showcase-only when interactive is false
+  if (!interactive) {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1',
+          toneClass,
+          loading ? 'opacity-60' : null,
+          className,
+        )}
+        title={label}
+        aria-label={label}
+      >
+        <span className="mr-1.5 size-1.5 rounded-full" style={{ background: dotColor }} />
+        {label}
+      </span>
+    )
+  }
 
   return (
     <button
@@ -42,12 +73,8 @@ export function EntityStatusToggle({
       )}
       title={isActive ? activeTitle : inactiveTitle}
     >
-      <span
-        className="mr-1.5 size-1.5 rounded-full"
-        style={{ background: isActive ? '#22c55e' : inactiveIsDanger ? '#e11d48' : '#94a3b8' }}
-      />
-      {isActive ? activeLabel : inactiveLabel}
-      {loading ? '…' : ''}
+      <span className="mr-1.5 size-1.5 rounded-full" style={{ background: dotColor }} />
+      {label}
     </button>
   )
 }

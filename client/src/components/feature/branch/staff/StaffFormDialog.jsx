@@ -14,13 +14,24 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
 import { FieldError } from '@/components/shared/FieldError'
-import { TimePicker } from '@/components/shared/TimePicker'
-import { formatClockTime } from '@/lib/formatDateTime'
+import { StaffScheduleFields } from '@/components/feature/branch/staff/StaffScheduleFields'
+import { StaffHardwareAssignFields } from '@/components/feature/branch/staff/StaffHardwareAssignFields'
 import {
+  defaultStaffWorkingDays,
   getBranchHoursSoftWarning,
+  isStaffScheduleReadyForHardware,
   STAFF_FIELD_ORDER,
   validateStaffFormFields,
 } from '@/lib/validation/staffSchedule'
+import { normalizeWorkingDays } from '@/lib/validation/branchForms'
+import { hardwareModeForRole, HARDWARE_MODES } from '@/lib/validation/hardwarePolicy'
+import {
+  formatSlotKey,
+  HARDWARE_SLOT_UNAVAILABLE_MSG,
+  isHardwareSlotConflictMessage,
+  parseSlotKey,
+  slotWithinEmployeeShift,
+} from '@/lib/validation/hardwareSlots'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
 import { apiClient } from '@/api/api'
@@ -32,10 +43,14 @@ const FIELD_IDS = {
   password: 'staff-password',
   fullName: 'staff-name',
   role: 'staff-role',
+  workingDays: 'staff-working-days',
   scheduleStart: 'staff-start',
   scheduleEnd: 'staff-end',
   scheduleBreakStart: 'staff-break-start',
   scheduleBreakEnd: 'staff-break-end',
+  hardwareType: 'staff-hardware-type',
+  hardwareDeviceId: 'staff-hardware',
+  hardwareSlotKey: 'staff-hardware-slot',
 }
 
 const EMPTY_FORM = {
@@ -43,7 +58,10 @@ const EMPTY_FORM = {
   password: '',
   fullName: '',
   role: 'inventory_manager',
+  workingDays: [],
+  hardwareType: '',
   hardwareDeviceId: '',
+  hardwareSlotKey: '',
   scheduleStart: '',
   scheduleBreakStart: '',
   scheduleBreakEnd: '',
@@ -76,9 +94,17 @@ function resolveRole(initialStaff) {
   return 'inventory_manager'
 }
 
+function emptyBranchContext() {
+  return { openingTime: '', closingTime: '', workingDays: [] }
+}
+
+function clearHardwareFields(prev) {
+  if (!prev.hardwareDeviceId && !prev.hardwareSlotKey) return prev
+  return { ...prev, hardwareDeviceId: '', hardwareSlotKey: '' }
+}
+
 // Add / Edit staff modal for Branch Manager.
-// Does not send branchId — server scopes from JWT.
-// System role drives designation automatically (no custom designation picker).
+// Flow: details → schedule → (gate) → role-aware hardware.
 export function StaffFormDialog({
   open,
   onOpenChange,
@@ -88,66 +114,256 @@ export function StaffFormDialog({
   loading = false,
 }) {
   const isEdit = mode === 'edit'
-  const [branchHours, setBranchHours] = useState({ openingTime: '', closingTime: '' })
+  const [branchHours, setBranchHours] = useState(emptyBranchContext)
   const hoursWarning = getBranchHoursSoftWarning(branchHours)
   const [form, setForm] = useState(EMPTY_FORM)
   const [hardwareOptions, setHardwareOptions] = useState([])
+  const [hardwareLoading, setHardwareLoading] = useState(false)
+  const [hardwareSearch, setHardwareSearch] = useState('')
+  // Bump to force availability reload after concurrent 409 (QA G4).
+  const [availabilityTick, setAvailabilityTick] = useState(0)
   const { fieldErrors, formError, setFormError, resetErrors, clearField, applyErrors } =
     useFieldErrors()
   const { captureBaseline, isDirty } = useFormBaseline(open)
 
+  const scheduleReady = isStaffScheduleReadyForHardware(form)
+
+  // Hydrate form + branch calendar when dialog opens
   useEffect(() => {
     if (!open) return
     resetErrors()
+    setAvailabilityTick(0)
+    setHardwareSearch('')
 
-    async function loadBranchHours() {
-      const res = await apiClient.get(endpoints.auth.me)
-      if (res.success && res.data) {
-        setBranchHours({
-          openingTime: timeInputValue(res.data.openingTime),
-          closingTime: timeInputValue(res.data.closingTime),
-        })
+    async function bootstrap() {
+      setHardwareOptions([])
+      let nextBranch = emptyBranchContext()
+      const meRes = await apiClient.get(endpoints.auth.me)
+      if (meRes.success && meRes.data) {
+        const branchDays = normalizeWorkingDays(meRes.data.workingDays)
+        nextBranch = {
+          openingTime: timeInputValue(meRes.data.openingTime),
+          closingTime: timeInputValue(meRes.data.closingTime),
+          workingDays: branchDays,
+        }
+      }
+      setBranchHours(nextBranch)
+
+      if (isEdit && initialStaff) {
+        const staffDays = normalizeWorkingDays(initialStaff.workingDays)
+        const nextForm = {
+          email: initialStaff.email || '',
+          password: '',
+          fullName: initialStaff.fullName || '',
+          role: resolveRole(initialStaff),
+          workingDays: staffDays.length
+            ? staffDays
+            : defaultStaffWorkingDays(nextBranch.workingDays),
+          hardwareType: initialStaff.hardwareType || '',
+          hardwareDeviceId: initialStaff.hardwareDeviceId || '',
+          hardwareSlotKey: formatSlotKey(
+            timeInputValue(initialStaff.hardwareAllocationStart),
+            timeInputValue(initialStaff.hardwareAllocationEnd),
+          ),
+          scheduleStart: timeInputValue(initialStaff.scheduleStart),
+          scheduleBreakStart: timeInputValue(initialStaff.scheduleBreakStart),
+          scheduleBreakEnd: timeInputValue(initialStaff.scheduleBreakEnd),
+          scheduleEnd: timeInputValue(initialStaff.scheduleEnd),
+          image: null,
+        }
+        setForm(nextForm)
+        captureBaseline(nextForm)
       } else {
-        setBranchHours({ openingTime: '', closingTime: '' })
+        const nextForm = {
+          ...EMPTY_FORM,
+          workingDays: defaultStaffWorkingDays(nextBranch.workingDays),
+        }
+        setForm(nextForm)
+        captureBaseline(nextForm)
       }
     }
 
+    void bootstrap()
+  }, [open, isEdit, initialStaff, captureBaseline, resetErrors])
+
+  // Schedule gate: incomplete schedule clears any hardware selection (QA A4 / E1–E2).
+  useEffect(() => {
+    if (!open) return
+    if (scheduleReady) return
+    setForm((prev) => clearHardwareFields(prev))
+    setHardwareOptions([])
+  }, [open, scheduleReady, form.workingDays, form.scheduleStart, form.scheduleEnd])
+
+  // When schedule changes with a selection, drop slots that no longer fit the shift.
+  useEffect(() => {
+    if (!open || !scheduleReady) return
+    setForm((prev) => {
+      if (!prev.hardwareDeviceId) return prev
+      if (!prev.hardwareSlotKey) return prev
+      const slot = parseSlotKey(prev.hardwareSlotKey)
+      if (
+        slot.start &&
+        slot.end &&
+        !slotWithinEmployeeShift(slot.start, slot.end, prev.scheduleStart, prev.scheduleEnd)
+      ) {
+        // Force BM to re-pick — do not silently keep an invalid allocation.
+        return { ...prev, hardwareDeviceId: '', hardwareSlotKey: '' }
+      }
+      return prev
+    })
+  }, [open, scheduleReady, form.scheduleStart, form.scheduleEnd, form.workingDays])
+
+  // Reload free hardware only after schedule is valid (schedule-first gate)
+  useEffect(() => {
+    if (!open) return
+
+    let cancelled = false
+
     async function loadHardwareOptions() {
-      const res = await apiClient.get(endpoints.branch.resources.hardware.list)
+      // Gate: do not query availability until days + shift are ready
+      if (!scheduleReady) {
+        setHardwareOptions([])
+        setHardwareLoading(false)
+        return
+      }
+
+      setHardwareLoading(true)
+      const days = normalizeWorkingDays(form.workingDays)
+      const roleMode = hardwareModeForRole(form.role)
+      const usesBoard =
+        roleMode === HARDWARE_MODES.EXCLUSIVE || roleMode === HARDWARE_MODES.SHARED
+
+      const params = {
+        scheduleStart: form.scheduleStart,
+        scheduleEnd: form.scheduleEnd,
+        workingDays: days.join(','),
+      }
+      if (usesBoard) {
+        params.includeBusy = true
+        params.forRole = form.role
+      }
+      if (form.hardwareType) params.type = form.hardwareType
+      if (hardwareSearch.trim()) params.q = hardwareSearch.trim()
+      if (isEdit && initialStaff?.id) params.excludeStaffId = initialStaff.id
+
+      const res = await apiClient.get(endpoints.branch.resources.hardware.list, params)
+      if (cancelled) return
+
       if (res.success) {
-        setHardwareOptions(res.data || [])
+        const list = Array.isArray(res.data) ? res.data : res.data?.items || []
+        setHardwareOptions(list)
+        setForm((prev) => {
+          if (!prev.hardwareDeviceId) return prev
+          const device = list.find((hw) => hw.id === prev.hardwareDeviceId)
+          // Device gone / filtered out → clear
+          if (!device) return clearHardwareFields(prev)
+
+          const freeSlots = Array.isArray(device.freeSlots) ? device.freeSlots : []
+          const selectable =
+            device.available ||
+            device.availability === 'partial' ||
+            freeSlots.length > 0
+
+          // Device no longer free for this schedule → clear (force reassign)
+          if (!selectable) return clearHardwareFields(prev)
+
+          if (prev.hardwareSlotKey) {
+            const slotStillValid = freeSlots.some(
+              (s) => formatSlotKey(s.start, s.end) === prev.hardwareSlotKey,
+            )
+            if (!slotStillValid) {
+              // Keep device only if a single unambiguous slot remains; else clear both.
+              if (freeSlots.length === 1) {
+                return {
+                  ...prev,
+                  hardwareSlotKey: formatSlotKey(freeSlots[0].start, freeSlots[0].end),
+                }
+              }
+              return clearHardwareFields(prev)
+            }
+          }
+          return prev
+        })
       } else {
         setHardwareOptions([])
       }
+      setHardwareLoading(false)
     }
 
-    void loadBranchHours()
     void loadHardwareOptions()
-
-    if (isEdit && initialStaff) {
-      const nextForm = {
-        email: initialStaff.email || '',
-        password: '',
-        fullName: initialStaff.fullName || '',
-        role: resolveRole(initialStaff),
-        hardwareDeviceId: initialStaff.hardwareDeviceId || '',
-        scheduleStart: timeInputValue(initialStaff.scheduleStart),
-        scheduleBreakStart: timeInputValue(initialStaff.scheduleBreakStart),
-        scheduleBreakEnd: timeInputValue(initialStaff.scheduleBreakEnd),
-        scheduleEnd: timeInputValue(initialStaff.scheduleEnd),
-        image: null,
-      }
-      setForm(nextForm)
-      captureBaseline(nextForm)
-    } else {
-      setForm(EMPTY_FORM)
-      captureBaseline(EMPTY_FORM)
+    return () => {
+      cancelled = true
     }
-  }, [open, isEdit, initialStaff, captureBaseline, resetErrors])
+  }, [
+    open,
+    scheduleReady,
+    form.hardwareType,
+    form.scheduleStart,
+    form.scheduleEnd,
+    form.workingDays,
+    form.role,
+    hardwareSearch,
+    isEdit,
+    initialStaff?.id,
+    availabilityTick,
+  ])
+
+  function pickDefaultSlot(device) {
+    const slots = Array.isArray(device?.freeSlots) ? device.freeSlots : []
+    if (!slots.length) return ''
+    const full = formatSlotKey(form.scheduleStart, form.scheduleEnd)
+    const match = slots.find((s) => formatSlotKey(s.start, s.end) === full)
+    if (match) return formatSlotKey(match.start, match.end)
+    if (slots.length === 1) return formatSlotKey(slots[0].start, slots[0].end)
+    return ''
+  }
+
+  function handleSelectDevice(device) {
+    if (!device?.id) return
+    const slotKey = pickDefaultSlot(device)
+    setForm((prev) => ({
+      ...prev,
+      hardwareDeviceId: device.id,
+      hardwareSlotKey: slotKey,
+    }))
+    clearField('hardwareDeviceId')
+    clearField('hardwareSlotKey')
+  }
+
+  function handleSelectSlot(device, slot) {
+    if (!device?.id || !slot) return
+    setForm((prev) => ({
+      ...prev,
+      hardwareDeviceId: device.id,
+      hardwareSlotKey: formatSlotKey(slot.start, slot.end),
+    }))
+    clearField('hardwareSlotKey')
+  }
+
+  function clearHardwareSelection() {
+    setForm((prev) => clearHardwareFields(prev))
+  }
 
   function patch(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
     clearField(field)
+  }
+
+  function handleRoleChange(role) {
+    setForm((prev) => ({
+      ...prev,
+      role,
+      // Role mode change invalidates prior device choice
+      hardwareDeviceId: '',
+      hardwareSlotKey: '',
+    }))
+    clearField('role')
+    clearField('hardwareDeviceId')
+    clearField('hardwareSlotKey')
+  }
+
+  function refreshAvailabilityBoard() {
+    setAvailabilityTick((n) => n + 1)
   }
 
   async function handleSubmit(event) {
@@ -156,35 +372,115 @@ export function StaffFormDialog({
     let hours = branchHours
     const meRes = await apiClient.get(endpoints.auth.me)
     if (meRes.success && meRes.data) {
+      const branchDays = normalizeWorkingDays(meRes.data.workingDays)
       hours = {
         openingTime: timeInputValue(meRes.data.openingTime),
         closingTime: timeInputValue(meRes.data.closingTime),
+        workingDays: branchDays,
       }
       setBranchHours(hours)
     }
 
     const errors = validateStaffFormFields(form, { isEdit, branchHours: hours })
+
+    if (form.hardwareDeviceId && form.role === 'cashier') {
+      const device = hardwareOptions.find((d) => d.id === form.hardwareDeviceId)
+      const slots = device?.freeSlots || []
+      let slotKey = form.hardwareSlotKey
+      if (!slotKey) {
+        const fallbackKey = pickDefaultSlot(device)
+        if (fallbackKey) slotKey = fallbackKey
+      }
+      const needsExplicitSlot =
+        device?.availability === 'partial' || (slots.length > 1 && !slotKey)
+      if (needsExplicitSlot && !slotKey) {
+        errors.hardwareSlotKey = 'Select an available hardware time slot'
+      }
+      if (!slotKey && slots.length === 0) {
+        errors.hardwareDeviceId = 'Selected hardware is not available for this schedule'
+      }
+    }
+
+    if (form.hardwareDeviceId && hardwareModeForRole(form.role) === HARDWARE_MODES.EXCLUSIVE) {
+      const device = hardwareOptions.find((d) => d.id === form.hardwareDeviceId)
+      if (device && !device.available) {
+        errors.hardwareDeviceId = 'This device is not available for exclusive assignment'
+      }
+    }
+
     if (Object.keys(errors).length) {
       applyErrors(errors, FIELD_IDS, STAFF_FIELD_ORDER)
       return
     }
 
+    let slot = parseSlotKey(form.hardwareSlotKey)
+    if (form.hardwareDeviceId && !slot.start) {
+      const device = hardwareOptions.find((d) => d.id === form.hardwareDeviceId)
+      const fallbackKey = pickDefaultSlot(device)
+      if (fallbackKey) slot = parseSlotKey(fallbackKey)
+    }
+
+    // Cashier with device must always send allocation bounds (server enforces too).
+    const allocationStart = form.hardwareDeviceId
+      ? slot.start || (form.role === 'cashier' ? '' : form.scheduleStart)
+      : undefined
+    const allocationEnd = form.hardwareDeviceId
+      ? slot.end || (form.role === 'cashier' ? '' : form.scheduleEnd)
+      : undefined
+
+    if (form.hardwareDeviceId && form.role === 'cashier' && (!allocationStart || !allocationEnd)) {
+      applyErrors(
+        { hardwareSlotKey: 'Select an available hardware time slot' },
+        FIELD_IDS,
+        STAFF_FIELD_ORDER,
+      )
+      return
+    }
+
+    // IM exclusive: persist full shift window when no sub-slot was picked.
+    const finalAllocStart =
+      form.hardwareDeviceId && form.role === 'inventory_manager'
+        ? form.scheduleStart
+        : allocationStart
+    const finalAllocEnd =
+      form.hardwareDeviceId && form.role === 'inventory_manager'
+        ? form.scheduleEnd
+        : allocationEnd
+
     resetErrors()
     try {
-      const result = await onSubmit?.(form)
+      const result = await onSubmit?.({
+        ...form,
+        workingDays: normalizeWorkingDays(form.workingDays),
+        hardwareAllocationStart: finalAllocStart,
+        hardwareAllocationEnd: finalAllocEnd,
+      })
       if (result && result.success === false) {
-        setFormError(result.error || 'Save failed. Please try again.')
+        const message = result.error || 'Save failed. Please try again.'
+        setFormError(message)
+        // Concurrent slot taken → surface message and drop stale free slots (QA G3–G4).
+        if (isHardwareSlotConflictMessage(message)) {
+          setForm((prev) => clearHardwareFields(prev))
+          refreshAvailabilityBoard()
+          setFormError(HARDWARE_SLOT_UNAVAILABLE_MSG)
+        }
         return
       }
       onOpenChange?.(false)
     } catch (err) {
-      setFormError(err?.message || 'Save failed. Please try again.')
+      const message = err?.message || 'Save failed. Please try again.'
+      setFormError(message)
+      if (isHardwareSlotConflictMessage(message)) {
+        setForm((prev) => clearHardwareFields(prev))
+        refreshAvailabilityBoard()
+        setFormError(HARDWARE_SLOT_UNAVAILABLE_MSG)
+      }
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} dirty={isDirty(form)}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Staff' : 'Add Staff'}</DialogTitle>
           <DialogDescription>
@@ -247,12 +543,12 @@ export function StaffFormDialog({
               <FieldError message={fieldErrors.fullName} />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="staff-role">System Role</Label>
               <NativeSelect
                 id="staff-role"
                 value={form.role}
-                onChange={(e) => patch('role', e.target.value)}
+                onChange={(e) => handleRoleChange(e.target.value)}
                 aria-invalid={Boolean(fieldErrors.role)}
                 className={fieldErrorClass(fieldErrors.role)}
               >
@@ -263,93 +559,59 @@ export function StaffFormDialog({
                 ))}
               </NativeSelect>
               <FieldError message={fieldErrors.role} />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="staff-hardware">Hardware</Label>
-              <NativeSelect
-                id="staff-hardware"
-                value={form.hardwareDeviceId || ''}
-                onChange={(e) => patch('hardwareDeviceId', e.target.value)}
-              >
-                <option value="">No hardware assigned</option>
-                {hardwareOptions
-                  .filter((hw) => {
-                    const assignedToOther =
-                      hw.assignedToStaffId &&
-                      hw.assignedToStaffId !== initialStaff?.id
-                    return !assignedToOther || hw.id === form.hardwareDeviceId
-                  })
-                  .map((hw) => (
-                    <option key={hw.id} value={hw.id}>
-                      {hw.name}
-                      {hw.code ? ` (${hw.code})` : ''}
-                      {hw.type ? ` · ${hw.type}` : ''}
-                    </option>
-                  ))}
-              </NativeSelect>
-              {hardwareOptions.length === 0 ? (
+              {form.role === 'inventory_manager' ? (
                 <p className="text-xs text-slate-500">
-                  No hardware registered yet. Add devices under Resources.
+                  Only one Inventory Manager is allowed per branch.
                 </p>
               ) : null}
             </div>
 
-            {hoursWarning ? (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-100 sm:col-span-2">
-                {hoursWarning}
-              </p>
-            ) : branchHours.openingTime && branchHours.closingTime ? (
-              <p className="text-xs text-slate-500 sm:col-span-2">
-                Branch hours: {formatClockTime(branchHours.openingTime)} –{' '}
-                {formatClockTime(branchHours.closingTime)}. Shift must fall
-                inside this window.
-              </p>
-            ) : null}
+            <StaffScheduleFields
+              form={form}
+              branchHours={branchHours}
+              hoursWarning={hoursWarning}
+              fieldErrors={fieldErrors}
+              onPatch={patch}
+              ids={{
+                workingDays: FIELD_IDS.workingDays,
+                scheduleStart: FIELD_IDS.scheduleStart,
+                scheduleEnd: FIELD_IDS.scheduleEnd,
+                scheduleBreakStart: FIELD_IDS.scheduleBreakStart,
+                scheduleBreakEnd: FIELD_IDS.scheduleBreakEnd,
+              }}
+            />
 
-            <div className="space-y-1.5">
-              <Label htmlFor="staff-start">Start Time</Label>
-              <TimePicker
-                id="staff-start"
-                value={form.scheduleStart}
-                onChange={(e) => patch('scheduleStart', e.target.value)}
-                className={fieldErrorClass(fieldErrors.scheduleStart)}
-              />
-              <FieldError message={fieldErrors.scheduleStart} />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="staff-break-start">Break from</Label>
-              <TimePicker
-                id="staff-break-start"
-                value={form.scheduleBreakStart}
-                onChange={(e) => patch('scheduleBreakStart', e.target.value)}
-                className={fieldErrorClass(fieldErrors.scheduleBreakStart)}
-              />
-              <FieldError message={fieldErrors.scheduleBreakStart} />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="staff-break-end">Break to</Label>
-              <TimePicker
-                id="staff-break-end"
-                value={form.scheduleBreakEnd}
-                onChange={(e) => patch('scheduleBreakEnd', e.target.value)}
-                className={fieldErrorClass(fieldErrors.scheduleBreakEnd)}
-              />
-              <FieldError message={fieldErrors.scheduleBreakEnd} />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="staff-end">End Time</Label>
-              <TimePicker
-                id="staff-end"
-                value={form.scheduleEnd}
-                onChange={(e) => patch('scheduleEnd', e.target.value)}
-                className={fieldErrorClass(fieldErrors.scheduleEnd)}
-              />
-              <FieldError message={fieldErrors.scheduleEnd} />
-            </div>
+            <StaffHardwareAssignFields
+              role={form.role}
+              hardwareType={form.hardwareType}
+              hardwareDeviceId={form.hardwareDeviceId}
+              hardwareOptions={hardwareOptions}
+              hardwareLoading={hardwareLoading}
+              scheduleReady={scheduleReady}
+              hardwareSearch={hardwareSearch}
+              selectedSlotKey={form.hardwareSlotKey}
+              fieldErrors={fieldErrors}
+              onSearchChange={setHardwareSearch}
+              onTypeChange={(type) => {
+                setForm((prev) => ({
+                  ...prev,
+                  hardwareType: type,
+                  hardwareDeviceId: '',
+                  hardwareSlotKey: '',
+                }))
+                clearField('hardwareType')
+                clearField('hardwareDeviceId')
+                clearField('hardwareSlotKey')
+              }}
+              onDeviceChange={(id) => patch('hardwareDeviceId', id)}
+              onSelectDevice={handleSelectDevice}
+              onSelectSlot={handleSelectSlot}
+              onClearSelection={clearHardwareSelection}
+              ids={{
+                hardwareType: FIELD_IDS.hardwareType,
+                hardwareDeviceId: FIELD_IDS.hardwareDeviceId,
+              }}
+            />
 
             <ImageUploadField
               id="staff-image"

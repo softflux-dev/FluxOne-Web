@@ -152,10 +152,13 @@ export const syncEventSchema = z.object({
   deviceId: optionalString,
 })
 
+// Cap batch size so a single push cannot overload ingest / DB.
+export const SYNC_PUSH_MAX_EVENTS = 200
+
 export const pushBodySchema = z.object({
   deviceId: optionalString,
   branchId: optionalGuid,
-  events: z.array(syncEventSchema).min(1),
+  events: z.array(syncEventSchema).min(1).max(SYNC_PUSH_MAX_EVENTS),
 })
 
 export const bootstrapQuerySchema = z.object({

@@ -13,12 +13,19 @@ export function buildStaffPayload(fields) {
     password,
     role,
     hardwareDeviceId,
+    hardwareAllocationStart,
+    hardwareAllocationEnd,
     scheduleStart,
     scheduleBreakStart,
     scheduleBreakEnd,
     scheduleEnd,
+    workingDays,
     image,
   } = fields
+
+  const days = Array.isArray(workingDays)
+    ? workingDays.map((d) => String(d).trim().toLowerCase()).filter(Boolean)
+    : undefined
 
   const base = {
     fullName: String(fullName || '').trim(),
@@ -26,19 +33,38 @@ export function buildStaffPayload(fields) {
     role,
     // Always send so BM can clear an assignment (null = unassigned).
     hardwareDeviceId: String(hardwareDeviceId || '').trim() || null,
-    scheduleStart: scheduleStart || undefined,
-    scheduleBreakStart: scheduleBreakStart || undefined,
-    scheduleBreakEnd: scheduleBreakEnd || undefined,
-    scheduleEnd: scheduleEnd || undefined,
+    hardwareAllocationStart: hardwareAllocationStart || undefined,
+    hardwareAllocationEnd: hardwareAllocationEnd || undefined,
+    // Always send schedule fields so Edit can clear (empty → null).
+    scheduleStart: scheduleStart ? String(scheduleStart).trim() : null,
+    scheduleBreakStart: scheduleBreakStart ? String(scheduleBreakStart).trim() : null,
+    scheduleBreakEnd: scheduleBreakEnd ? String(scheduleBreakEnd).trim() : null,
+    scheduleEnd: scheduleEnd ? String(scheduleEnd).trim() : null,
+    ...(days !== undefined ? { workingDays: days } : {}),
   }
 
   if (password) base.password = password
 
   if (image instanceof File && image.size > 0) {
     const form = new FormData()
+    const scheduleKeys = new Set([
+      'scheduleStart',
+      'scheduleEnd',
+      'scheduleBreakStart',
+      'scheduleBreakEnd',
+    ])
     Object.entries(base).forEach(([key, value]) => {
       if (key === 'hardwareDeviceId') {
         form.append(key, value || '')
+        return
+      }
+      if (key === 'workingDays') {
+        form.append(key, JSON.stringify(value || []))
+        return
+      }
+      // Clears must travel as empty string (validator maps '' → null).
+      if (scheduleKeys.has(key)) {
+        form.append(key, value == null ? '' : String(value))
         return
       }
       if (value !== undefined && value !== null && value !== '') {
@@ -56,6 +82,8 @@ function defaultFilters(overrides = {}) {
   return {
     q: '',
     status: '',
+    role: '',
+    hardwareType: '',
     page: 1,
     limit: STAFF_PAGE_SIZE,
     ...overrides,
@@ -86,6 +114,9 @@ export const fetchBranchStaff = createAsyncThunk(
       q: next.q || undefined,
       status: next.status || undefined,
       role: next.role || undefined,
+      // Server accepts hardwareType | type
+      hardwareType: next.hardwareType || undefined,
+      type: next.hardwareType || undefined,
     })
     if (!result.success) {
       return rejectWithValue(result.error || 'Failed to load staff')
@@ -162,6 +193,7 @@ const branchStaffSlice = createSlice({
         patch.q !== undefined ||
         patch.status !== undefined ||
         patch.role !== undefined ||
+        patch.hardwareType !== undefined ||
         patch.limit !== undefined
       ) {
         next.page = patch.page ?? 1

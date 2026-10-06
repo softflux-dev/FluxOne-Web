@@ -6,6 +6,10 @@ const DEFAULT_PAGE_SIZE = 50
 
 // JSON body, or multipart FormData when a new branch/manager image File is selected.
 export function buildAdminBranchPayload(fields) {
+  const workingDays = Array.isArray(fields.workingDays)
+    ? fields.workingDays.map((d) => String(d).trim().toLowerCase()).filter(Boolean)
+    : []
+
   const base = {
     name: String(fields.name || '').trim(),
     location: String(fields.location || '').trim(),
@@ -18,6 +22,7 @@ export function buildAdminBranchPayload(fields) {
     status: fields.status || undefined,
     openingTime: fields.openingTime != null ? String(fields.openingTime).trim() : '',
     closingTime: fields.closingTime != null ? String(fields.closingTime).trim() : '',
+    workingDays,
   }
 
   const branchImage = fields.image instanceof File && fields.image.size > 0 ? fields.image : null
@@ -29,6 +34,7 @@ export function buildAdminBranchPayload(fields) {
   if (branchImage || managerImage) {
     const form = new FormData()
     Object.entries(base).forEach(([key, value]) => {
+      if (key === 'workingDays') return
       if (value !== undefined && value !== null && value !== '') {
         form.append(key, String(value))
       }
@@ -36,6 +42,8 @@ export function buildAdminBranchPayload(fields) {
     // Always send hour fields (empty clears) so multipart updates match JSON.
     form.set('openingTime', base.openingTime)
     form.set('closingTime', base.closingTime)
+    // JSON string — server preprocess also accepts comma-separated
+    form.set('workingDays', JSON.stringify(base.workingDays))
     if (branchImage) form.append('image', branchImage)
     if (managerImage) form.append('profile_image', managerImage)
     return form

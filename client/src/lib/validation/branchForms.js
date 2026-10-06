@@ -3,7 +3,87 @@
 import { validatePercentage } from '@/lib/validation/formValidators'
 import { firstValidationMessage } from '@/lib/validation/fieldErrors'
 
-const HARDWARE_TYPES = new Set(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
+// Weekday tokens — match server schedule.validation WEEK_DAYS / branches.working_days
+export const WEEK_DAY_OPTIONS = [
+  { value: 'mon', label: 'Mon', fullLabel: 'Monday' },
+  { value: 'tue', label: 'Tue', fullLabel: 'Tuesday' },
+  { value: 'wed', label: 'Wed', fullLabel: 'Wednesday' },
+  { value: 'thu', label: 'Thu', fullLabel: 'Thursday' },
+  { value: 'fri', label: 'Fri', fullLabel: 'Friday' },
+  { value: 'sat', label: 'Sat', fullLabel: 'Saturday' },
+  { value: 'sun', label: 'Sun', fullLabel: 'Sunday' },
+]
+
+export const FULL_WEEK_DAYS = WEEK_DAY_OPTIONS.map((d) => d.value)
+
+const WEEK_DAY_SET = new Set(FULL_WEEK_DAYS)
+
+// Normalize to unique lowercase day tokens (invalid dropped).
+export function normalizeWorkingDays(value) {
+  if (value == null) return []
+  let raw = value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    try {
+      const parsed = JSON.parse(trimmed)
+      raw = Array.isArray(parsed) ? parsed : trimmed.split(',')
+    } catch {
+      raw = trimmed.split(',')
+    }
+  }
+  if (!Array.isArray(raw)) return []
+  const out = []
+  const seen = new Set()
+  for (const item of raw) {
+    const day = String(item).trim().toLowerCase()
+    if (!WEEK_DAY_SET.has(day) || seen.has(day)) continue
+    seen.add(day)
+    out.push(day)
+  }
+  return out
+}
+
+// Compact label for lists: "Mon–Fri" or "Mon, Wed, Fri"
+export function formatWorkingDaysShort(days) {
+  const normalized = normalizeWorkingDays(days)
+  if (!normalized.length) return null
+  if (normalized.length === 7) return 'Mon–Sun'
+  const labels = WEEK_DAY_OPTIONS.filter((d) => normalized.includes(d.value)).map((d) => d.label)
+  // Contiguous Mon–Fri style ranges
+  const indices = normalized.map((d) => FULL_WEEK_DAYS.indexOf(d)).sort((a, b) => a - b)
+  let contiguous = indices.length > 1
+  for (let i = 1; i < indices.length; i += 1) {
+    if (indices[i] !== indices[i - 1] + 1) {
+      contiguous = false
+      break
+    }
+  }
+  if (contiguous && labels.length >= 3) {
+    return `${labels[0]}–${labels[labels.length - 1]}`
+  }
+  return labels.join(', ')
+}
+
+export function validateWorkingDaysFields(workingDays, { required = true } = {}) {
+  const errors = {}
+  const days = normalizeWorkingDays(workingDays)
+  if (required && !days.length) {
+    errors.workingDays = 'Select at least one working day'
+  }
+  return errors
+}
+
+// Matches branch_hardware.type CHECK constraint
+export const HARDWARE_TYPE_OPTIONS = [
+  'Computers',
+  'Scanners',
+  'Printers',
+  'Telephone',
+  'Other',
+]
+
+const HARDWARE_TYPES = new Set(HARDWARE_TYPE_OPTIONS)
 const HARDWARE_STATUSES = new Set(['New', 'Used', 'Good', 'Poor'])
 
 export function validateHardwareFormFields(fields = {}, { isCreate = true } = {}) {

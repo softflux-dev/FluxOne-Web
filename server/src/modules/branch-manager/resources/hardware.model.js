@@ -1,5 +1,11 @@
 import { tenantQuery } from '../../../config/db.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
+import { ROLES } from '../../../config/constants.js'
+import { normalizeWorkingDays } from '../staff/schedule.validation.js'
+import {
+  classifyDeviceAvailability,
+  listActiveAllocationsForDevices,
+} from '../staff/hardwareAllocation.model.js'
 
 const HARDWARE_TYPES = new Set(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
 const HARDWARE_STATUSES = new Set(['New', 'Used', 'Good', 'Poor'])
@@ -12,14 +18,13 @@ const hardwareSelect = `
   h.type,
   h.status,
   h.access_status AS "accessStatus",
+  COALESCE(h.is_active, true) AS "isActive",
   h.image_url AS "imageUrl",
   h.created_at AS "createdAt",
-  h.branch_id AS "branchId",
-  u.full_name AS "assignedToName",
-  s.id AS "assignedToStaffId"
+  h.branch_id AS "branchId"
 `
 
-function mapHardware(row) {
+function mapHardware(row, availability = null) {
   if (!row) return null
   return {
     id: row.id,
@@ -30,12 +35,19 @@ function mapHardware(row) {
     status: row.status,
     // System Access: active | blocked (Admin + BM can toggle)
     accessStatus: row.accessStatus === 'blocked' ? 'blocked' : 'active',
+    // Soft delete — directory visibility
+    isActive: row.isActive !== false,
     image: normalizeImageUrl(row.imageUrl) || '',
     imageUrl: normalizeImageUrl(row.imageUrl) || '',
     createdAt: row.createdAt,
     branchId: row.branchId,
-    assignedToName: row.assignedToName || null,
+    assignedToName: availability?.occupiedBy || row.assignedToName || null,
     assignedToStaffId: row.assignedToStaffId || null,
+    // Availability metadata (set when schedule window is provided)
+    availability: availability?.availability || null,
+    available: availability ? availability.available : null,
+    occupiedSlot: availability?.occupiedSlot || null,
+    lockMode: availability?.mode || null,
   }
 }
 
@@ -87,44 +99,123 @@ export function assertHardwareStatus(status) {
   }
 }
 
-export async function listHardware(tenantId, { branchId, type, q } = {}) {
+// Optional availability: scheduleStart/End + workingDays.
+// Returns free devices by default (filterBusy). Pass includeBusy for full board later.
+export async function listHardware(
+  tenantId,
+  {
+    branchId,
+    type,
+    q,
+    active = true,
+    scheduleStart = null,
+    scheduleEnd = null,
+    workingDays = null,
+    excludeStaffId = null,
+    includeBusy = false,
+    forRole = null,
+  } = {},
+) {
   const search = q ? String(q).trim() : null
+  const activeFilter = active === null || active === undefined ? null : Boolean(active)
+  const days = normalizeWorkingDays(workingDays)
+  const checkAvailability = Boolean(days.length && scheduleStart && scheduleEnd)
+
   const { rows } = await tenantQuery(
     tenantId,
     `
       SELECT ${hardwareSelect}
       FROM branch_hardware h
-      LEFT JOIN staff s
-        ON s.tenant_id = h.tenant_id
-       AND s.hardware_device_id = h.id::text
-      LEFT JOIN users u
-        ON u.id = s.user_id
-       AND u.tenant_id = s.tenant_id
       WHERE h.tenant_id = $1
         AND ($2::uuid IS NULL OR h.branch_id = $2)
         AND ($3::text IS NULL OR h.type = $3)
+        AND ($4::boolean IS NULL OR COALESCE(h.is_active, true) = $4)
         AND (
-          $4::text IS NULL
-          OR h.name ILIKE '%' || $4 || '%'
-          OR h.code ILIKE '%' || $4 || '%'
-          OR h.company_name ILIKE '%' || $4 || '%'
+          $5::text IS NULL
+          OR h.name ILIKE '%' || $5 || '%'
+          OR h.code ILIKE '%' || $5 || '%'
+          OR h.company_name ILIKE '%' || $5 || '%'
         )
       ORDER BY h.created_at DESC
     `,
-    [branchId || null, type || null, search],
+    [branchId || null, type || null, activeFilter, search],
   )
-  return rows.map(mapHardware)
+
+  const mapped = rows.map((row) => mapHardware(row))
+  if (!checkAvailability || !branchId) return mapped
+
+  const deviceIds = mapped.map((h) => h.id)
+  if (!deviceIds.length) return mapped
+
+  const holders = await listActiveAllocationsForDevices(tenantId, {
+    branchId,
+    hardwareIds: deviceIds,
+    excludeStaffId,
+  })
+
+  const byDevice = new Map()
+  for (const holder of holders) {
+    const key = String(holder.hardwareId)
+    if (!byDevice.has(key)) byDevice.set(key, [])
+    byDevice.get(key).push(holder)
+  }
+
+  const candidate = {
+    workingDays: days,
+    scheduleStart,
+    scheduleEnd,
+  }
+
+  const withAvailability = mapped.map((hw) => {
+    const deviceHolders = byDevice.get(String(hw.id)) || []
+    let availability = classifyDeviceAvailability(candidate, deviceHolders)
+
+    // IM: device is selectable only when nothing is allocated (exclusive lock).
+    if (forRole === ROLES.INVENTORY_MANAGER) {
+      const imFree = deviceHolders.length === 0
+      availability = {
+        ...availability,
+        available: imFree,
+        availability: imFree ? 'available' : 'locked_exclusive',
+        freeSlots: imFree
+          ? [{ start: scheduleStart, end: scheduleEnd }]
+          : [],
+        occupiedBy: imFree ? null : availability.occupiedBy || deviceHolders[0]?.staffName,
+      }
+    }
+
+    return {
+      ...hw,
+      assignedToName: availability.occupiedBy,
+      availability: availability.availability,
+      available: availability.available,
+      occupiedSlot: availability.occupiedSlot,
+      lockMode: availability.mode,
+      freeSlots: availability.freeSlots || [],
+      occupiedIntervals: availability.occupiedIntervals || [],
+    }
+  })
+
+  // Staff picker: return full board when includeBusy; else only devices with a free slot
+  if (includeBusy) return withAvailability
+  return withAvailability.filter(
+    (h) => h.available || (Array.isArray(h.freeSlots) && h.freeSlots.length > 0),
+  )
 }
 
 export async function getHardwareById(tenantId, id, { branchId } = {}) {
   const { rows } = await tenantQuery(
     tenantId,
     `
-      SELECT ${hardwareSelect}
+      SELECT
+        ${hardwareSelect},
+        u.full_name AS "assignedToName",
+        s.id AS "assignedToStaffId"
       FROM branch_hardware h
       LEFT JOIN staff s
         ON s.tenant_id = h.tenant_id
        AND s.hardware_device_id = h.id::text
+       AND s.status NOT IN ('inactive', 'blocked')
       LEFT JOIN users u
         ON u.id = s.user_id
        AND u.tenant_id = s.tenant_id
@@ -159,9 +250,9 @@ export async function createHardware(tenantId, payload) {
         tenantId,
         `
           INSERT INTO branch_hardware (
-            tenant_id, branch_id, code, name, company_name, type, status, image_url
+            tenant_id, branch_id, code, name, company_name, type, status, image_url, is_active
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
           RETURNING id
         `,
         [branchId, code, name, companyName, type, status, imageUrl || null],
@@ -225,22 +316,41 @@ export async function updateHardware(tenantId, id, payload, { branchId } = {}) {
   return getHardwareById(tenantId, id, { branchId })
 }
 
+// Soft-deactivate hardware (replaces hard delete for client UX).
 export async function deleteHardware(tenantId, id, { branchId } = {}) {
   const existing = await getHardwareById(tenantId, id, { branchId })
   if (!existing) return null
 
-  if (existing.assignedToStaffId) {
-    throw httpError(409, 'Cannot delete hardware. It is currently assigned to a staff member.')
+  // Block deactivate while any active allocation exists
+  const { rows: allocRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT id
+      FROM hardware_allocations
+      WHERE tenant_id = $1
+        AND hardware_id = $2::uuid
+        AND status = 'active'
+      LIMIT 1
+    `,
+    [id],
+  )
+  if (allocRows[0] || existing.assignedToStaffId) {
+    throw httpError(
+      409,
+      'Cannot deactivate hardware. It is currently assigned to a staff member. Unassign it first.',
+    )
   }
 
   const { rowCount } = await tenantQuery(
     tenantId,
     `
-      DELETE FROM branch_hardware
+      UPDATE branch_hardware
+      SET is_active = false
       WHERE tenant_id = $1 AND id = $2
         AND ($3::uuid IS NULL OR branch_id = $3)
+        AND COALESCE(is_active, true) = true
     `,
     [id, branchId || null],
   )
-  return rowCount > 0 ? existing : null
+  return rowCount > 0 ? { ...existing, isActive: false } : null
 }

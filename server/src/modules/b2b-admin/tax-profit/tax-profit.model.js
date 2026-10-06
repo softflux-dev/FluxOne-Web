@@ -9,7 +9,10 @@ function mapProductRow(row) {
   const profitPct = Number(row.profitPct) || 0
   const taxPct = Number(row.taxPct) || 0
   // Admin Tax & Profit formula: cost + profit-on-cost + tax-on-cost
-  const finalPrice = Math.round(baseCost + (baseCost * profitPct) / 100 + (baseCost * taxPct) / 100)
+  const profitAmount = (baseCost * profitPct) / 100
+  const subTotal = baseCost + profitAmount
+  const taxAmount = (subTotal * taxPct ) / 100
+  const finalPrice = Math.round((subTotal + taxAmount) * 100) / 100
 
   return {
     id: row.id,
@@ -21,7 +24,6 @@ function mapProductRow(row) {
     category: row.categoryName || '',
     subcategoryId: row.subcategoryId || null,
     subcategory: row.subcategoryName || '',
-    // Keep scale on payload for legacy clients; UI no longer displays it (TC-054)
     scale: row.scale || '',
     scaleLabel: row.scale || '',
     parentId: row.parentId || null,

@@ -19,12 +19,12 @@ import {
   TableCell,
   TablePagination,
 } from '@/components/ui/table'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
+import { UserAvatar } from '@/components/shared/UserAvatar'
 import { BRAND } from '@/lib/constants'
-import { formatDateTime } from '@/lib/formatDateTime'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
+import { HARDWARE_TYPE_OPTIONS } from '@/lib/validation/branchForms'
 import { displayStaffRef } from '@/lib/formatDisplayId'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
 import {
@@ -47,7 +47,6 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Clock,
   ShieldCheck,
   Search,
   Loader2,
@@ -55,22 +54,6 @@ import {
   Coins,
   Building2,
 } from 'lucide-react'
-
-function formatLastActive(value) {
-  if (!value) return 'Never'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '—'
-  const diffMs = Date.now() - d.getTime()
-  const mins = Math.floor(diffMs / 60000)
-  if (mins < 1) return 'Just now'
-  if (mins < 60) return `${mins} min ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  // Older than a week — absolute 12h AM/PM
-  return formatDateTime(d)
-}
 
 const PASSWORD_FIELD_IDS = {
   currentPassword: 'admin-current-password',
@@ -100,6 +83,7 @@ export function SettingsPage() {
   // Currency Settings (local draft until Save)
   const {
     defaultCurrency,
+    currencyLocked,
     options: currencyOptions,
     ratesToPkr,
     loading: currencyLoading,
@@ -126,14 +110,12 @@ export function SettingsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedQ = useDebouncedValue(searchQuery.trim(), 300)
   const [statusFilter, setStatusFilter] = useState('all')
-  // Multi-branch filter for System Access list
+  // Multi-branch + hardware type filters for System Access list
   const [branchFilter, setBranchFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
   const [branchOptions, setBranchOptions] = useState([])
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(ADMIN_DEVICES_PAGE_SIZE)
-
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
-  const [targetSystem, setTargetSystem] = useState(null)
 
   // Load company branches for the System Access dropdown
   useEffect(() => {
@@ -157,27 +139,29 @@ export function SettingsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedQ, statusFilter, branchFilter])
+  }, [debouncedQ, statusFilter, branchFilter, typeFilter])
 
   const {
     items: systems,
     stats,
     pagination,
     loading,
-    mutating,
     error,
-    setDeviceStatus,
   } = useAdminDevices({
     q: debouncedQ,
     status: statusFilter,
     branchId: branchFilter,
+    type: typeFilter,
     page,
     limit,
   })
 
   const slowHint = useSlowLoadingHint(loading && activeTab === 'systems')
   const hasDeviceFilters =
-    Boolean(debouncedQ) || statusFilter !== 'all' || branchFilter !== 'all'
+    Boolean(debouncedQ) ||
+    statusFilter !== 'all' ||
+    branchFilter !== 'all' ||
+    typeFilter !== 'all'
   const savedRate = ratesToPkr?.[selectedCurrency]
   const rateDirty =
     selectedCurrency !== 'PKR' &&
@@ -267,30 +251,6 @@ export function SettingsPage() {
         ? `Default currency saved. ${converted} product price(s) converted.`
         : 'Exchange rate updated. Totals will use the latest rate.',
     )
-  }
-
-  function handlePromptBlockSystem(sys) {
-    setTargetSystem(sys)
-    setConfirmDialogOpen(true)
-  }
-
-  async function handleConfirmToggleBlock() {
-    if (!targetSystem) return
-    const isCurrentlyActive = targetSystem.status === 'active'
-    const nextStatus = isCurrentlyActive ? 'blocked' : 'active'
-
-    const result = await setDeviceStatus(targetSystem.id, nextStatus)
-    if (!result.success) {
-      toastError(result.error || 'Failed to update device status')
-      return
-    }
-
-    toastSuccess(
-      `${targetSystem.deviceName} is now ${nextStatus === 'blocked' ? 'BLOCKED from accessing the system' : 'ACTIVE & Authorized'
-      }`,
-    )
-    setTargetSystem(null)
-    setConfirmDialogOpen(false)
   }
 
   return (
@@ -494,16 +454,15 @@ export function SettingsPage() {
                     </Badge>
                   </div>
 
-                  {/* System access tip — signature UUID binding removed */}
                   <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/70">
                     <div className="space-y-0.5">
                       <p className="font-bold text-xs text-slate-900">Assigned Hardware Access</p>
                       <p className="text-[11px] text-slate-500">
-                        Block or authorize systems under All System Access
+                        View assigned terminals under All System Access
                       </p>
                     </div>
                     <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
-                      Enforced
+                      Read-only
                     </Badge>
                   </div>
                 </div>
@@ -546,6 +505,13 @@ export function SettingsPage() {
                   </div>
                 ) : (
                   <form onSubmit={handleSaveCurrency} className="space-y-4">
+                    {currencyLocked ? (
+                      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-100">
+                        Default currency is locked after the first save. Changes are only possible via
+                        database (Supabase) for now.
+                      </p>
+                    ) : null}
+
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold text-slate-700">
                         Default Currency <span className="text-rose-600">*</span>
@@ -555,6 +521,7 @@ export function SettingsPage() {
                         onChange={(e) => setSelectedCurrency(e.target.value)}
                         className="h-10 text-sm"
                         required
+                        disabled={currencyLocked}
                       >
                         {currencyOptions.map((opt) => (
                           <option key={opt.code} value={opt.code}>
@@ -563,7 +530,9 @@ export function SettingsPage() {
                         ))}
                       </NativeSelect>
                       <p className="text-[11px] text-slate-500">
-                        Select the default currency to be used across the system.
+                        {currencyLocked
+                          ? 'Locked — contact a developer to change via Supabase if required.'
+                          : 'Select the default currency to be used across the system. Locked after first save.'}
                       </p>
                     </div>
 
@@ -585,11 +554,14 @@ export function SettingsPage() {
                             placeholder="e.g. 230"
                             className="h-10"
                             required
+                            disabled={currencyLocked}
                           />
                           <span className="shrink-0 text-xs font-semibold text-slate-600">PKR</span>
                         </div>
                         <p className="text-[11px] text-slate-500">
-                          Latest rate is used for totals. Update anytime (e.g. 230 today, 240 tomorrow).
+                          {currencyLocked
+                            ? 'Rate updates are locked with the default currency.'
+                            : 'Latest rate is used for totals. Update anytime before the first lock.'}
                         </p>
                       </div>
                     ) : null}
@@ -597,11 +569,15 @@ export function SettingsPage() {
                     <div className="pt-2">
                       <Button
                         type="submit"
-                        disabled={currencySaving || !currencyDirty}
+                        disabled={currencySaving || !currencyDirty || currencyLocked}
                         className="w-full text-white font-semibold cursor-pointer shadow-sm disabled:opacity-60"
                         style={{ background: BRAND.purple }}
                       >
-                        {currencySaving ? 'Saving…' : 'Save'}
+                        {currencyLocked
+                          ? 'Currency locked'
+                          : currencySaving
+                            ? 'Saving…'
+                            : 'Save'}
                       </Button>
                     </div>
                   </form>
@@ -682,7 +658,7 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-3.5 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-3.5 shadow-2xs">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -694,7 +670,7 @@ export function SettingsPage() {
                 />
               </div>
 
-              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <span className="shrink-0 text-xs font-semibold text-slate-500">Status:</span>
                 <div className="flex max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-0.5">
                   {[
@@ -716,7 +692,25 @@ export function SettingsPage() {
                   ))}
                 </div>
 
-                {/* Branch filter — after Search + Status (multi-branch companies) */}
+                {/* Hardware type filter — Computers / Scanners / Printers / … */}
+                <label className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-slate-50/70 px-2.5 py-1.5 text-xs">
+                  <Cpu className="size-3.5 text-slate-400" />
+                  <span className="font-semibold text-slate-500">Type</span>
+                  <NativeSelect
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="h-7 min-w-[8.5rem] border-0 bg-transparent py-0 text-xs font-semibold text-slate-800 shadow-none focus:ring-0"
+                  >
+                    <option value="all">All Types</option>
+                    {HARDWARE_TYPE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+
+                {/* Branch filter — multi-branch companies */}
                 <label className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-slate-50/70 px-2.5 py-1.5 text-xs">
                   <Building2 className="size-3.5 text-slate-400" />
                   <span className="font-semibold text-slate-500">Branch</span>
@@ -738,7 +732,7 @@ export function SettingsPage() {
 
             <SurfaceCard
               title="List of System Access Terminals"
-              description="Assigned branch hardware, employee binding & authorization status"
+              description="Assigned branch hardware, employee binding and authorization status"
             >
               {loading && systems.length === 0 ? (
                 <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
@@ -755,7 +749,7 @@ export function SettingsPage() {
                   }
                   description={
                     hasDeviceFilters
-                      ? 'Clear search, status, or branch filters to see assigned systems.'
+                      ? 'Clear search, status, type, or branch filters to see assigned systems.'
                       : 'Devices appear here after a branch manager creates hardware and assigns it to an employee.'
                   }
                   compact
@@ -768,12 +762,21 @@ export function SettingsPage() {
                       return (
                         <DataCard key={sys.id}>
                           <div className="flex items-start gap-3">
-                            <div
-                              className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-white ${isActive ? 'bg-purple-900' : 'bg-rose-600'
+                            {sys.imageUrl ? (
+                              <img
+                                src={sys.imageUrl}
+                                alt=""
+                                className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-border"
+                              />
+                            ) : (
+                              <div
+                                className={`flex size-10 shrink-0 items-center justify-center rounded-xl text-white ${
+                                  isActive ? 'bg-purple-900' : 'bg-rose-600'
                                 }`}
-                            >
-                              <Cpu className="size-4" />
-                            </div>
+                              >
+                                <Cpu className="size-4" />
+                              </div>
+                            )}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
@@ -782,6 +785,9 @@ export function SettingsPage() {
                                   </p>
                                   <p className="mt-0.5 font-mono text-[11px] font-semibold text-purple-900">
                                     {sys.hardwareCode || '—'}
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                                    {sys.hardwareType || '—'}
                                   </p>
                                   <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-slate-500">
                                     <Building2 className="size-3 shrink-0 text-slate-400" />
@@ -799,60 +805,40 @@ export function SettingsPage() {
                                   {isActive ? 'Active' : 'Blocked'}
                                 </Badge>
                               </div>
-                              {/* hardwareSignature removed — Hardware ID is shown above */}
-                              <p className="mt-2 text-xs font-semibold text-slate-900">
-                                {sys.userName}
-                              </p>
-                              <p className="font-mono text-[11px] text-slate-500">
-                                {displayStaffRef({ id: sys.staffId })}
-                              </p>
-                              <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
-                                <Clock className="size-3 text-slate-400" />
-                                {formatLastActive(sys.lastActiveAt)}
-                              </p>
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={mutating}
-                                onClick={() => handlePromptBlockSystem(sys)}
-                                className={`mt-3 h-8 w-full cursor-pointer px-3.5 text-xs font-semibold text-white shadow-xs ${
-                                  isActive
-                                    ? 'bg-red-600 hover:bg-red-700'
-                                    : 'bg-emerald-600 hover:bg-emerald-700'
-                                }`}
-                              >
-                                {isActive ? (
-                                  <>
-                                    <Ban className="mr-1.5 size-3.5" />
-                                    Block System
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="mr-1.5 size-3.5" />
-                                    Authorize
-                                  </>
-                                )}
-                              </Button>
+                              <div className="mt-3 flex items-center gap-2.5">
+                                <UserAvatar
+                                  name={sys.userName}
+                                  imageUrl={sys.employeeImageUrl}
+                                  className="size-9"
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-slate-900">
+                                    {sys.userName}
+                                  </p>
+                                  <p className="font-mono text-[11px] text-slate-500">
+                                    {displayStaffRef({ id: sys.staffId })}
+                                  </p>
+                                  <p className="truncate text-[11px] text-slate-400">
+                                    {sys.designation || '—'}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </DataCard>
                       )
                     })}
                     desktop={
-                      <Table className="min-w-[44rem] w-full text-left text-sm">
+                      <Table className="min-w-[52rem] w-full text-left text-sm">
                         <TableHeader>
                           <TableRow className="text-xs text-slate-500 uppercase">
-                            <TableHead className="px-4 py-3 font-medium">
-                              Hardware ID & Name
-                            </TableHead>
+                            <TableHead className="px-4 py-3 font-medium">Hardware</TableHead>
+                            <TableHead className="px-4 py-3 font-medium">Hardware Type</TableHead>
                             <TableHead className="px-4 py-3 font-medium">Branch</TableHead>
-                            <TableHead className="hidden px-4 py-3 font-medium lg:table-cell">
+                            <TableHead className="px-4 py-3 font-medium">
                               Assigned Employee
                             </TableHead>
                             <TableHead className="px-4 py-3 font-medium">Status</TableHead>
-                            <TableHead className="sticky right-0 z-[1] bg-slate-200/80 px-4 py-3 text-right font-medium">
-                              Action
-                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -865,12 +851,21 @@ export function SettingsPage() {
                               >
                                 <TableCell className="px-4 py-3.5">
                                   <div className="flex items-center gap-3">
-                                    <div
-                                      className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-white ${isActive ? 'bg-purple-900' : 'bg-rose-600'
+                                    {sys.imageUrl ? (
+                                      <img
+                                        src={sys.imageUrl}
+                                        alt=""
+                                        className="size-9 shrink-0 rounded-xl object-cover ring-1 ring-border"
+                                      />
+                                    ) : (
+                                      <div
+                                        className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-white ${
+                                          isActive ? 'bg-purple-900' : 'bg-rose-600'
                                         }`}
-                                    >
-                                      <Cpu className="size-4" />
-                                    </div>
+                                      >
+                                        <Cpu className="size-4" />
+                                      </div>
+                                    )}
                                     <div className="min-w-0">
                                       <p className="text-xs leading-tight font-semibold text-slate-900">
                                         {sys.deviceName}
@@ -882,6 +877,10 @@ export function SettingsPage() {
                                   </div>
                                 </TableCell>
 
+                                <TableCell className="px-4 py-3.5 text-xs font-medium text-slate-700">
+                                  {sys.hardwareType || '—'}
+                                </TableCell>
+
                                 <TableCell className="px-4 py-3.5">
                                   <p className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
                                     <Building2 className="size-3.5 shrink-0 text-slate-400" />
@@ -889,58 +888,38 @@ export function SettingsPage() {
                                   </p>
                                 </TableCell>
 
-                                {/* Hardware Signature & Network column removed */}
-
-                                <TableCell className="hidden px-4 py-3.5 text-xs text-slate-700 lg:table-cell">
-                                  <p className="font-semibold text-slate-900">{sys.userName}</p>
-                                  <p className="mt-0.5 font-mono text-[11px] text-slate-500">
-                                    {displayStaffRef({ id: sys.staffId })}
-                                  </p>
-                                </TableCell>
-
-                                <TableCell className="px-4 py-3.5 whitespace-nowrap">
-                                  <div className="flex items-center gap-2">
-                                    <Badge
-                                      variant="outline"
-                                      className={
-                                        isActive
-                                          ? 'border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700'
-                                          : 'border-rose-200 bg-rose-50 text-[11px] font-bold text-rose-700'
-                                      }
-                                    >
-                                      {isActive ? 'Active' : 'Blocked'}
-                                    </Badge>
-                                    {/* <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
-                                      <Clock className="size-3 text-slate-400" />
-                                      {formatLastActive(sys.lastActiveAt)}
-                                    </span> */}
+                                <TableCell className="px-4 py-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <UserAvatar
+                                      name={sys.userName}
+                                      imageUrl={sys.employeeImageUrl}
+                                      className="size-9"
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="truncate text-xs font-semibold text-slate-900">
+                                        {sys.userName}
+                                      </p>
+                                      <p className="font-mono text-[11px] text-slate-500">
+                                        {displayStaffRef({ id: sys.staffId })}
+                                      </p>
+                                      <p className="truncate text-[11px] text-slate-400">
+                                        {sys.designation || '—'}
+                                      </p>
+                                    </div>
                                   </div>
                                 </TableCell>
 
-                                <TableCell className="sticky right-0 z-[1] bg-white px-4 py-3.5 text-right whitespace-nowrap group-hover:bg-slate-50/70">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    disabled={mutating}
-                                    onClick={() => handlePromptBlockSystem(sys)}
-                                    className={`h-8 cursor-pointer px-3.5 text-xs font-semibold text-white shadow-xs ${
+                                <TableCell className="px-4 py-3.5 whitespace-nowrap">
+                                  <Badge
+                                    variant="outline"
+                                    className={
                                       isActive
-                                        ? 'bg-red-600 hover:bg-red-700'
-                                        : 'bg-emerald-600 hover:bg-emerald-700'
-                                    }`}
+                                        ? 'border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-700'
+                                        : 'border-rose-200 bg-rose-50 text-[11px] font-bold text-rose-700'
+                                    }
                                   >
-                                    {isActive ? (
-                                      <>
-                                        <Ban className="mr-1.5 size-3.5" />
-                                        Block System
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CheckCircle2 className="mr-1.5 size-3.5" />
-                                        Authorize
-                                      </>
-                                    )}
-                                  </Button>
+                                    {isActive ? 'Active' : 'Blocked'}
+                                  </Badge>
                                 </TableCell>
                               </TableRow>
                             )
@@ -968,40 +947,6 @@ export function SettingsPage() {
           </div>
         </MotionReveal>
       )}
-
-      <ConfirmDialog
-        open={confirmDialogOpen}
-        onOpenChange={setConfirmDialogOpen}
-        title={
-          targetSystem?.status === 'active' ? 'Block System Access' : 'Authorize System Access'
-        }
-        variant={targetSystem?.status === 'active' ? 'destructive' : 'success'}
-        icon={targetSystem?.status === 'active' ? Ban : CheckCircle2}
-        description={
-          targetSystem?.status === 'active' ? (
-            <>
-              Are you sure you want to block <strong>&quot;{targetSystem?.deviceName}&quot;</strong>?
-              <span className="font-mono text-[11px] text-slate-500 mt-1 block">
-                Hardware ID: {targetSystem?.hardwareCode || '—'}
-              </span>
-              This workstation will be blocked from accessing the system.
-            </>
-          ) : (
-            <>
-              Are you sure you want to authorize <strong>&quot;{targetSystem?.deviceName}&quot;</strong>?
-              <span className="font-mono text-[11px] text-slate-500 mt-1 block">
-                Hardware ID: {targetSystem?.hardwareCode || '—'}
-              </span>
-              This workstation will regain operational access.
-            </>
-          )
-        }
-        confirmLabel={
-          targetSystem?.status === 'active' ? 'Yes, Block System' : 'Yes, Authorize System'
-        }
-        loading={mutating || loading}
-        onConfirm={handleConfirmToggleBlock}
-      />
     </div>
   )
 }

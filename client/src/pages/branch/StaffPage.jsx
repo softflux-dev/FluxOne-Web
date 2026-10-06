@@ -108,7 +108,7 @@ export function StaffPage() {
     try {
       const result = await setStaffStatus(row.id, status)
       if (!result.success) toastError(result.error || 'Status update failed')
-      else toastSuccess(status === 'inactive' ? 'Staff blocked' : 'Staff opened')
+      else toastSuccess(status === 'inactive' ? 'Staff set inactive' : 'Staff set active')
     } finally {
       setStatusUpdatingId(null)
     }
@@ -257,10 +257,14 @@ export function StaffPage() {
               q={localQ}
               status={filters.status || ''}
               role={filters.role || ''}
+              hardwareType={filters.hardwareType || ''}
               onChange={(patch) => {
                 if (patch.q !== undefined) onSearchChange(patch.q)
                 if (patch.status !== undefined) updateFilters({ status: patch.status })
                 if (patch.role !== undefined) updateFilters({ role: patch.role })
+                if (patch.hardwareType !== undefined) {
+                  updateFilters({ hardwareType: patch.hardwareType })
+                }
               }}
             />
           </MotionReveal>
@@ -274,7 +278,8 @@ export function StaffPage() {
               onPageSizeChange={(limit) => updateFilters({ limit })}
               onEdit={openEdit}
               onDelete={setDeleteTarget}
-              onStatusChange={handleStatusChange}
+              onBlock={(row) => handleStatusChange(row, false)}
+              onUnblock={(row) => handleStatusChange(row, true)}
               statusUpdatingId={statusUpdatingId}
             />
           </MotionReveal>
@@ -335,14 +340,14 @@ export function StaffPage() {
         onOpenChange={(open) => {
           if (!open) setStatusTarget(null)
         }}
-        title="Block staff?"
+        title="Set staff inactive?"
         description={
           statusTarget
-            ? `${statusTarget.fullName || statusTarget.email} will be blocked from logging in. You can open access again later.`
+            ? `${statusTarget.fullName || statusTarget.email} will lose login access. You can set them active again later.`
             : undefined
         }
-        warning="This blocks login only. The staff record stays, and you can open access again from this roster."
-        confirmLabel="Block"
+        warning="This sets the account Inactive only. The staff record stays, and you can reactivate from the Inactive filter."
+        confirmLabel="Set Inactive"
         icon={Ban}
         variant="destructive"
         loading={mutating}

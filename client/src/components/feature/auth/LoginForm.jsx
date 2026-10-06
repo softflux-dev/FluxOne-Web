@@ -45,21 +45,11 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [demoOpen, setDemoOpen] = useState(false)
   const [localError, setLocalError] = useState('')
-  const [slowHint, setSlowHint] = useState(false)
   // Remaining lockout seconds — submit blocked until 0
   const [lockRemaining, setLockRemaining] = useState(0)
   const loading = status === 'loading'
   const locked = lockRemaining > 0
   const displayError = localError || error
-
-  useEffect(() => {
-    if (!loading) {
-      setSlowHint(false)
-      return
-    }
-    const timer = setTimeout(() => setSlowHint(true), 2500)
-    return () => clearTimeout(timer)
-  }, [loading])
 
   // Tick down the lockout timer once per second
   useEffect(() => {
@@ -266,15 +256,6 @@ export function LoginForm() {
             className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
           >
             {displayError}
-          </p>
-        ) : null}
-
-        {slowHint && !locked ? (
-          <p
-            role="status"
-            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
-          >
-            Waking the server… free hosting can take 15–30 seconds on the first request.
           </p>
         ) : null}
 

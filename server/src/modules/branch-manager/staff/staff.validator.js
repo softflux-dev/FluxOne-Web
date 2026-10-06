@@ -8,7 +8,7 @@ import {
   optionalUuid,
   paginationQuery,
 } from '../shared.validator.js'
-import { refineStaffSchedule } from './schedule.validation.js'
+import { refineStaffSchedule, workingDaysFieldSchema } from './schedule.validation.js'
 
 const staffRoleEnum = z.enum([
   'inventory_manager',
@@ -16,6 +16,14 @@ const staffRoleEnum = z.enum([
   'production_staff',
   'delivery_staff',
   'website_manager',
+])
+
+const hardwareTypeEnum = z.enum([
+  'Computers',
+  'Scanners',
+  'Printers',
+  'Telephone',
+  'Other',
 ])
 
 const staffStatusEnum = z
@@ -47,6 +55,9 @@ export const listStaffSchema = z.object({
     status: staffStatusEnum.optional(),
     branchId: optionalUuid,
     role: staffRoleEnum.optional(),
+    // Filter staff by assigned hardware type
+    hardwareType: hardwareTypeEnum.optional(),
+    type: hardwareTypeEnum.optional(),
   }),
 })
 
@@ -69,12 +80,16 @@ export const createStaffSchema = z
       scheduleBreakStart: optionalTime,
       scheduleBreakEnd: optionalTime,
       scheduleEnd: optionalTime,
+      workingDays: workingDaysFieldSchema,
+      hardwareAllocationStart: optionalTime,
+      hardwareAllocationEnd: optionalTime,
     }),
     query: empty,
     params: empty,
   })
   .superRefine(({ body }, ctx) => {
     refineStaffSchedule(body, ctx)
+    refineCashierHardwareAllocation(body, ctx)
   })
 
 export const updateStaffSchema = z
@@ -93,6 +108,9 @@ export const updateStaffSchema = z
       scheduleBreakStart: optionalTime,
       scheduleBreakEnd: optionalTime,
       scheduleEnd: optionalTime,
+      workingDays: workingDaysFieldSchema,
+      hardwareAllocationStart: optionalTime,
+      hardwareAllocationEnd: optionalTime,
       password: z.string().min(8).optional(),
     }),
     query: empty,
@@ -100,7 +118,32 @@ export const updateStaffSchema = z
   })
   .superRefine(({ body }, ctx) => {
     refineStaffSchedule(body, ctx)
+    refineCashierHardwareAllocation(body, ctx)
   })
+
+// Cashier + device → both allocation bounds required (full shift or partial slot).
+function refineCashierHardwareAllocation(body, ctx) {
+  const role = body.role
+  const hasDevice =
+    body.hardwareDeviceId != null && String(body.hardwareDeviceId).trim() !== ''
+  if (!hasDevice) return
+  if (role !== 'cashier') return
+
+  const hasStart =
+    body.hardwareAllocationStart != null &&
+    String(body.hardwareAllocationStart).trim() !== ''
+  const hasEnd =
+    body.hardwareAllocationEnd != null &&
+    String(body.hardwareAllocationEnd).trim() !== ''
+  if (hasStart && hasEnd) return
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message:
+      'Cashier hardware assignment requires hardwareAllocationStart and hardwareAllocationEnd',
+    path: ['body', 'hardwareAllocationStart'],
+  })
+}
 
 export const staffIdParamsSchema = z.object({
   body: empty,

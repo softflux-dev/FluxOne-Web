@@ -46,6 +46,8 @@ function formatTimeValue(value) {
   return `${match[1].padStart(2, '0')}:${match[2]}`
 }
 
+const FULL_WEEK_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+
 const branchSelect = `
   b.id,
   b.name,
@@ -54,6 +56,7 @@ const branchSelect = `
   b.status,
   to_char(b.opening_time, 'HH24:MI') AS "openingTime",
   to_char(b.closing_time, 'HH24:MI') AS "closingTime",
+  COALESCE(b.working_days, ARRAY[]::text[]) AS "workingDays",
   b.created_at AS "createdAt",
   u.id AS "managerUserId",
   u.full_name AS "managerName",
@@ -82,6 +85,8 @@ function mapBranchRow(row) {
     status: row.status || BRANCH_STATUS.OPEN,
     openingTime: formatTimeValue(row.openingTime),
     closingTime: formatTimeValue(row.closingTime),
+    // Admin-defined branch calendar (staff days must stay within this set)
+    workingDays: Array.isArray(row.workingDays) ? row.workingDays : [],
     createdAt: row.createdAt,
     totalStaff: row.totalStaff ?? 0,
     manager: row.managerUserId
@@ -172,6 +177,7 @@ export async function listBranches(tenantId, filters = {}) {
         b.status,
         to_char(b.opening_time, 'HH24:MI') AS "openingTime",
         to_char(b.closing_time, 'HH24:MI') AS "closingTime",
+        COALESCE(b.working_days, ARRAY[]::text[]) AS "workingDays",
         b.created_at AS "createdAt",
         u.id AS "managerUserId",
         u.full_name AS "managerName",
@@ -245,16 +251,25 @@ export async function getBranchById(tenantId, id) {
   return mapBranchRow(rows[0] || null)
 }
 
-//One transaction: branch + BM user. Caller supplies passwordHash + plaintext for email.
+// One transaction: branch + BM user. Caller supplies passwordHash + plaintext for email.
 export async function createBranchWithManager(tenantId, payload) {
   try {
     return await withTransaction(async (client) => {
+      // Omit workingDays → full week (matches migration default)
+      const workingDays =
+        Array.isArray(payload.workingDays) && payload.workingDays.length
+          ? payload.workingDays
+          : FULL_WEEK_DAYS
+
       const { rows: branchRows } = await tenantClientQuery(
         client,
         tenantId,
         `
-          INSERT INTO branches (tenant_id, name, location, image_url, status, opening_time, closing_time)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO branches (
+            tenant_id, name, location, image_url, status,
+            opening_time, closing_time, working_days
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING id
         `,
         [
@@ -264,6 +279,7 @@ export async function createBranchWithManager(tenantId, payload) {
           payload.status || BRANCH_STATUS.OPEN,
           payload.openingTime || null,
           payload.closingTime || null,
+          workingDays,
         ],
       )
 
@@ -312,7 +328,8 @@ export async function updateBranch(tenantId, id, payload) {
         payload.image !== undefined ||
         payload.imageUrl !== undefined ||
         payload.openingTime !== undefined ||
-        payload.closingTime !== undefined
+        payload.closingTime !== undefined ||
+        payload.workingDays !== undefined
       ) {
         await tenantClientQuery(
           client,
@@ -324,7 +341,8 @@ export async function updateBranch(tenantId, id, payload) {
               location = CASE WHEN $4::boolean THEN $5 ELSE location END,
               image_url = CASE WHEN $6::boolean THEN $7 ELSE image_url END,
               opening_time = CASE WHEN $8::boolean THEN $9::time ELSE opening_time END,
-              closing_time = CASE WHEN $10::boolean THEN $11::time ELSE closing_time END
+              closing_time = CASE WHEN $10::boolean THEN $11::time ELSE closing_time END,
+              working_days = CASE WHEN $12::boolean THEN $13::text[] ELSE working_days END
             WHERE tenant_id = $1 AND id = $2
           `,
           [
@@ -340,6 +358,8 @@ export async function updateBranch(tenantId, id, payload) {
             payload.openingTime !== undefined ? payload.openingTime || null : null,
             payload.closingTime !== undefined,
             payload.closingTime !== undefined ? payload.closingTime || null : null,
+            payload.workingDays !== undefined,
+            payload.workingDays !== undefined ? payload.workingDays : null,
           ],
         )
       }
@@ -607,15 +627,18 @@ export async function getTenantName(tenantId) {
   return rows[0]?.name || null
 }
 
-// Opening/closing window for staff shift bounds (nulls when unset).
+// Branch hours + calendar for staff shift / working-day bounds.
 export async function getBranchHours(tenantId, branchId) {
-  if (!branchId) return { openingTime: null, closingTime: null }
+  if (!branchId) {
+    return { openingTime: null, closingTime: null, workingDays: [] }
+  }
   const { rows } = await tenantQuery(
     tenantId,
     `
       SELECT
         to_char(opening_time, 'HH24:MI') AS "openingTime",
-        to_char(closing_time, 'HH24:MI') AS "closingTime"
+        to_char(closing_time, 'HH24:MI') AS "closingTime",
+        COALESCE(working_days, ARRAY[]::text[]) AS "workingDays"
       FROM branches
       WHERE tenant_id = $1 AND id = $2
       LIMIT 1
@@ -627,5 +650,6 @@ export async function getBranchHours(tenantId, branchId) {
   return {
     openingTime: formatTimeValue(row.openingTime),
     closingTime: formatTimeValue(row.closingTime),
+    workingDays: Array.isArray(row.workingDays) ? row.workingDays : [],
   }
 }

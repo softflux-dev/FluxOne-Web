@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { DEFAULT_CURRENCY, formatMoney, normalizeCurrency } from '@/lib/currency'
-import { formatDateTimeInline } from '@/lib/formatDateTime'
+import { formatClockTime, formatDateTimeInline } from '@/lib/formatDateTime'
 
 function safeFilename(value, fallback = 'download') {
   const base = String(value || fallback)
@@ -8,6 +8,16 @@ function safeFilename(value, fallback = 'download') {
     .replace(/\s+/g, '-')
     .slice(0, 80)
   return base || fallback
+}
+
+// Peak window API is 24h ("10:00–11:00") → PDF shows 12h AM/PM
+function formatPeakWindowPdf(peakHour) {
+  if (!peakHour || peakHour === '—') return '—'
+  const parts = String(peakHour).split(/[–-]/).map((p) => p.trim()).filter(Boolean)
+  if (parts.length < 2) return formatClockTime(peakHour) || peakHour
+  const start = formatClockTime(parts[0]) || parts[0]
+  const end = formatClockTime(parts[1]) || parts[1]
+  return `${start}–${end}`
 }
 
 async function blobUrlToDataUrl(url) {
@@ -305,9 +315,10 @@ export function downloadBranchDashboardPdf({
   y += 10
 
   y = drawBwSectionTitle(doc, 'Key performance', y, margin)
+  // Key KPIs — Profit only (no Average Ticket)
   y = drawBwRow(
     doc,
-    [`Total sales: ${money(kpis.totalSales)}`, `Gross profit: ${money(kpis.profit)}`],
+    [`Total sales: ${money(kpis.totalSales)}`, `Profit: ${money(kpis.profit)}`],
     y,
     margin,
   )
@@ -319,10 +330,7 @@ export function downloadBranchDashboardPdf({
   )
   y = drawBwRow(
     doc,
-    [
-      `Transactions: ${Number(kpis.saleCount || dailySummary.orders || 0).toLocaleString()}`,
-      `Average ticket: ${money(kpis.avgTicket)}`,
-    ],
+    [`Transactions: ${Number(kpis.saleCount || dailySummary.orders || 0).toLocaleString()}`],
     y,
     margin,
   )
@@ -341,7 +349,7 @@ export function downloadBranchDashboardPdf({
   y = drawBwRow(
     doc,
     [
-      `Peak window: ${dailySummary.peakHour || '—'}`,
+      `Peak window: ${formatPeakWindowPdf(dailySummary.peakHour)}`,
       `Peak revenue: ${dailySummary.peakHourSales ? money(dailySummary.peakHourSales) : '—'}`,
     ],
     y,

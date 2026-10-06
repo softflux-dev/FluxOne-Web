@@ -1,4 +1,7 @@
 import { formatClockTime } from '@/lib/formatDateTime'
+import {
+  normalizeWorkingDays,
+} from '@/lib/validation/branchForms'
 
 // Parse HH:MM or HH:MM:SS to minutes since midnight; returns null if empty/invalid.
 export function parseTimeToMinutes(value) {
@@ -22,11 +25,32 @@ function hasValue(value) {
   return value != null && String(value).trim() !== ''
 }
 
+function isSubsetOfDays(staffDays, branchDays) {
+  const branch = new Set(normalizeWorkingDays(branchDays))
+  if (!branch.size) return true
+  return normalizeWorkingDays(staffDays).every((d) => branch.has(d))
+}
+
 // Soft UI note when admin has not configured branch hours yet.
 export function getBranchHoursSoftWarning(branchHours) {
   if (!branchHours) return null
   if (hasValue(branchHours.openingTime) && hasValue(branchHours.closingTime)) return null
   return 'Branch opening hours are not set — shift is not limited to a branch window.'
+}
+
+// Validate staff working days ⊆ branch calendar
+export function validateStaffWorkingDaysFields(fields, branchHours = null) {
+  const errors = {}
+  const days = normalizeWorkingDays(fields.workingDays)
+  if (!days.length) {
+    errors.workingDays = 'Select at least one working day'
+    return errors
+  }
+  const branchDays = normalizeWorkingDays(branchHours?.workingDays)
+  if (branchDays.length && !isSubsetOfDays(days, branchDays)) {
+    errors.workingDays = `Working days must be within branch days (${branchDays.join(', ')})`
+  }
+  return errors
 }
 
 // Validate staff shift + break window → field map
@@ -82,7 +106,10 @@ export function validateStaffScheduleFields(fields, branchHours = null) {
 }
 
 export function validateStaffSchedule(fields, branchHours = null) {
-  const errors = validateStaffScheduleFields(fields, branchHours)
+  const errors = {
+    ...validateStaffWorkingDaysFields(fields, branchHours),
+    ...validateStaffScheduleFields(fields, branchHours),
+  }
   return Object.values(errors)[0] || null
 }
 
@@ -91,17 +118,33 @@ export const STAFF_FIELD_ORDER = [
   'email',
   'password',
   'role',
+  'workingDays',
   'scheduleStart',
   'scheduleEnd',
   'scheduleBreakStart',
   'scheduleBreakEnd',
+  'hardwareType',
+  'hardwareDeviceId',
+  'hardwareSlotKey',
 ]
+
+// True when working days + shift are complete enough to query hardware availability.
+export function isStaffScheduleReadyForHardware(fields) {
+  const days = normalizeWorkingDays(fields?.workingDays)
+  const hasStart = hasValue(fields?.scheduleStart)
+  const hasEnd = hasValue(fields?.scheduleEnd)
+  if (!days.length || !hasStart || !hasEnd) return false
+  const start = parseTimeToMinutes(fields.scheduleStart)
+  const end = parseTimeToMinutes(fields.scheduleEnd)
+  return start != null && end != null && start < end
+}
 
 // Staff create/edit → field map
 export function validateStaffFormFields(fields, { isEdit = false, branchHours = null } = {}) {
   const errors = {}
   const fullName = String(fields.fullName || '').trim()
   const loginId = String(fields.email || '').trim()
+  const hasHardware = Boolean(String(fields.hardwareDeviceId || '').trim())
 
   if (!fullName) errors.fullName = 'Name is required'
   else if (fullName.length < 2) errors.fullName = 'Name must be at least 2 characters'
@@ -119,7 +162,27 @@ export function validateStaffFormFields(fields, { isEdit = false, branchHours = 
     errors.password = 'Password must be at least 8 characters'
   }
 
-  return { ...errors, ...validateStaffScheduleFields(fields, branchHours) }
+  const scheduleErrors = {
+    ...validateStaffWorkingDaysFields(fields, branchHours),
+    ...validateStaffScheduleFields(fields, branchHours),
+  }
+
+  // Hardware assignment requires a valid schedule first (all roles)
+  if (hasHardware && !isStaffScheduleReadyForHardware(fields)) {
+    if (!normalizeWorkingDays(fields.workingDays).length) {
+      scheduleErrors.workingDays =
+        scheduleErrors.workingDays || 'Select working days before assigning hardware'
+    }
+    if (!hasValue(fields.scheduleStart) || !hasValue(fields.scheduleEnd)) {
+      scheduleErrors.scheduleEnd =
+        scheduleErrors.scheduleEnd || 'Set shift start and end before assigning hardware'
+    }
+  }
+
+  return {
+    ...errors,
+    ...scheduleErrors,
+  }
 }
 
 export function validateStaffForm(fields, opts = {}) {
@@ -128,4 +191,9 @@ export function validateStaffForm(fields, opts = {}) {
     if (errors[key]) return errors[key]
   }
   return Object.values(errors)[0] || null
+}
+
+// Default staff days: empty — user picks from branch calendar
+export function defaultStaffWorkingDays(_branchWorkingDays) {
+  return []
 }

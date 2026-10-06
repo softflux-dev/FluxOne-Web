@@ -1,29 +1,43 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Layers, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Layers } from 'lucide-react'
 import { VariantTypeDialog } from '@/components/feature/branch/resources/VariantTypeDialog'
 import { VariantValueDialog } from '@/components/feature/branch/resources/VariantValueDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DeleteEntityDialog } from '@/components/shared/DeleteEntityDialog'
-import { EntityStatusToggle } from '@/components/shared/EntityStatusToggle'
-import { ParentChildTreePanel } from '@/components/shared/ParentChildTreePanel'
-import { Button } from '@/components/ui/button'
+import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { ParentChildManagementLayout } from '@/components/shared/parent-child/ParentChildManagementLayout'
+import {
+  ChildEntityTable,
+  ParentEntityTable,
+} from '@/components/shared/parent-child/ParentChildEntityTables'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { useClientPagination } from '@/hooks/useClientPagination'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import { filterParentChildRows } from '@/lib/filterParentChildRows'
+import {
+  filterFlatChildRows,
+  filterParentChildRows,
+  flattenParentChildRows,
+} from '@/lib/filterParentChildRows'
 import { TABLE_PAGE_SIZE } from '@/lib/tablePagination'
 import { toastError, toastSuccess } from '@/lib/toast'
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+]
 
 export function VariantManagementPanel() {
   const [saving, setSaving] = useState(false)
   const [types, setTypes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('parents')
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [parentFilterId, setParentFilterId] = useState('all')
   const debouncedSearch = useDebouncedValue(search, 300)
-  // Multi-open — same expand model as Categories
-  const [openIds, setOpenIds] = useState(() => new Set())
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
 
   const [typeDialogOpen, setTypeDialogOpen] = useState(false)
@@ -52,7 +66,6 @@ export function VariantManagementPanel() {
     return false
   }, [])
 
-  // Mount fetch — setState only runs after the network response
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -70,7 +83,9 @@ export function VariantManagementPanel() {
     }
   }, [])
 
-  // Normalize types → shared tree row shape
+  //
+  // Normalize API → shared parent/child row shape.
+  //
   const treeRows = useMemo(() => {
     return types.map((type) => {
       const values = type.values || []
@@ -83,6 +98,7 @@ export function VariantManagementPanel() {
           id: value.id,
           name: value.name,
           isActive: value.isActive,
+          parentId: value.variantTypeId || type.id,
           variantTypeId: value.variantTypeId || type.id,
         })),
         _raw: type,
@@ -90,28 +106,38 @@ export function VariantManagementPanel() {
     })
   }, [types])
 
-  const rows = useMemo(
+  const parentRows = useMemo(
     () => filterParentChildRows(treeRows, statusFilter, debouncedSearch),
     [treeRows, statusFilter, debouncedSearch],
   )
 
-  const {
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-    pageCount,
-    total,
-    slice: pageRows,
-  } = useClientPagination(rows, TABLE_PAGE_SIZE)
+  const flatChildren = useMemo(() => flattenParentChildRows(treeRows), [treeRows])
 
-  function toggleParent(parentId) {
-    setOpenIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(parentId)) next.delete(parentId)
-      else next.add(parentId)
-      return next
-    })
+  const childRows = useMemo(
+    () =>
+      filterFlatChildRows(flatChildren, statusFilter, debouncedSearch, parentFilterId),
+    [flatChildren, statusFilter, debouncedSearch, parentFilterId],
+  )
+
+  const parentCount = treeRows.length
+  const childCount = flatChildren.length
+
+  const parentPaging = useClientPagination(parentRows, TABLE_PAGE_SIZE)
+  const childPaging = useClientPagination(childRows, TABLE_PAGE_SIZE)
+
+  const parentFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All Variant Types' },
+      ...treeRows.map((row) => ({ value: String(row.id), label: row.name })),
+    ],
+    [treeRows],
+  )
+
+  const hasActiveType = types.some((t) => t.isActive !== false)
+
+  function resetPageOnFilter() {
+    parentPaging.setPage(1)
+    childPaging.setPage(1)
   }
 
   function openCreateType() {
@@ -120,9 +146,9 @@ export function VariantManagementPanel() {
     setTypeDialogOpen(true)
   }
 
-  function openEditType(type) {
+  function openEditType(row) {
     setTypeDialogMode('edit')
-    setEditingType(type._raw || type)
+    setEditingType(row._raw || row)
     setTypeDialogOpen(true)
   }
 
@@ -133,9 +159,9 @@ export function VariantManagementPanel() {
     setValueDialogOpen(true)
   }
 
-  function openEditValue(value) {
+  function openEditValue(row) {
     setValueDialogMode('edit')
-    setEditingValue(value)
+    setEditingValue(row)
     setLockedTypeId(null)
     setValueDialogOpen(true)
   }
@@ -180,10 +206,6 @@ export function VariantManagementPanel() {
 
       if (!res.success) return res
       toastSuccess(valueDialogMode === 'edit' ? 'Variant value updated' : 'Variant value created')
-      // Open the parent so the new value is visible
-      if (variantTypeId) {
-        setOpenIds((prev) => new Set(prev).add(variantTypeId))
-      }
       await loadTypes()
       return res
     } finally {
@@ -264,12 +286,6 @@ export function VariantManagementPanel() {
             ? `Variant type deleted (${count} value${count === 1 ? '' : 's'} removed)`
             : 'Variant type deleted',
         )
-        setOpenIds((prev) => {
-          if (!prev.has(deleteTarget.id)) return prev
-          const next = new Set(prev)
-          next.delete(deleteTarget.id)
-          return next
-        })
       } else {
         toastSuccess('Variant value deleted')
       }
@@ -288,161 +304,124 @@ export function VariantManagementPanel() {
         : `Permanently remove variant type “${deleteTarget?.name}”? This cannot be undone.`
       : `Permanently remove variant value “${deleteTarget?.name}”? This cannot be undone.`
 
-  const hasActiveType = types.some((t) => t.isActive !== false)
+  const emptyParentTitle =
+    debouncedSearch || statusFilter !== 'all'
+      ? 'No variant types match your filters.'
+      : 'No variant types yet. Create a type first, then add values.'
+
+  const emptyChildTitle =
+    debouncedSearch || statusFilter !== 'all' || parentFilterId !== 'all'
+      ? 'No variant values match your filters.'
+      : 'No variant values yet. Add values from a type or use Add Variant Value.'
 
   return (
     <>
-      <ParentChildTreePanel
-        search={search}
-        onSearchChange={(value) => {
-          setSearch(value)
-          setPage(1)
-        }}
-        searchId="variant-search"
-        searchPlaceholder="Search type or value…"
-        status={statusFilter}
-        onStatusChange={(value) => {
-          setStatusFilter(value)
-          setPage(1)
-        }}
-        statusId="variant-status-filter"
-        toolbarActions={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => openCreateValue()}
-              disabled={!hasActiveType}
-            >
-              <Plus className="size-4" />
-              Add Value
-            </Button>
-            <Button
-              type="button"
-              variant="brand"
-              className="cursor-pointer"
-              onClick={openCreateType}
-            >
-              <Plus className="size-4" />
-              Add Variant Type
-            </Button>
-          </>
-        }
-        title="Variant Types"
-        description="Click the chevron to expand or collapse values"
-        countLabel={`${rows.length} type${rows.length === 1 ? '' : 's'}${
-          statusFilter !== 'all' ? ` · ${statusFilter}` : ''
-        }`}
-        emptyIcon={Layers}
-        emptyTitle={
-          debouncedSearch || statusFilter !== 'all'
-            ? 'No variant types match your filters.'
-            : 'No variant types yet. Create a type first, then add values.'
-        }
-        loading={loading}
-        rows={pageRows}
-        openIds={openIds}
-        onToggleParent={toggleParent}
-        renderParentMeta={(parent, children) => (
-          <p className="text-xs text-slate-400">
-            {parent.valuesCount ?? children.length} value
-            {(parent.valuesCount ?? children.length) === 1 ? '' : 's'}
-          </p>
-        )}
-        renderParentActions={(parent) => {
-          const inactive = parent.isActive === false
-          return (
-            <>
-              <EntityStatusToggle
-                status={inactive ? 'inactive' : 'active'}
-                loading={statusUpdatingId === parent.id}
-                onChange={(nextActive) => patchStatus('type', parent, nextActive)}
-              />
-              {!inactive ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer"
-                  onClick={() => openCreateValue(parent)}
-                >
-                  <Plus className="size-3.5" />
-                  Add Values
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110"
-                title="Edit"
-                onClick={() => openEditType(parent)}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer text-slate-500 hover:bg-rose-50 hover:text-rose-700 hover:scale-110"
-                title="Delete"
-                aria-label={`Delete ${parent.name || 'variant type'}`}
-                onClick={() => requestDelete('type', parent)}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </>
-          )
-        }}
-        // Always allow expand so empty types can show the empty hint
-        renderChildEmpty={() => (
-          <div className="rounded-lg bg-white px-2.5 py-3 text-sm text-slate-400 ring-1 ring-border">
-            No values yet. Use Add Values to create one.
-          </div>
-        )}
-        renderChild={(child) => (
-          <>
-            <span className="truncate text-sm font-medium text-slate-800">{child.name}</span>
-            <div className="flex items-center gap-1">
-              <EntityStatusToggle
-                status={child.isActive === false ? 'inactive' : 'active'}
-                loading={statusUpdatingId === child.id}
-                onChange={(nextActive) => patchStatus('value', child, nextActive)}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110"
-                title="Edit"
-                onClick={() => openEditValue(child)}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer text-slate-500 hover:bg-rose-50 hover:text-rose-700 hover:scale-110"
-                title="Delete"
-                aria-label={`Delete ${child.name || 'variant value'}`}
-                onClick={() => requestDelete('value', child)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          </>
-        )}
-        pagination={{
-          page,
-          pageCount,
-          total,
-          pageSize,
-          onPageChange: setPage,
-          onPageSizeChange: setPageSize,
-        }}
-      />
+      <MotionHeader>
+        <PageHeader
+          title="Variant Management"
+          description="Variant Types and Values configured here become available to the Inventory Manager in Add Item."
+        />
+      </MotionHeader>
+
+      <MotionReveal delay={0.02}>
+        <ParentChildManagementLayout
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setActiveTab(tab)
+            resetPageOnFilter()
+          }}
+          parentTabLabel="Variant Types"
+          childTabLabel="Variant Values"
+          parentCount={parentCount}
+          childCount={childCount}
+          primaryActionLabel={
+            activeTab === 'parents' ? 'Add Variant Type' : 'Add Variant Value'
+          }
+          primaryActionDisabled={activeTab === 'children' && !hasActiveType}
+          onPrimaryAction={() =>
+            activeTab === 'parents' ? openCreateType() : openCreateValue()
+          }
+          search={search}
+          onSearchChange={(value) => {
+            setSearch(value)
+            resetPageOnFilter()
+          }}
+          searchPlaceholder={
+            activeTab === 'parents'
+              ? 'Search variant type or value…'
+              : 'Search value or type…'
+          }
+          status={statusFilter}
+          onStatusChange={(value) => {
+            setStatusFilter(value)
+            resetPageOnFilter()
+          }}
+          statusOptions={STATUS_OPTIONS}
+          showParentFilter={activeTab === 'children'}
+          parentFilterId={parentFilterId}
+          onParentFilterChange={(value) => {
+            setParentFilterId(value)
+            childPaging.setPage(1)
+          }}
+          parentFilterOptions={parentFilterOptions}
+          parentFilterLabel="Variant type"
+        >
+          {activeTab === 'parents' ? (
+            <ParentEntityTable
+              rows={parentPaging.slice}
+              loading={loading}
+              emptyIcon={Layers}
+              emptyTitle={emptyParentTitle}
+              showConfiguredColumn
+              countSuffix=""
+              labels={{
+                name: 'Variant Type Name',
+                count: 'Number of Values',
+                parentSummaryEmpty: 'No values yet',
+              }}
+              statusUpdatingId={statusUpdatingId}
+              onEdit={openEditType}
+              onToggleActive={(row, next) => patchStatus('type', row, next)}
+              onDelete={(row) => requestDelete('type', row)}
+              onAddChild={openCreateValue}
+              addChildLabel="Add Values"
+              pagination={{
+                page: parentPaging.page,
+                pageCount: parentPaging.pageCount,
+                total: parentPaging.total,
+                pageSize: parentPaging.pageSize,
+                loading,
+                onPageChange: parentPaging.setPage,
+                onPageSizeChange: parentPaging.setPageSize,
+              }}
+            />
+          ) : (
+            <ChildEntityTable
+              rows={childPaging.slice}
+              loading={loading}
+              emptyIcon={Layers}
+              emptyTitle={emptyChildTitle}
+              labels={{
+                name: 'Value Name',
+                parent: 'Variant Type',
+              }}
+              statusUpdatingId={statusUpdatingId}
+              onEdit={openEditValue}
+              onToggleActive={(row, next) => patchStatus('value', row, next)}
+              onDelete={(row) => requestDelete('value', row)}
+              pagination={{
+                page: childPaging.page,
+                pageCount: childPaging.pageCount,
+                total: childPaging.total,
+                pageSize: childPaging.pageSize,
+                loading,
+                onPageChange: childPaging.setPage,
+                onPageSizeChange: childPaging.setPageSize,
+              }}
+            />
+          )}
+        </ParentChildManagementLayout>
+      </MotionReveal>
 
       <VariantTypeDialog
         open={typeDialogOpen}

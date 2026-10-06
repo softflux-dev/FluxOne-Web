@@ -1,4 +1,13 @@
 import { tenantQuery } from '../../../config/db.js'
+import { normalizeSearchQuery } from '../../../utils/displayRef.util.js'
+
+// UI shows SAL-{saleNumber} / TRK-{saleNumber}; DB stores raw sale_number (e.g. INV-1020)
+function normalizeSaleSearchQuery(value) {
+  const q = normalizeSearchQuery(value)
+  if (!q) return null
+  const stripped = q.replace(/^(sal|trk)[-_\s]*/i, '').trim()
+  return stripped || q
+}
 
 export async function listSales(tenantId, filters = {}) {
   let query = `
@@ -37,23 +46,68 @@ export async function listSales(tenantId, filters = {}) {
     params.push(filters.branchId)
     query += ` AND s.branch_id = $${params.length + 1}`
   }
-  if (filters.q) {
-    params.push(`%${filters.q.trim()}%`)
-    const idx = params.length + 1  // +1 kyunki $1 hamesha tenant_id hai
-    query += ` AND (s.sale_number ILIKE $${idx} OR s.id::text ILIKE $${idx})`
+
+  // Match raw sale_number, UUID, or UI-prefixed SAL-/TRK- queries
+  const saleQ = normalizeSaleSearchQuery(filters.q)
+  if (saleQ) {
+    params.push(`%${saleQ}%`)
+    const idx = params.length + 1
+    query += ` AND (
+      s.sale_number ILIKE $${idx}
+      OR s.id::text ILIKE $${idx}
+      OR ('SAL-' || COALESCE(s.sale_number, '')) ILIKE $${idx}
+      OR ('TRK-' || COALESCE(s.sale_number, '')) ILIKE $${idx}
+    )`
   }
+
   if (filters.date) {
     params.push(filters.date)
     query += ` AND s.sold_at::date = $${params.length + 1}::date`
   }
-  if (filters.category_id) {
-    params.push(filters.category_id)
-    query += ` AND s.id IN (
-  SELECT DISTINCT sale_id
-  FROM sale_items si2
-  JOIN products p2 ON p2.id = si2.product_id
-  WHERE p2.category_id = $${params.length + 1}
-)`
+
+  // Catalog cascade: category → subcategory → product → variant (variant wins if set)
+  if (filters.variantId) {
+    params.push(filters.variantId)
+    query += ` AND EXISTS (
+      SELECT 1 FROM sale_items si_v
+      WHERE si_v.sale_id = s.id
+        AND si_v.tenant_id = s.tenant_id
+        AND si_v.product_id = $${params.length + 1}
+    )`
+  } else if (filters.productId) {
+    params.push(filters.productId)
+    query += ` AND EXISTS (
+      SELECT 1 FROM sale_items si_p
+      JOIN products p_p ON p_p.id = si_p.product_id AND p_p.tenant_id = si_p.tenant_id
+      WHERE si_p.sale_id = s.id
+        AND si_p.tenant_id = s.tenant_id
+        AND (
+          si_p.product_id = $${params.length + 1}
+          OR p_p.parent_id = $${params.length + 1}
+        )
+    )`
+  } else if (filters.subcategoryId) {
+    params.push(filters.subcategoryId)
+    query += ` AND EXISTS (
+      SELECT 1 FROM sale_items si_s
+      JOIN products p_s ON p_s.id = si_s.product_id AND p_s.tenant_id = si_s.tenant_id
+      WHERE si_s.sale_id = s.id
+        AND si_s.tenant_id = s.tenant_id
+        AND p_s.subcategory_id = $${params.length + 1}
+    )`
+  } else if (filters.categoryId || filters.category_id) {
+    const catId = filters.categoryId || filters.category_id
+    params.push(catId)
+    query += ` AND EXISTS (
+      SELECT 1 FROM sale_items si2
+      JOIN products p2 ON p2.id = si2.product_id AND p2.tenant_id = si2.tenant_id
+      WHERE si2.sale_id = s.id
+        AND si2.tenant_id = s.tenant_id
+        AND (
+          p2.category_id = $${params.length + 1}
+          OR p2.subcategory_id = $${params.length + 1}
+        )
+    )`
   }
 
   query += ` GROUP BY s.id ORDER BY s.sold_at DESC`

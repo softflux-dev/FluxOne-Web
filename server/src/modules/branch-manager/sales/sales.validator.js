@@ -12,6 +12,9 @@ export const listSalesSchema = z.object({
     q: optionalString,
     date: isoDate.optional(),
     categoryId: optionalUuid,
+    subcategoryId: optionalUuid,
+    productId: optionalUuid,
+    variantId: optionalUuid,
   }),
 })
 

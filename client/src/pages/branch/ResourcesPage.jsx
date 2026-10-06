@@ -194,7 +194,9 @@ export function ResourcesPage() {
 
   function handleDeleteHardware(hw) {
     if (hw.assignedToStaffId || hw.assignedToName) {
-      return toastError('Cannot delete hardware. It is currently assigned to a staff member.')
+      return toastError(
+        'Cannot deactivate hardware. It is currently assigned to a staff member. Unassign it first.',
+      )
     }
     setDeleteTargetHardware(hw)
   }
@@ -207,9 +209,9 @@ export function ResourcesPage() {
     )
     setSaving(false)
     if (!res.success) {
-      return toastError(res.error || 'Failed to delete hardware')
+      return toastError(res.error || 'Failed to deactivate hardware')
     }
-    toastSuccess('Hardware deleted successfully')
+    toastSuccess('Hardware deactivated')
     setDeleteTargetHardware(null)
     void loadHardware(filterHardware, debouncedHwSearch)
   }
@@ -672,15 +674,20 @@ export function ResourcesPage() {
         }}
         entityName={deleteTargetHardware?.name}
         description={
-          deleteTargetHardware
-            ? `Permanently remove hardware “${deleteTargetHardware.name}”? Device records have no Inactive soft-delete — this cannot be undone.`
-            : null
+          deleteTargetHardware ? (
+            <>
+              Prefer <strong>Deactivate</strong> for “{deleteTargetHardware.name}” so device history
+              stays intact. Unassign from staff before removing.
+            </>
+          ) : null
         }
-        showSoftAction={false}
-        canHardDelete
-        hardLabel="Permanently delete"
+        softLabel="Deactivate"
+        softHint="Hides from active lists and System Access. You can restore via database if needed."
+        showSoftAction
+        canHardDelete={false}
+        hardDisabledReason="Permanent wipe is not available for hardware — use Deactivate."
         loading={saving}
-        onHardDelete={confirmDeleteHardware}
+        onSoftDelete={confirmDeleteHardware}
       />
     </div>
   )

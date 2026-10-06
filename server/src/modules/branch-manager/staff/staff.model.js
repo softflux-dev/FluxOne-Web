@@ -1,16 +1,62 @@
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
-import { ROLE_IDS } from '../../../config/constants.js'
+import { ROLE_IDS, ROLES, STAFF_STATUS } from '../../../config/constants.js'
 import {
   CREATABLE_STAFF_ROLES,
   CREATABLE_STAFF_ROLE_SQL,
   STAFF_ROLE_TO_DESIGNATION,
 } from './staff.access.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
+import { displayRefSearchHex, normalizeSearchQuery } from '../../../utils/displayRef.util.js'
+import { getBranchHours } from '../../b2b-admin/branches/branches.model.js'
+import {
+  formatAllocatedSlot,
+  normalizeWorkingDays,
+  validateWorkingDaysAgainstBranch,
+} from './schedule.validation.js'
+import {
+  assertHardwareAllocationAvailable,
+  releaseActiveAllocationsForStaff,
+  upsertStaffHardwareAllocation,
+} from './hardwareAllocation.model.js'
 
 function httpError(status, message) {
   const error = new Error(message)
   error.status = status
   return error
+}
+
+// One active Inventory Manager per branch (Wah ≠ Taxilla; each may have its own IM)
+async function assertSingleInventoryManager(
+  client,
+  tenantId,
+  { branchId, excludeStaffId = null },
+) {
+  if (!branchId) return
+  const { rows } = await tenantClientQuery(
+    client,
+    tenantId,
+    `
+      SELECT s.id
+      FROM staff s
+      JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+      JOIN roles r ON r.id = u.role_id
+      WHERE s.tenant_id = $1
+        AND s.branch_id = $2
+        AND r.slug = $3
+        AND s.status NOT IN ('inactive', 'blocked')
+        AND u.is_active = true
+        AND ($4::uuid IS NULL OR s.id <> $4)
+      LIMIT 1
+    `,
+    [branchId, ROLES.INVENTORY_MANAGER, excludeStaffId],
+  )
+
+  if (rows[0]) {
+    throw httpError(
+      409,
+      'This branch already has an Inventory Manager. Only one Inventory Manager is allowed per branch.',
+    )
+  }
 }
 
 const staffSelect = `
@@ -23,11 +69,16 @@ const staffSelect = `
   s.hardware_device_id AS "hardwareDeviceId",
   hw.code AS "hardwareCode",
   hw.name AS "hardwareName",
+  hw.type AS "hardwareType",
+  hw.image_url AS "hardwareImageUrl",
   s.status,
   s.schedule_start AS "scheduleStart",
   s.schedule_break_start AS "scheduleBreakStart",
   s.schedule_break_end AS "scheduleBreakEnd",
   s.schedule_end AS "scheduleEnd",
+  COALESCE(s.working_days, ARRAY[]::text[]) AS "workingDays",
+  ha.start_time AS "hardwareAllocationStart",
+  ha.end_time AS "hardwareAllocationEnd",
   s.branch_id AS "branchId",
   s.user_id AS "userId",
   u.full_name AS "fullName",
@@ -37,16 +88,71 @@ const staffSelect = `
   r.slug AS role
 `
 
+// Active hardware allocation window (may be a cashier sub-slot).
+const staffAllocationJoin = `
+  LEFT JOIN LATERAL (
+    SELECT start_time, end_time
+    FROM hardware_allocations ha0
+    WHERE ha0.tenant_id = s.tenant_id
+      AND ha0.staff_id = s.id
+      AND ha0.status = 'active'
+    ORDER BY ha0.created_at DESC
+    LIMIT 1
+  ) ha ON true
+`
+
 function mapStaffRow(row) {
   if (!row) return null
+  const workingDays = Array.isArray(row.workingDays) ? row.workingDays : []
   return {
     ...row,
+    workingDays,
     imageUrl: normalizeImageUrl(row.imageUrl),
+    hardwareImageUrl: normalizeImageUrl(row.hardwareImageUrl) || null,
+    // Display slot from shift + working days (null when unassigned / no schedule)
+    hardwareAllocatedSlot: row.hardwareDeviceId
+      ? formatAllocatedSlot({
+          workingDays,
+          scheduleStart: row.hardwareAllocationStart || row.scheduleStart,
+          scheduleEnd: row.hardwareAllocationEnd || row.scheduleEnd,
+        })
+      : null,
   }
+}
+
+async function assertStaffDaysWithinBranch(
+  tenantId,
+  branchId,
+  workingDays,
+  { requireDays = true } = {},
+) {
+  const hours = await getBranchHours(tenantId, branchId)
+  if (hours === null) throw httpError(404, 'Branch not found')
+  const days = normalizeWorkingDays(workingDays)
+  if (!days.length) {
+    if (!requireDays) return hours
+    throw httpError(400, 'Select at least one working day')
+  }
+  const message = validateWorkingDaysAgainstBranch(days, hours)
+  if (message) throw httpError(400, message)
+  return hours
 }
 
 function mapPgUniqueViolation(err, message) {
   if (err?.code === '23505') {
+    const constraint = String(err.constraint || '')
+    if (constraint.includes('uq_one_active_im_per_branch')) {
+      throw httpError(
+        409,
+        'This branch already has an Inventory Manager. Only one Inventory Manager is allowed per branch.',
+      )
+    }
+    if (constraint.includes('uq_hw_alloc_exclusive_device')) {
+      throw httpError(
+        409,
+        'This hardware slot is no longer available. Please select another available slot.',
+      )
+    }
     throw httpError(409, message)
   }
   throw err
@@ -57,12 +163,19 @@ export async function listStaff(tenantId, filters = {}) {
   const limit = Math.min(50, Math.max(1, Number(filters.limit) || 8))
   const offset = (page - 1) * limit
 
+  // STF-XXXXXXXX display refs are UI-only — match via compact UUID hex
+  const q = normalizeSearchQuery(filters.q) || null
+  const qHex = q ? displayRefSearchHex(q, 'STF') : null
+  const hardwareType = filters.hardwareType || filters.type || null
+
   const params = [
-    filters.q || null,
+    q,
+    qHex,
     filters.designationId || null,
     filters.status || null,
     filters.branchId || null,
     filters.role || null,
+    hardwareType,
   ]
 
   const { rows: countRows } = await tenantQuery(
@@ -72,6 +185,9 @@ export async function listStaff(tenantId, filters = {}) {
       FROM staff s
       JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
       JOIN roles r ON r.id = u.role_id
+      LEFT JOIN branch_hardware hw
+        ON hw.tenant_id = s.tenant_id
+       AND hw.id::text = s.hardware_device_id
       WHERE s.tenant_id = $1
         AND r.slug IN (${CREATABLE_STAFF_ROLE_SQL})
         AND (
@@ -79,11 +195,16 @@ export async function listStaff(tenantId, filters = {}) {
           OR u.full_name ILIKE '%' || $2 || '%'
           OR u.email ILIKE '%' || $2 || '%'
           OR s.id::text ILIKE '%' || $2 || '%'
+          OR (
+            $3::text IS NOT NULL
+            AND REPLACE(LOWER(s.id::text), '-', '') ILIKE '%' || $3 || '%'
+          )
         )
-        AND ($3::uuid IS NULL OR s.designation_id = $3)
-        AND ($4::text IS NULL OR s.status = $4)
-        AND ($5::uuid IS NULL OR s.branch_id = $5)
-        AND ($6::text IS NULL OR r.slug = $6)
+        AND ($4::uuid IS NULL OR s.designation_id = $4)
+        AND ($5::text IS NULL OR s.status = $5)
+        AND ($6::uuid IS NULL OR s.branch_id = $6)
+        AND ($7::text IS NULL OR r.slug = $7)
+        AND ($8::text IS NULL OR hw.type = $8)
     `,
     params,
   )
@@ -99,6 +220,7 @@ export async function listStaff(tenantId, filters = {}) {
       LEFT JOIN branch_hardware hw
         ON hw.tenant_id = s.tenant_id
        AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
       WHERE s.tenant_id = $1
         AND r.slug IN (${CREATABLE_STAFF_ROLE_SQL})
         AND (
@@ -106,13 +228,18 @@ export async function listStaff(tenantId, filters = {}) {
           OR u.full_name ILIKE '%' || $2 || '%'
           OR u.email ILIKE '%' || $2 || '%'
           OR s.id::text ILIKE '%' || $2 || '%'
+          OR (
+            $3::text IS NOT NULL
+            AND REPLACE(LOWER(s.id::text), '-', '') ILIKE '%' || $3 || '%'
+          )
         )
-        AND ($3::uuid IS NULL OR s.designation_id = $3)
-        AND ($4::text IS NULL OR s.status = $4)
-        AND ($5::uuid IS NULL OR s.branch_id = $5)
-        AND ($6::text IS NULL OR r.slug = $6)
+        AND ($4::uuid IS NULL OR s.designation_id = $4)
+        AND ($5::text IS NULL OR s.status = $5)
+        AND ($6::uuid IS NULL OR s.branch_id = $6)
+        AND ($7::text IS NULL OR r.slug = $7)
+        AND ($8::text IS NULL OR hw.type = $8)
       ORDER BY COALESCE(s.joined_at, s.created_at) DESC, u.full_name
-      LIMIT $7 OFFSET $8
+      LIMIT $9 OFFSET $10
     `,
     [...params, limit, offset],
   )
@@ -132,6 +259,7 @@ export async function getStaffById(tenantId, id, { branchId } = {}) {
       LEFT JOIN branch_hardware hw
         ON hw.tenant_id = s.tenant_id
        AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
       WHERE s.tenant_id = $1
         AND s.id = $2
         AND ($3::uuid IS NULL OR s.branch_id = $3)
@@ -245,6 +373,27 @@ export async function createStaffUser(tenantId, payload) {
 
   try {
     return await withTransaction(async (client) => {
+      if (roleSlug === ROLES.INVENTORY_MANAGER) {
+        await assertSingleInventoryManager(client, tenantId, {
+          branchId: payload.branchId,
+        })
+      }
+
+      const workingDays = normalizeWorkingDays(payload.workingDays)
+      await assertStaffDaysWithinBranch(tenantId, payload.branchId, workingDays)
+
+      // Schedule + role policy before insert (IM exclusive / Cashier shared)
+      await assertHardwareAllocationAvailable(client, tenantId, {
+        branchId: payload.branchId,
+        hardwareDeviceId: payload.hardwareDeviceId || null,
+        role: roleSlug,
+        workingDays,
+        scheduleStart: payload.scheduleStart || null,
+        scheduleEnd: payload.scheduleEnd || null,
+        allocationStart: payload.hardwareAllocationStart || null,
+        allocationEnd: payload.hardwareAllocationEnd || null,
+      })
+
       const resolved = await resolveStaffDesignation(client, tenantId, {
         ...payload,
         role: roleSlug,
@@ -281,9 +430,12 @@ export async function createStaffUser(tenantId, payload) {
             tenant_id, user_id, branch_id, designation, designation_id,
             hardware_device_id, image_url, status,
             schedule_start, schedule_break_start, schedule_break_end, schedule_end,
-            joined_at, created_by
+            working_days, joined_at, created_by
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13::timestamptz, now()), $14)
+          VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+            COALESCE($14::timestamptz, now()), $15
+          )
           RETURNING id
         `,
         [
@@ -298,12 +450,28 @@ export async function createStaffUser(tenantId, payload) {
           payload.scheduleBreakStart || null,
           payload.scheduleBreakEnd || null,
           payload.scheduleEnd || null,
+          workingDays,
           payload.joinedAt || null,
           payload.createdBy || null,
         ],
       )
 
-      return getStaffByIdInTx(client, tenantId, staffRows[0].id)
+      const staffId = staffRows[0].id
+
+      // Persist allocation row (source of truth for conflicts / IM lock)
+      await upsertStaffHardwareAllocation(client, tenantId, {
+        branchId: payload.branchId,
+        staffId,
+        role: roleSlug,
+        hardwareDeviceId: payload.hardwareDeviceId || null,
+        workingDays,
+        scheduleStart: payload.scheduleStart || null,
+        scheduleEnd: payload.scheduleEnd || null,
+        allocationStart: payload.hardwareAllocationStart || null,
+        allocationEnd: payload.hardwareAllocationEnd || null,
+      })
+
+      return getStaffByIdInTx(client, tenantId, staffId)
     })
   } catch (err) {
     mapPgUniqueViolation(err, 'A user with this email already exists')
@@ -323,6 +491,7 @@ async function getStaffByIdInTx(client, tenantId, id, { branchId } = {}) {
       LEFT JOIN branch_hardware hw
         ON hw.tenant_id = s.tenant_id
        AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
       WHERE s.tenant_id = $1
         AND s.id = $2
         AND ($3::uuid IS NULL OR s.branch_id = $3)
@@ -340,6 +509,111 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
       const existing = await getStaffByIdInTx(client, tenantId, id, { branchId })
       if (!existing) throw httpError(404, 'Staff not found')
 
+      const nextRole = payload.role || existing.role
+      const nextBranchId =
+        payload.branchId !== undefined ? payload.branchId : existing.branchId
+
+      if (nextRole === ROLES.INVENTORY_MANAGER) {
+        await assertSingleInventoryManager(client, tenantId, {
+          branchId: nextBranchId,
+          excludeStaffId: existing.id,
+        })
+      }
+
+      const nextWorkingDays =
+        payload.workingDays !== undefined
+          ? normalizeWorkingDays(payload.workingDays)
+          : normalizeWorkingDays(existing.workingDays)
+      const nextScheduleStart =
+        payload.scheduleStart !== undefined
+          ? payload.scheduleStart
+          : existing.scheduleStart
+      const nextScheduleEnd =
+        payload.scheduleEnd !== undefined ? payload.scheduleEnd : existing.scheduleEnd
+      const nextHardwareId =
+        payload.hardwareDeviceId !== undefined
+          ? payload.hardwareDeviceId || null
+          : existing.hardwareDeviceId || null
+
+      // Status → inactive/blocked: release hardware claim (history kept as released)
+      const nextStatus = payload.status !== undefined ? payload.status : existing.status
+      const becomingInactive =
+        payload.status !== undefined &&
+        (payload.status === STAFF_STATUS.INACTIVE || payload.status === 'blocked') &&
+        existing.status !== STAFF_STATUS.INACTIVE &&
+        existing.status !== 'blocked'
+
+      if (becomingInactive) {
+        await releaseActiveAllocationsForStaff(client, tenantId, existing.id)
+        await tenantClientQuery(
+          client,
+          tenantId,
+          `
+            UPDATE users
+            SET
+              full_name = COALESCE($2, full_name),
+              email = COALESCE($3, email),
+              phone = COALESCE($4, phone),
+              branch_id = COALESCE($5, branch_id),
+              role_id = COALESCE($6, role_id),
+              password_hash = COALESCE($7, password_hash),
+              is_active = false
+            WHERE tenant_id = $1 AND id = $8
+          `,
+          [
+            payload.fullName || null,
+            payload.email || null,
+            payload.phone !== undefined ? payload.phone : null,
+            nextBranchId,
+            payload.role ? ROLE_IDS[payload.role] : null,
+            payload.passwordHash || null,
+            existing.userId,
+          ],
+        )
+        await tenantClientQuery(
+          client,
+          tenantId,
+          `
+            UPDATE staff
+            SET
+              status = $2,
+              hardware_device_id = NULL,
+              branch_id = COALESCE($3, branch_id)
+            WHERE tenant_id = $1 AND id = $4
+          `,
+          [nextStatus, nextBranchId, id],
+        )
+        return getStaffByIdInTx(client, tenantId, id, { branchId })
+      }
+
+      await assertStaffDaysWithinBranch(tenantId, nextBranchId, nextWorkingDays, {
+        // Legacy rows may have empty days until edited; require when assigning hardware or patching days
+        requireDays:
+          Boolean(nextHardwareId) || payload.workingDays !== undefined,
+      })
+
+      // Re-validate merged schedule + allocation (reject invalid keep on schedule edit)
+      const nextAllocationStart =
+        payload.hardwareAllocationStart !== undefined
+          ? payload.hardwareAllocationStart
+          : existing.hardwareAllocationStart
+      const nextAllocationEnd =
+        payload.hardwareAllocationEnd !== undefined
+          ? payload.hardwareAllocationEnd
+          : existing.hardwareAllocationEnd
+
+      await assertHardwareAllocationAvailable(client, tenantId, {
+        branchId: nextBranchId,
+        hardwareDeviceId: nextHardwareId,
+        role: nextRole,
+        workingDays: nextWorkingDays,
+        scheduleStart: nextScheduleStart,
+        scheduleEnd: nextScheduleEnd,
+        allocationStart: nextAllocationStart,
+        allocationEnd: nextAllocationEnd,
+        excludeStaffId: existing.id,
+      })
+
       let designationName = existing.designation
       let designationId = existing.designationId
       if (
@@ -350,15 +624,13 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
         const resolved = await resolveStaffDesignation(client, tenantId, {
           designationId: payload.designationId,
           designation: payload.designation,
-          role: payload.role || existing.role,
+          role: nextRole,
         })
         designationName = resolved.designationName
         designationId = resolved.designationId
       }
 
       const roleId = payload.role ? ROLE_IDS[payload.role] : null
-      const nextBranchId =
-        payload.branchId !== undefined ? payload.branchId : existing.branchId
 
       await tenantClientQuery(
         client,
@@ -401,12 +673,13 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
             hardware_device_id = $4,
             image_url = COALESCE($5, image_url),
             status = COALESCE($6, status),
-            schedule_start = COALESCE($7, schedule_start),
-            schedule_break_start = COALESCE($8, schedule_break_start),
-            schedule_break_end = COALESCE($9, schedule_break_end),
-            schedule_end = COALESCE($10, schedule_end),
-            branch_id = COALESCE($11, branch_id)
-          WHERE tenant_id = $1 AND id = $12
+            schedule_start = CASE WHEN $7::boolean THEN $8::time ELSE schedule_start END,
+            schedule_break_start = CASE WHEN $9::boolean THEN $10::time ELSE schedule_break_start END,
+            schedule_break_end = CASE WHEN $11::boolean THEN $12::time ELSE schedule_break_end END,
+            schedule_end = CASE WHEN $13::boolean THEN $14::time ELSE schedule_end END,
+            working_days = CASE WHEN $15::boolean THEN $16::text[] ELSE working_days END,
+            branch_id = COALESCE($17, branch_id)
+          WHERE tenant_id = $1 AND id = $18
         `,
         [
           designationName,
@@ -415,19 +688,48 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
             payload.role !== undefined
             ? designationId
             : null,
-          payload.hardwareDeviceId !== undefined
-            ? payload.hardwareDeviceId || null
-            : existing.hardwareDeviceId || null,
+          nextHardwareId,
           payload.imageUrl || null,
           payload.status || null,
+          payload.scheduleStart !== undefined,
           payload.scheduleStart !== undefined ? payload.scheduleStart : null,
+          payload.scheduleBreakStart !== undefined,
           payload.scheduleBreakStart !== undefined ? payload.scheduleBreakStart : null,
+          payload.scheduleBreakEnd !== undefined,
           payload.scheduleBreakEnd !== undefined ? payload.scheduleBreakEnd : null,
+          payload.scheduleEnd !== undefined,
           payload.scheduleEnd !== undefined ? payload.scheduleEnd : null,
+          payload.workingDays !== undefined,
+          payload.workingDays !== undefined ? nextWorkingDays : null,
           nextBranchId,
           id,
         ],
       )
+
+      // Keep allocation row in sync with staff schedule / device
+      const shouldRefreshAllocation =
+        payload.hardwareDeviceId !== undefined ||
+        payload.workingDays !== undefined ||
+        payload.scheduleStart !== undefined ||
+        payload.scheduleEnd !== undefined ||
+        payload.hardwareAllocationStart !== undefined ||
+        payload.hardwareAllocationEnd !== undefined ||
+        payload.role !== undefined ||
+        payload.branchId !== undefined
+
+      if (shouldRefreshAllocation) {
+        await upsertStaffHardwareAllocation(client, tenantId, {
+          branchId: nextBranchId,
+          staffId: existing.id,
+          role: nextRole,
+          hardwareDeviceId: nextHardwareId,
+          workingDays: nextWorkingDays,
+          scheduleStart: nextScheduleStart,
+          scheduleEnd: nextScheduleEnd,
+          allocationStart: nextAllocationStart,
+          allocationEnd: nextAllocationEnd,
+        })
+      }
 
       return getStaffByIdInTx(client, tenantId, id, { branchId })
     })
@@ -462,6 +764,21 @@ export async function setStaffStatus(tenantId, id, status, { branchId } = {}) {
       `,
       [status, existing.userId],
     )
+
+    // Deactivate → release future hardware claim (history rows stay as released)
+    if (status === STAFF_STATUS.INACTIVE || status === 'blocked') {
+      await releaseActiveAllocationsForStaff(client, tenantId, id)
+      await tenantClientQuery(
+        client,
+        tenantId,
+        `
+          UPDATE staff
+          SET hardware_device_id = NULL
+          WHERE tenant_id = $1 AND id = $2
+        `,
+        [id],
+      )
+    }
 
     return getStaffByIdInTx(client, tenantId, id, { branchId })
   })

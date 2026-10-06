@@ -389,7 +389,8 @@ export function ProductsPage() {
           onEdit={handleEdit}
           onAddStock={handleAddStock}
           onPrintBarcode={setPrintTarget}
-          onStatusChange={handleStatusChange}
+          onBlock={(row) => handleStatusChange(row, PRODUCT_STATUS.INACTIVE)}
+          onUnblock={(row) => handleStatusChange(row, PRODUCT_STATUS.ACTIVE)}
           onDelete={openDelete}
         />
       </MotionReveal>

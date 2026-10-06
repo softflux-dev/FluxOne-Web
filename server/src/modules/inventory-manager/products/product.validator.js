@@ -280,6 +280,7 @@ export const updateProductSchema = z
       type: z
         .enum([PRODUCT_TYPES.SINGLE, PRODUCT_TYPES.BUNDLE, PRODUCT_TYPES.VARIANT])
         .optional(),
+      // type may be sent by clients but updateProduct rejects mismatches (locked after create)
       status: z
         .enum([PRODUCT_STATUS.ACTIVE, PRODUCT_STATUS.INACTIVE, 'open', 'close'])
         .optional()

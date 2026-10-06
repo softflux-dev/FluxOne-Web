@@ -6,8 +6,8 @@ import {
   deleteHolidaySchedule,
 } from './holidays.model.js'
 import {
-  upsertAttendance,
-  clearHolidayAttendanceByDate,
+  clearHolidayAttendanceByDates,
+  batchUpsertHolidayAttendance,
 } from '../attendance/attendance.model.js'
 import { tenantQuery } from '../../../config/db.js'
 import { success, fail, failFromError } from '../../../utils/response.util.js'
@@ -17,28 +17,18 @@ function getDatesInRange(startDate, endDate) {
   if (!startDate) return dates
   const current = new Date(startDate)
   const last = new Date(endDate || startDate)
-  while (current <= last) {
-    dates.push(current.toISOString().split('T')[0])
-    current.setDate(current.getDate() + 1)
+  if (Number.isNaN(current.getTime()) || Number.isNaN(last.getTime())) return dates
+  // Normalize to UTC date-only to avoid timezone day-shift
+  const cursor = new Date(Date.UTC(current.getFullYear(), current.getMonth(), current.getDate()))
+  const end = new Date(Date.UTC(last.getFullYear(), last.getMonth(), last.getDate()))
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
   return dates
 }
 
-async function syncScheduleAttendance(tenantId, userId, schedule, employeeIds) {
-  const dates = getDatesInRange(schedule.startDate, schedule.endDate)
-
-  if (schedule.status === 'inactive') {
-    // Clear attendance marks if inactive
-    for (const date of dates) {
-      await clearHolidayAttendanceByDate(tenantId, {
-        workDate: date,
-        note: schedule.name,
-      })
-    }
-    return
-  }
-
-  let targetStaffIds = employeeIds || []
+async function resolveTargetStaffIds(tenantId, schedule, employeeIds) {
   if (schedule.isAllEmployees) {
     const { rows: allStaff } = await tenantQuery(
       tenantId,
@@ -53,20 +43,36 @@ async function syncScheduleAttendance(tenantId, userId, schedule, employeeIds) {
       `,
       [schedule.branchId || null],
     )
-    targetStaffIds = allStaff.map((s) => s.id)
+    return allStaff.map((s) => s.id)
+  }
+  return Array.isArray(employeeIds) ? employeeIds.filter(Boolean) : []
+}
+
+//
+// Sync holiday → attendance in 1–2 queries (clear range + batch upsert).
+//
+async function syncScheduleAttendance(tenantId, userId, schedule, employeeIds) {
+  const dates = getDatesInRange(schedule.startDate, schedule.endDate)
+  if (!dates.length) return
+
+  const note = schedule.name || null
+
+  if (schedule.status === 'inactive') {
+    await clearHolidayAttendanceByDates(tenantId, { dates, note })
+    return
   }
 
-  for (const staffId of targetStaffIds) {
-    for (const date of dates) {
-      await upsertAttendance(tenantId, {
-        staffId,
-        workDate: date,
-        status: 'holiday',
-        note: schedule.name,
-        createdBy: userId,
-      })
-    }
-  }
+  const targetStaffIds = await resolveTargetStaffIds(tenantId, schedule, employeeIds)
+  if (!targetStaffIds.length) return
+
+  // Replace prior marks for this holiday name on these dates, then write fresh rows
+  await clearHolidayAttendanceByDates(tenantId, { dates, note })
+  await batchUpsertHolidayAttendance(tenantId, {
+    staffIds: targetStaffIds,
+    dates,
+    note,
+    createdBy: userId,
+  })
 }
 
 export async function holidaysList(req, res) {
@@ -98,7 +104,11 @@ export async function addHoliday(req, res) {
     await syncScheduleAttendance(
       req.tenantId,
       req.user.id,
-      schedule,
+      {
+        ...schedule,
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
+      },
       employeeIds,
     )
 
@@ -124,11 +134,11 @@ export async function editHoliday(req, res) {
     const existing = await getHolidayScheduleById(req.tenantId, id)
     if (!existing) return fail(res, 'Holiday schedule not found', 404)
 
-    // Clear previous dates attendance if dates or name changed
+    // One DELETE for the old date range + old holiday name
     const oldDates = getDatesInRange(existing.startDate, existing.endDate)
-    for (const date of oldDates) {
-      await clearHolidayAttendanceByDate(req.tenantId, {
-        workDate: date,
+    if (oldDates.length) {
+      await clearHolidayAttendanceByDates(req.tenantId, {
+        dates: oldDates,
         note: existing.name,
       })
     }
@@ -145,7 +155,6 @@ export async function editHoliday(req, res) {
 
     if (!updated) return fail(res, 'Failed to update holiday schedule', 500)
 
-    // Re-apply attendance for new configuration
     await syncScheduleAttendance(
       req.tenantId,
       req.user.id,
@@ -167,9 +176,9 @@ export async function removeHoliday(req, res) {
     if (!existing) return fail(res, 'Holiday schedule not found', 404)
 
     const dates = getDatesInRange(existing.startDate, existing.endDate)
-    for (const date of dates) {
-      await clearHolidayAttendanceByDate(req.tenantId, {
-        workDate: date,
+    if (dates.length) {
+      await clearHolidayAttendanceByDates(req.tenantId, {
+        dates,
         note: existing.name,
       })
     }

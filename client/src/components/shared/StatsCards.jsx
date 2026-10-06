@@ -84,9 +84,9 @@ export function StatCard({
               {value}
             </p>
 
-            {subtitle && (
+            {/* {subtitle && (
               <p className="mt-0.5 truncate text-xs font-normal text-slate-500">{subtitle}</p>
-            )}
+            )} */}
 
             {trend != null && (
               <div className="mt-1.5 flex items-center gap-1.5">

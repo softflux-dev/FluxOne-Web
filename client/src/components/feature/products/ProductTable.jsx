@@ -4,8 +4,9 @@ import { BarcodeCell } from '@/components/feature/products/BarcodeCell'
 import { PricingColumns } from '@/components/feature/products/PricingColumns'
 import { ProductImageCell, ProductStatusToggle } from '@/components/feature/products/ProductStatusToggle'
 import { PromotionColumns } from '@/components/feature/products/PromotionColumns'
-import { ActionIconButton } from '@/components/shared/ActionIconButton'
+import { RowActionButtons } from '@/components/shared/ActionIconButton'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { isEntityActive } from '@/components/shared/EntityStatusToggle'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -24,9 +25,20 @@ import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { formatInventoryStock, money, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
 
-// Print / Add Stock / Edit / Delete for one catalog row
-function ProductRowActions({ row, onPrintBarcode, onAddStock, onEdit, onDelete }) {
+// Print / Add Stock / Edit / Block|Open / Delete for one catalog row
+function ProductRowActions({
+  row,
+  onPrintBarcode,
+  onAddStock,
+  onEdit,
+  onBlock,
+  onUnblock,
+  onDelete,
+  statusLoading,
+}) {
   const isVariantParent = row.type === PRODUCT_TYPES.VARIANT
+  const open = isEntityActive(row.status)
+
   return (
     <>
       <Button
@@ -53,17 +65,18 @@ function ProductRowActions({ row, onPrintBarcode, onAddStock, onEdit, onDelete }
           <PackagePlus className="size-4" />
         </Button>
       ) : null}
-      <ActionIconButton
-        action="edit"
-        label="Edit product"
-        className="size-8"
-        onClick={() => onEdit?.(row)}
-      />
-      <ActionIconButton
-        action="delete"
-        label="Delete product"
-        className="size-8"
-        onClick={() => onDelete?.(row)}
+      {/* clean and optimized code — reuse shared CRUD icons; Ban opens Open/Close modal */}
+      <RowActionButtons
+        onEdit={() => onEdit?.(row)}
+        onBlock={() => onBlock?.(row)}
+        onUnblock={() => onUnblock?.(row)}
+        isActive={open}
+        onDelete={() => onDelete?.(row)}
+        editLabel="Edit product"
+        blockLabel="Close product"
+        unblockLabel="Open product"
+        deleteLabel="Delete product"
+        disabled={statusLoading}
       />
     </>
   )
@@ -103,7 +116,8 @@ export function ProductTable({
   onEdit,
   onAddStock,
   onPrintBarcode,
-  onStatusChange,
+  onBlock,
+  onUnblock,
   onDelete,
   className,
 }) {
@@ -223,7 +237,6 @@ export function ProductTable({
                       <ProductStatusToggle
                         status={row.status}
                         loading={statusUpdatingId === row.id}
-                        onChange={(status) => onStatusChange?.(row, status)}
                       />
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
@@ -264,7 +277,10 @@ export function ProductTable({
                         onPrintBarcode={onPrintBarcode}
                         onAddStock={onAddStock}
                         onEdit={onEdit}
+                        onBlock={onBlock}
+                        onUnblock={onUnblock}
                         onDelete={onDelete}
+                        statusLoading={statusUpdatingId === row.id}
                       />
                     </div>
                   </div>
@@ -382,7 +398,6 @@ export function ProductTable({
                       <ProductStatusToggle
                         status={row.status}
                         loading={statusUpdatingId === row.id}
-                        onChange={(status) => onStatusChange?.(row, status)}
                       />
                     </TableCell>
                     <TableActionsCell>
@@ -391,7 +406,10 @@ export function ProductTable({
                         onPrintBarcode={onPrintBarcode}
                         onAddStock={onAddStock}
                         onEdit={onEdit}
+                        onBlock={onBlock}
+                        onUnblock={onUnblock}
                         onDelete={onDelete}
+                        statusLoading={statusUpdatingId === row.id}
                       />
                     </TableActionsCell>
                   </TableRow>

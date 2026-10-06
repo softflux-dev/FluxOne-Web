@@ -5,8 +5,8 @@ export function Skeleton({ className }) {
   return <div className={cn('skeleton-block rounded-xl', className)} aria-hidden />
 }
 
-// Card-style rows for tables/lists — friendlier than bare bars during cold starts.
-export function TableRowsSkeleton({ rows = 6, className, hint = true }) {
+// Card-style rows for tables/lists while data loads.
+export function TableRowsSkeleton({ rows = 6, className }) {
   return (
     <div
       className={cn('space-y-3 py-2', className)}
@@ -28,11 +28,6 @@ export function TableRowsSkeleton({ rows = 6, className, hint = true }) {
           <Skeleton className="hidden h-8 w-8 rounded-lg md:block" />
         </div>
       ))}
-      {hint ? (
-        <p className="pt-1 text-center text-xs text-slate-400">
-          Loading data… the first request can take 15–30s while the server wakes up.
-        </p>
-      ) : null}
     </div>
   )
 }

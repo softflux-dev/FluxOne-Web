@@ -69,6 +69,7 @@ export function TimePicker({
   disabled = false,
   placeholder = '--:-- --',
   className = '',
+  clearable = true
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
@@ -114,7 +115,6 @@ export function TimePicker({
   // Close when clicking outside
   useEffect(() => {
     if (!isOpen) return
-
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         // Cancel/close without saving
@@ -125,6 +125,17 @@ export function TimePicker({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
+
+  const emitChange = (nextValue) => {
+    if (!onChange) return
+    onChange({
+      target: {
+        id: id || name,
+        name: name || id,
+        value: nextValue
+      }
+    })
+  }
 
   const handleCancel = (e) => {
     e?.stopPropagation()
@@ -137,20 +148,15 @@ export function TimePicker({
 
   const handleConfirm = (e) => {
     e?.stopPropagation()
-    const time24 = format12to24(tempHour, tempMinute, tempPeriod)
-    if (onChange) {
-      const syntheticEvent = {
-        target: {
-          id: id || name,
-          name: name || id,
-          value: time24,
-        },
-      }
-      onChange(syntheticEvent)
-    }
+    emitChange(format12to24(tempHour, tempMinute, tempPeriod))
     setIsOpen(false)
   }
 
+  const handleClear = (e) => {
+    e?.stopPropagation()
+    emitChange('')
+    setIsOpen(false)
+  }
   // Ensure minute list includes the temp minute if not in 5-min intervals
   const minutesList = DEFAULT_MINUTES.includes(tempMinute)
     ? DEFAULT_MINUTES
@@ -266,22 +272,21 @@ export function TimePicker({
 
           {/* Action Footer */}
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-white">
-            <button
-              type="button"
-              onClick={handleCancel}
-              style={{ color: BRAND.purple }}
-              className="text-sm font-medium hover:opacity-75 transition-opacity cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              style={{ color: BRAND.purple }}
-              className="text-sm font-medium hover:opacity-75 transition-opacity cursor-pointer"
-            >
-              OK
-            </button>
+            {clearable && value ? (
+              <button type="button" onClick={handleClear} className="text-sm font-medium text-slate-500 hover:opacity-75 cursor-pointer">
+                Clear
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-4">
+              <button type="button" onClick={handleCancel} style={{ color: BRAND.purple }} className="text-sm font-medium hover:opacity-75 cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirm} style={{ color: BRAND.purple }} className="text-sm font-medium hover:opacity-75 cursor-pointer">
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}

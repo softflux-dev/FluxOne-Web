@@ -29,7 +29,17 @@ export async function hardwareList(req, res) {
     }
     const type = req.validated.query.type || undefined
     const q = req.validated.query.q || undefined
-    const rows = await listHardware(req.tenantId, { branchId, type, q })
+    const rows = await listHardware(req.tenantId, {
+      branchId,
+      type,
+      q,
+      scheduleStart: req.validated.query.scheduleStart || null,
+      scheduleEnd: req.validated.query.scheduleEnd || null,
+      workingDays: req.validated.query.workingDays || null,
+      excludeStaffId: req.validated.query.excludeStaffId || null,
+      includeBusy: req.validated.query.includeBusy ?? false,
+      forRole: req.validated.query.forRole || null,
+    })
     return success(res, rows)
   } catch (err) {
     return failFromError(res, err, 'Failed to list hardware')
@@ -84,9 +94,9 @@ export async function hardwareRemove(req, res) {
     const { id } = req.validated.params
     const row = await deleteHardware(req.tenantId, id, { branchId })
     if (!row) return fail(res, 'Hardware not found', 404)
-    return success(res, { message: 'Hardware deleted successfully', id: row.id })
+    return success(res, { id: row.id, isActive: false, deactivated: true })
   } catch (err) {
-    return failFromError(res, err, 'Failed to delete hardware')
+    return failFromError(res, err, 'Failed to deactivate hardware')
   }
 }
 

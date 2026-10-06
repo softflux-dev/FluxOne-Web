@@ -1,7 +1,8 @@
-import { Building2, Pencil } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { RowActionButtons } from '@/components/shared/ActionIconButton'
+import { ProductStatusToggle } from '@/components/feature/products/ProductStatusToggle'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableHeader,
@@ -9,12 +10,13 @@ import {
   TableHead,
   TableRow,
   TableCell,
+  TableActionsHead,
+  TableActionsCell,
   TablePagination,
 } from '@/components/ui/table'
 import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { BRAND } from '@/lib/constants'
 import { displaySupplierRef } from '@/lib/formatDisplayId'
-import { ProductStatusToggle } from '@/components/feature/products/ProductStatusToggle'
 
 function SupplierAvatar({ row }) {
   if (row.imageUrl) {
@@ -30,15 +32,47 @@ function SupplierAvatar({ row }) {
   )
 }
 
-// Supplier list — mobile cards + desktop table
+// clean and optimized code — CRUD icons; Status capsule is display-only
+function SupplierRowActions({
+  row,
+  onView,
+  onEdit,
+  onDeactivate,
+  onActivate,
+  onDelete,
+  statusLoading,
+}) {
+  const active = row.isActive !== false
+  return (
+    <RowActionButtons
+      onView={() => onView?.(row)}
+      onEdit={() => onEdit?.(row)}
+      onBlock={() => onDeactivate?.(row)}
+      onUnblock={() => onActivate?.(row)}
+      isActive={active}
+      onDelete={() => onDelete?.(row)}
+      viewLabel={`View ${row.companyName || 'supplier'}`}
+      editLabel={`Edit ${row.companyName || 'supplier'}`}
+      blockLabel={`Deactivate ${row.companyName || 'supplier'}`}
+      unblockLabel={`Activate ${row.companyName || 'supplier'}`}
+      deleteLabel={`Delete ${row.companyName || 'supplier'}`}
+      disabled={statusLoading}
+    />
+  )
+}
+
+// Supplier list — mobile cards + desktop table (no Signature column; view in details)
 export function SupplierTable({
   items = [],
   loading = false,
   pagination,
   onPageChange,
   onPageSizeChange,
+  onView,
   onEdit,
-  onStatusChange,
+  onDeactivate,
+  onActivate,
+  onDelete,
   statusUpdatingId = null,
   className,
 }) {
@@ -86,7 +120,6 @@ export function SupplierTable({
                       <ProductStatusToggle
                         status={row.isActive === false ? 'inactive' : 'active'}
                         loading={statusUpdatingId === row.id}
-                        onChange={(status) => onStatusChange?.(row, status === 'active')}
                       />
                     </div>
                     <p className="mt-1 text-xs text-slate-600">{row.companyPhone || '—'}</p>
@@ -107,16 +140,15 @@ export function SupplierTable({
                       >
                         Tax {row.taxPaid ? 'Yes' : 'No'}
                       </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="cursor-pointer"
-                        onClick={() => onEdit?.(row)}
-                      >
-                        <Pencil className="size-3.5" />
-                        Edit
-                      </Button>
+                      <SupplierRowActions
+                        row={row}
+                        onView={onView}
+                        onEdit={onEdit}
+                        onDeactivate={onDeactivate}
+                        onActivate={onActivate}
+                        onDelete={onDelete}
+                        statusLoading={statusUpdatingId === row.id}
+                      />
                     </div>
                   </div>
                 </div>
@@ -136,11 +168,8 @@ export function SupplierTable({
                   <TableHead className="hidden px-2 py-3 font-semibold lg:table-cell">Location</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Tax paid</TableHead>
                   <TableHead className="hidden px-2 py-3 font-semibold xl:table-cell">Reg / Bank</TableHead>
-                  <TableHead className="hidden px-2 py-3 font-semibold xl:table-cell">Signature</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Status</TableHead>
-                  <TableHead className="sticky right-0 z-[1] bg-slate-200/80 px-2 py-3 font-semibold">
-                    Actions
-                  </TableHead>
+                  <TableActionsHead className="px-2 py-3 font-semibold" sticky />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -185,37 +214,23 @@ export function SupplierTable({
                       <span className="block">{row.registrationNumber || '—'}</span>
                       <span className="block font-mono">{row.bankAccountNumber || '—'}</span>
                     </TableCell>
-                    <TableCell className="hidden px-2 py-3 xl:table-cell">
-                      {row.signatureUrl ? (
-                        <img
-                          src={row.signatureUrl}
-                          alt="Signature"
-                          className="h-8 max-w-[72px] object-contain"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </TableCell>
                     <TableCell className="px-2 py-3">
                       <ProductStatusToggle
                         status={row.isActive === false ? 'inactive' : 'active'}
                         loading={statusUpdatingId === row.id}
-                        onChange={(status) => onStatusChange?.(row, status === 'active')}
                       />
                     </TableCell>
-                    <TableCell className="sticky right-0 z-[1] bg-white px-2 py-3 group-hover:bg-slate-50/80">
-                      <div className="inline-flex items-center justify-start">
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="cursor-pointer text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110"
-                          onClick={() => onEdit?.(row)}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    <TableActionsCell sticky>
+                      <SupplierRowActions
+                        row={row}
+                        onView={onView}
+                        onEdit={onEdit}
+                        onDeactivate={onDeactivate}
+                        onActivate={onActivate}
+                        onDelete={onDelete}
+                        statusLoading={statusUpdatingId === row.id}
+                      />
+                    </TableActionsCell>
                   </TableRow>
                 ))}
               </TableBody>

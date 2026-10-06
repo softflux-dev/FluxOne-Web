@@ -33,10 +33,16 @@ import { ImageUploadField } from '@/components/shared/ImageUploadField'
 import { FieldError } from '@/components/shared/FieldError'
 import { PhoneInput } from '@/components/shared/PhoneInput'
 import { TimePicker } from '@/components/shared/TimePicker'
+import { WorkingDaysPicker } from '@/components/shared/WorkingDaysPicker'
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
 import { BRAND } from '@/lib/constants'
 import { formatDateTimeInline, formatClockTime } from '@/lib/formatDateTime'
 import { toastSuccess, toastError } from '@/lib/toast'
+import {
+  formatWorkingDaysShort,
+  normalizeWorkingDays,
+  validateWorkingDaysFields,
+} from '@/lib/validation/branchForms'
 import {
   validatePhone,
   validateEmail,
@@ -112,6 +118,8 @@ const emptyForm = {
   location: '',
   openingTime: '',
   closingTime: '',
+  // Empty until Admin picks days (dropdown multi-select)
+  workingDays: [],
   imageFile: null,
   managerImageFile: null,
   managerName: '',
@@ -213,6 +221,7 @@ const BRANCH_FIELD_IDS = {
   managerOtherContact: 'mgrOtherContact',
   openingTime: 'branchOpeningTime',
   closingTime: 'branchClosingTime',
+  workingDays: 'branchWorkingDays',
 }
 
 const BRANCH_FIELD_ORDER = [
@@ -220,6 +229,7 @@ const BRANCH_FIELD_ORDER = [
   'location',
   'openingTime',
   'closingTime',
+  'workingDays',
   'managerName',
   'managerEmail',
   'managerContact',
@@ -308,6 +318,7 @@ export function BranchesPage() {
           'Status',
           'Opening Time',
           'Closing Time',
+          'Working Days',
           'Created At',
         ],
         rows: filteredBranches.map((b) => [
@@ -321,6 +332,7 @@ export function BranchesPage() {
           b.status === 'open' ? 'Open' : 'Blocked',
           formatClockTime(b.openingTime) || '',
           formatClockTime(b.closingTime) || '',
+          formatWorkingDaysShort(b.workingDays) || '',
           formatCreatedAt(b.createdAt),
         ]),
       })
@@ -342,6 +354,7 @@ export function BranchesPage() {
 
   function handleOpenEdit(b) {
     setEditingBranch(b)
+    const days = normalizeWorkingDays(b.workingDays)
     setFormData({
       id: b.id,
       createdAt: formatCreatedAt(b.createdAt),
@@ -349,6 +362,7 @@ export function BranchesPage() {
       location: b.location || '',
       openingTime: timeInputValue(b.openingTime),
       closingTime: timeInputValue(b.closingTime),
+      workingDays: days,
       imageFile: null,
       managerImageFile: null,
       managerName: b.manager?.name || '',
@@ -466,6 +480,8 @@ export function BranchesPage() {
       errors.closingTime = 'Closing time must be after opening time'
     }
 
+    Object.assign(errors, validateWorkingDaysFields(formData.workingDays))
+
     if (Object.keys(errors).length) {
       applyErrors(errors, BRANCH_FIELD_IDS, BRANCH_FIELD_ORDER)
       return
@@ -477,6 +493,7 @@ export function BranchesPage() {
       location: formData.location.trim(),
       openingTime: formData.openingTime || '',
       closingTime: formData.closingTime || '',
+      workingDays: normalizeWorkingDays(formData.workingDays),
       image: formData.imageFile || undefined,
       profileImage: formData.managerImageFile || undefined,
       managerName: formData.managerName.trim(),
@@ -702,6 +719,11 @@ export function BranchesPage() {
                             Hours {formatHoursRange(b.openingTime, b.closingTime)}
                           </p>
                         ) : null}
+                        {formatWorkingDaysShort(b.workingDays) ? (
+                          <p className="mt-0.5 text-[10px] text-slate-500">
+                            Days {formatWorkingDaysShort(b.workingDays)}
+                          </p>
+                        ) : null}
                         <div className="mt-2 flex items-center gap-2">
                           <img
                             src={managerAvatar(b.manager)}
@@ -791,6 +813,11 @@ export function BranchesPage() {
                             {formatHoursRange(b.openingTime, b.closingTime) ? (
                               <p className="mt-0.5 text-[10px] font-medium text-purple-800 whitespace-nowrap">
                                 Hours {formatHoursRange(b.openingTime, b.closingTime)}
+                              </p>
+                            ) : null}
+                            {formatWorkingDaysShort(b.workingDays) ? (
+                              <p className="mt-0.5 text-[10px] text-slate-500 whitespace-nowrap">
+                                Days {formatWorkingDaysShort(b.workingDays)}
                               </p>
                             ) : null}
                           </TableCell>
@@ -1005,6 +1032,23 @@ export function BranchesPage() {
                   Optional. Same-day window only (opening before closing). Staff shifts must fall inside
                   these hours when set.
                 </p>
+
+                <div className="space-y-1.5">
+                  <Label id="branchWorkingDays" className="text-xs">
+                    Working days *
+                  </Label>
+                  <WorkingDaysPicker
+                    value={formData.workingDays}
+                    onChange={(days) => {
+                      setFormData({ ...formData, workingDays: days })
+                      clearField('workingDays')
+                    }}
+                  />
+                  <FieldError message={fieldErrors.workingDays} />
+                  <p className="text-[11px] text-slate-500">
+                    Staff schedules can only use days within this branch calendar.
+                  </p>
+                </div>
 
                 <div className="space-y-1 sm:col-span-2">
                   <ImageUploadField
