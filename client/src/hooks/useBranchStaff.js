@@ -11,6 +11,7 @@ import {
   updateStaff as updateStaffThunk,
   setStaffStatus as setStaffStatusThunk,
   deleteStaff as deleteStaffThunk,
+  exportBranchStaffCsv as exportBranchStaffCsvThunk,
 } from '@/rtk/features/branch/branchStaffSlice'
 
 export { STAFF_PAGE_SIZE as DEFAULT_LIMIT }
@@ -20,7 +21,7 @@ const EMPTY_FILTERS = {}
 
 export function useBranchStaff(initialFilters = EMPTY_FILTERS) {
   const dispatch = useAppDispatch()
-  const { items, pagination, filters, loading, mutating, error } = useAppSelector(
+  const { items, pagination, filters, loading, mutating, exporting, error } = useAppSelector(
     (state) => state.branchStaff,
   )
   const filtersRef = useRef(filters)
@@ -52,6 +53,7 @@ export function useBranchStaff(initialFilters = EMPTY_FILTERS) {
     filters,
     loading,
     mutating,
+    exporting,
     error,
     updateFilters,
     setPage: (page) => updateFilters({ page }),
@@ -62,5 +64,7 @@ export function useBranchStaff(initialFilters = EMPTY_FILTERS) {
     setStaffStatus: (id, status) =>
       asResult(dispatch(setStaffStatusThunk({ id, status })).unwrap()),
     deleteStaff: (id) => asResult(dispatch(deleteStaffThunk(id)).unwrap()),
+    // Dedicated /branch/staff/export — respects current roster filters
+    exportCsv: () => asResult(dispatch(exportBranchStaffCsvThunk()).unwrap()),
   }
 }

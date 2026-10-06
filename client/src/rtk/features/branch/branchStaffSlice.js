@@ -2,6 +2,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { exportStaffRosterCsv } from '@/lib/staffExport'
 
 export const STAFF_PAGE_SIZE = 8
 
@@ -101,6 +102,7 @@ const initialState = {
   filters: defaultFilters(),
   loading: false,
   mutating: false,
+  exporting: false,
   error: null,
 }
 
@@ -176,6 +178,27 @@ export const deleteStaff = createAsyncThunk(
     if (!result.success) return rejectWithValue(result.error || 'Delete failed')
     void dispatch(fetchBranchStaff(getState().branchStaff.filters))
     return result
+  },
+)
+
+// Dedicated export API — same Search / Role / Status / Hardware filters as roster
+export const exportBranchStaffCsv = createAsyncThunk(
+  'branchStaff/exportCsv',
+  async (_, { getState, rejectWithValue }) => {
+    const filters = getState().branchStaff.filters || defaultFilters()
+    const result = await apiClient.get(endpoints.branch.staff.export, {
+      q: filters.q || undefined,
+      status: filters.status || undefined,
+      role: filters.role || undefined,
+      hardwareType: filters.hardwareType || undefined,
+      type: filters.hardwareType || undefined,
+    })
+    if (!result.success) return rejectWithValue(result.error || 'Export failed')
+    const rows = Array.isArray(result.data?.rows) ? result.data.rows : []
+    if (!rows.length) return rejectWithValue('No staff to export')
+    // use reusable staffExport → csvExport
+    const { exported } = exportStaffRosterCsv(rows)
+    return { success: true, data: { exported } }
   },
 )
 
@@ -265,6 +288,15 @@ const branchStaffSlice = createSlice({
       })
       .addCase(deleteStaff.rejected, (state) => {
         state.mutating = false
+      })
+      .addCase(exportBranchStaffCsv.pending, (state) => {
+        state.exporting = true
+      })
+      .addCase(exportBranchStaffCsv.fulfilled, (state) => {
+        state.exporting = false
+      })
+      .addCase(exportBranchStaffCsv.rejected, (state) => {
+        state.exporting = false
       })
   },
 })

@@ -46,19 +46,28 @@ const optionalHardwareDeviceId = z.preprocess((value) => {
   return value
 }, z.string().nullable().optional())
 
+const staffListFilterQuery = {
+  q: optionalString,
+  designationId: optionalUuid,
+  status: staffStatusEnum.optional(),
+  branchId: optionalUuid,
+  role: staffRoleEnum.optional(),
+  // Filter staff by assigned hardware type
+  hardwareType: hardwareTypeEnum.optional(),
+  type: hardwareTypeEnum.optional(),
+}
+
 export const listStaffSchema = z.object({
   body: empty,
   params: empty,
-  query: paginationQuery.extend({
-    q: optionalString,
-    designationId: optionalUuid,
-    status: staffStatusEnum.optional(),
-    branchId: optionalUuid,
-    role: staffRoleEnum.optional(),
-    // Filter staff by assigned hardware type
-    hardwareType: hardwareTypeEnum.optional(),
-    type: hardwareTypeEnum.optional(),
-  }),
+  query: paginationQuery.extend(staffListFilterQuery),
+})
+
+// Dedicated export — same filters as list, no page/limit
+export const exportStaffSchema = z.object({
+  body: empty,
+  params: empty,
+  query: z.object(staffListFilterQuery),
 })
 
 export const createStaffSchema = z

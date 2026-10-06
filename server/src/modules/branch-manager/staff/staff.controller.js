@@ -4,6 +4,7 @@ import {
   deleteStaff,
   getStaffById,
   listStaff,
+  listStaffForExport,
   setStaffStatus,
   updateStaff,
 } from './staff.model.js'
@@ -51,6 +52,14 @@ export async function staffList(req, res) {
   query.branchId = resolveListBranchId(req, query.branchId)
   const result = await listStaff(req.tenantId, query)
   return success(res, paginatedResult(result.items, result))
+}
+
+// Full filtered roster rows for client CSV (Products-style Option B)
+export async function staffExport(req, res) {
+  const query = { ...req.validated.query }
+  query.branchId = resolveListBranchId(req, query.branchId)
+  const rows = await listStaffForExport(req.tenantId, query)
+  return success(res, { rows, exported: rows.length })
 }
 
 export async function createStaff(req, res) {

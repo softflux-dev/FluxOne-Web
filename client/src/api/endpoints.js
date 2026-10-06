@@ -68,6 +68,7 @@ export const endpoints = {
     dashboard: '/branch/dashboard',
     staff: {
       list: '/branch/staff',
+      export: '/branch/staff/export',
       create: '/branch/staff',
       detail: (id) => `/branch/staff/${id}`,
       update: (id) => `/branch/staff/${id}`,

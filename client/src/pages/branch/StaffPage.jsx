@@ -4,6 +4,8 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DeleteEntityDialog } from '@/components/shared/DeleteEntityDialog'
+// use reusable components
+import { ExportCsvButton } from '@/components/shared/ExportCsvButton'
 import { StaffFilters } from '@/components/feature/branch/staff/StaffFilters'
 import { StaffFormDialog } from '@/components/feature/branch/staff/StaffFormDialog'
 import { StaffTable } from '@/components/feature/branch/staff/StaffTable'
@@ -27,6 +29,7 @@ export function StaffPage() {
     filters,
     loading,
     mutating,
+    exporting,
     error,
     updateFilters,
     setPage,
@@ -34,6 +37,7 @@ export function StaffPage() {
     updateStaff,
     setStaffStatus,
     deleteStaff,
+    exportCsv,
   } = useBranchStaff()
 
   const { localQ, onSearchChange } = useDebouncedSearch(updateFilters)
@@ -148,13 +152,32 @@ export function StaffPage() {
   const deleteStaffIsActive =
     deleteTarget?.status === 'active' || deleteTarget?.status === 'open'
 
+  async function handleExportStaff() {
+    const result = await exportCsv()
+    if (result.success) {
+      toastSuccess(`Exported ${result.data?.exported ?? 0} staff record(s)`)
+    } else {
+      toastError(result.error || 'Export failed')
+    }
+  }
+
   function renderHeaderActions() {
     if (activeTab === 'list') {
+      // [ Export ] [ + Add Staff ] — use reusable ExportCsvButton
       return (
-        <Button type="button" variant="brand" onClick={openCreate} className="w-full sm:w-auto">
-          <Plus className="size-4" />
-          Add Staff
-        </Button>
+        <>
+          <ExportCsvButton
+            onClick={handleExportStaff}
+            disabled={loading || exporting}
+            label="Export"
+            title="Export staff roster to CSV (current filters)"
+            className="w-full sm:w-auto"
+          />
+          <Button type="button" variant="brand" onClick={openCreate} className="w-full sm:w-auto">
+            <Plus className="size-4" />
+            Add Staff
+          </Button>
+        </>
       )
     }
 

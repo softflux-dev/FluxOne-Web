@@ -5,6 +5,7 @@ import {
   patchStaffStatus,
   removeStaff,
   staffDetail,
+  staffExport,
   staffList,
 } from './staff.controller.js'
 import { asyncHandler } from '../../../middlewares/error.middleware.js'
@@ -13,6 +14,7 @@ import { upload } from '../../../middlewares/upload.middleware.js'
 import { validate } from '../../../middlewares/validate.middleware.js'
 import {
   createStaffSchema,
+  exportStaffSchema,
   listStaffSchema,
   staffIdParamsSchema,
   updateStaffSchema,
@@ -22,6 +24,13 @@ import {
 const router = Router()
 
 router.get('/', requirePermission('staff:read'), validate(listStaffSchema), asyncHandler(staffList))
+// /export before /:id so "export" is not parsed as a UUID
+router.get(
+  '/export',
+  requirePermission('staff:read'),
+  validate(exportStaffSchema),
+  asyncHandler(staffExport),
+)
 router.post(
   '/',
   requirePermission('staff:write'),

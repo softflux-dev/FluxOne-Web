@@ -158,17 +158,12 @@ function mapPgUniqueViolation(err, message) {
   throw err
 }
 
-export async function listStaff(tenantId, filters = {}) {
-  const page = Math.max(1, Number(filters.page) || 1)
-  const limit = Math.min(50, Math.max(1, Number(filters.limit) || 8))
-  const offset = (page - 1) * limit
-
-  // STF-XXXXXXXX display refs are UI-only — match via compact UUID hex
+// Shared list/export filters — STF refs are UI-only (match via compact UUID hex)
+function staffListFilterParams(filters = {}) {
   const q = normalizeSearchQuery(filters.q) || null
   const qHex = q ? displayRefSearchHex(q, 'STF') : null
   const hardwareType = filters.hardwareType || filters.type || null
-
-  const params = [
+  return [
     q,
     qHex,
     filters.designationId || null,
@@ -177,18 +172,10 @@ export async function listStaff(tenantId, filters = {}) {
     filters.role || null,
     hardwareType,
   ]
+}
 
-  const { rows: countRows } = await tenantQuery(
-    tenantId,
-    `
-      SELECT count(*)::int AS total
-      FROM staff s
-      JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
-      JOIN roles r ON r.id = u.role_id
-      LEFT JOIN branch_hardware hw
-        ON hw.tenant_id = s.tenant_id
-       AND hw.id::text = s.hardware_device_id
-      WHERE s.tenant_id = $1
+// Shared WHERE for paginated list + unpaginated export ($1 = tenantId via tenantQuery)
+const staffListWhereSql = `
         AND r.slug IN (${CREATABLE_STAFF_ROLE_SQL})
         AND (
           $2::text IS NULL
@@ -205,6 +192,26 @@ export async function listStaff(tenantId, filters = {}) {
         AND ($6::uuid IS NULL OR s.branch_id = $6)
         AND ($7::text IS NULL OR r.slug = $7)
         AND ($8::text IS NULL OR hw.type = $8)
+`
+
+export async function listStaff(tenantId, filters = {}) {
+  const page = Math.max(1, Number(filters.page) || 1)
+  const limit = Math.min(50, Math.max(1, Number(filters.limit) || 8))
+  const offset = (page - 1) * limit
+  const params = staffListFilterParams(filters)
+
+  const { rows: countRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT count(*)::int AS total
+      FROM staff s
+      JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+      JOIN roles r ON r.id = u.role_id
+      LEFT JOIN branch_hardware hw
+        ON hw.tenant_id = s.tenant_id
+       AND hw.id::text = s.hardware_device_id
+      WHERE s.tenant_id = $1
+      ${staffListWhereSql}
     `,
     params,
   )
@@ -222,22 +229,7 @@ export async function listStaff(tenantId, filters = {}) {
        AND hw.id::text = s.hardware_device_id
       ${staffAllocationJoin}
       WHERE s.tenant_id = $1
-        AND r.slug IN (${CREATABLE_STAFF_ROLE_SQL})
-        AND (
-          $2::text IS NULL
-          OR u.full_name ILIKE '%' || $2 || '%'
-          OR u.email ILIKE '%' || $2 || '%'
-          OR s.id::text ILIKE '%' || $2 || '%'
-          OR (
-            $3::text IS NOT NULL
-            AND REPLACE(LOWER(s.id::text), '-', '') ILIKE '%' || $3 || '%'
-          )
-        )
-        AND ($4::uuid IS NULL OR s.designation_id = $4)
-        AND ($5::text IS NULL OR s.status = $5)
-        AND ($6::uuid IS NULL OR s.branch_id = $6)
-        AND ($7::text IS NULL OR r.slug = $7)
-        AND ($8::text IS NULL OR hw.type = $8)
+      ${staffListWhereSql}
       ORDER BY COALESCE(s.joined_at, s.created_at) DESC, u.full_name
       LIMIT $9 OFFSET $10
     `,
@@ -245,6 +237,35 @@ export async function listStaff(tenantId, filters = {}) {
   )
 
   return { items: rows.map(mapStaffRow), total: countRows[0]?.total || 0, page, limit }
+}
+
+// Full filtered roster for CSV export (same filters as list — no pagination)
+const STAFF_EXPORT_MAX = 5000
+
+export async function listStaffForExport(tenantId, filters = {}) {
+  const params = staffListFilterParams(filters)
+
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT ${staffSelect}
+      FROM staff s
+      JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+      JOIN roles r ON r.id = u.role_id
+      LEFT JOIN designations d ON d.id = s.designation_id AND d.tenant_id = s.tenant_id
+      LEFT JOIN branch_hardware hw
+        ON hw.tenant_id = s.tenant_id
+       AND hw.id::text = s.hardware_device_id
+      ${staffAllocationJoin}
+      WHERE s.tenant_id = $1
+      ${staffListWhereSql}
+      ORDER BY COALESCE(s.joined_at, s.created_at) DESC, u.full_name
+      LIMIT $9
+    `,
+    [...params, STAFF_EXPORT_MAX],
+  )
+
+  return rows.map(mapStaffRow)
 }
 
 export async function getStaffById(tenantId, id, { branchId } = {}) {
@@ -474,7 +495,7 @@ export async function createStaffUser(tenantId, payload) {
       return getStaffByIdInTx(client, tenantId, staffId)
     })
   } catch (err) {
-    mapPgUniqueViolation(err, 'A user with this email already exists')
+    mapPgUniqueViolation(err, 'A user with this Login ID/Email already exists')
   }
 }
 
@@ -734,7 +755,7 @@ export async function updateStaff(tenantId, id, payload, { branchId } = {}) {
       return getStaffByIdInTx(client, tenantId, id, { branchId })
     })
   } catch (err) {
-    mapPgUniqueViolation(err, 'A user with this email already exists')
+    mapPgUniqueViolation(err, 'A user with this Login ID/Email already exists')
   }
 }
 

@@ -510,7 +510,7 @@ export function StaffFormDialog({
                 className={fieldErrorClass(fieldErrors.email)}
               />
               <FieldError message={fieldErrors.email} />
-              <p className="text-xs text-slate-500">Used with password at login (maps to API email).</p>
+              <p className="text-xs text-slate-500">Used with password to log in.</p>
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
