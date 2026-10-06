@@ -20,6 +20,7 @@ import { ROLE_IDS, ROLES, BCRYPT_COST } from '../../../config/constants.js'
 import { fail, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
+import { reallocateStaffHardware } from './hardwareAllocation.model.js'
 
 function bmBranchFilter(req) {
   if (req.user?.role === ROLES.BRANCH_MANAGER) {
@@ -160,6 +161,26 @@ export async function patchStaffStatus(req, res) {
   )
   if (!row) return fail(res, 'Staff not found', 404)
   return success(res, row)
+}
+
+export async function reallocateHardware(req, res) {
+  const existing = await getStaffById(req.tenantId, req.validated.params.id, {
+    branchId: bmBranchFilter(req),
+  })
+  if (!existing) return fail(res, 'Staff not found', 404)
+  assertStaffBranchAccess(req, existing)
+
+  try {
+    const data = await reallocateStaffHardware(req.tenantId, existing.id, {
+      hardwareDeviceId: req.validated.body.hardwareDeviceId,
+      hardwareAllocationStart: req.validated.body.hardwareAllocationStart || null,
+      hardwareAllocationEnd: req.validated.body.hardwareAllocationEnd || null,
+    })
+    return success(res, data)
+  } catch (err) {
+    if (err.status) return fail(res, err.message, err.status)
+    throw err
+  }
 }
 
 export async function removeStaff(req, res) {

@@ -35,6 +35,14 @@ import { salesList, processRefund } from './sales/sales.controller.js'
 import { getDiscounts, addDiscount, editDiscount, removeDiscount } from './discounts/discounts.controller.js'
 import { addStockRequest, stockRequestList } from './stock/stock_request.controller.js'
 import {
+  getBranchStockPriceRule,
+  patchBranchStockPriceRule,
+} from '../inventory-manager/control/control.controller.js'
+import {
+  branchPriceRulePatchSchema,
+  priceRuleSchema,
+} from '../inventory-manager/control/control.validator.js'
+import {
   hardwareList,
   hardwareCreate,
   hardwareUpdate,
@@ -388,6 +396,20 @@ router.delete(
   requirePermission('resources:write'),
   validate(variantValueIdParamsSchema),
   asyncHandler(variantValuesRemove),
+)
+
+// Stock Control Price — BM Inventory Monitoring toggle.
+router.get(
+  '/inventory/price-rule',
+  requirePermission('items:read'),
+  validate(priceRuleSchema),
+  asyncHandler(getBranchStockPriceRule),
+)
+router.patch(
+  '/inventory/price-rule',
+  requirePermission('items:write'),
+  validate(branchPriceRulePatchSchema),
+  asyncHandler(patchBranchStockPriceRule),
 )
 
 // Stock Requests

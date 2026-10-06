@@ -113,11 +113,16 @@ export async function listHardware(
     workingDays = null,
     excludeStaffId = null,
     includeBusy = false,
+    includeInactive = false,
     forRole = null,
   } = {},
 ) {
   const search = q ? String(q).trim() : null
-  const activeFilter = active === null || active === undefined ? null : Boolean(active)
+  const activeFilter = includeInactive
+    ? null
+    : active === null || active === undefined
+      ? null
+      : Boolean(active)
   const days = normalizeWorkingDays(workingDays)
   const checkAvailability = Boolean(days.length && scheduleStart && scheduleEnd)
 
@@ -173,6 +178,7 @@ export async function listHardware(
     // IM: device is selectable only when nothing is allocated (exclusive lock).
     if (forRole === ROLES.INVENTORY_MANAGER) {
       const imFree = deviceHolders.length === 0
+      const blocker = deviceHolders[0] || null
       availability = {
         ...availability,
         available: imFree,
@@ -180,7 +186,36 @@ export async function listHardware(
         freeSlots: imFree
           ? [{ start: scheduleStart, end: scheduleEnd }]
           : [],
-        occupiedBy: imFree ? null : availability.occupiedBy || deviceHolders[0]?.staffName,
+        occupiedBy: imFree ? null : availability.occupiedBy || blocker?.staffName,
+        holder: imFree
+          ? null
+          : availability.holder ||
+            (blocker
+              ? {
+                  staffId: blocker.staffId,
+                  staffName: blocker.staffName,
+                  staffRole: blocker.staffRole,
+                  workingDays: blocker.workingDays,
+                  startTime: blocker.startTime,
+                  endTime: blocker.endTime,
+                }
+              : null),
+      }
+    }
+
+    if (hw.isActive === false) {
+      availability = {
+        ...availability,
+        available: false,
+        availability: 'inactive',
+        freeSlots: [],
+      }
+    } else if (hw.accessStatus === 'blocked') {
+      availability = {
+        ...availability,
+        available: false,
+        availability: 'locked_exclusive',
+        freeSlots: [],
       }
     }
 
@@ -193,6 +228,7 @@ export async function listHardware(
       lockMode: availability.mode,
       freeSlots: availability.freeSlots || [],
       occupiedIntervals: availability.occupiedIntervals || [],
+      holder: availability.holder || null,
     }
   })
 

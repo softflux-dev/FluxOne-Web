@@ -160,6 +160,16 @@ export const staffIdParamsSchema = z.object({
   params: idParams,
 })
 
+export const reallocateHardwareSchema = z.object({
+  body: z.object({
+    hardwareDeviceId: z.string().uuid(),
+    hardwareAllocationStart: optionalTime,
+    hardwareAllocationEnd: optionalTime,
+  }),
+  query: empty,
+  params: idParams,
+})
+
 export const updateStaffStatusSchema = z.object({
   body: z.object({
     status: staffStatusEnum,

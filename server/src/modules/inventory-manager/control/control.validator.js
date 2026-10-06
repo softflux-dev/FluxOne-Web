@@ -62,6 +62,7 @@ export const stockInSchema = z.object({
           scale: z.string().min(1),
           quantity: z.coerce.number().int().positive(),
           unitCost: z.coerce.number().int().nonnegative().optional(),
+          sellingPrice: z.coerce.number().nonnegative().optional(),
           expiresAt: z.coerce.date().optional(),
           reason: z.string().min(1).max(2000).optional(),
         }),
@@ -263,6 +264,14 @@ export const priceRuleSchema = z.object({
   body: empty,
   params: empty,
   query: empty,
+})
+
+export const branchPriceRulePatchSchema = z.object({
+  body: z.object({
+    updateAllStock: z.boolean(),
+  }),
+  query: empty,
+  params: empty,
 })
 
 export const patchPriceRuleSchema = z.object({

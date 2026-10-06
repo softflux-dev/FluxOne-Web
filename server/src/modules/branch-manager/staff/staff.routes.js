@@ -3,6 +3,7 @@ import {
   createStaff,
   patchStaff,
   patchStaffStatus,
+  reallocateHardware,
   removeStaff,
   staffDetail,
   staffExport,
@@ -17,6 +18,7 @@ import {
   exportStaffSchema,
   listStaffSchema,
   staffIdParamsSchema,
+  reallocateHardwareSchema,
   updateStaffSchema,
   updateStaffStatusSchema,
 } from './staff.validator.js'
@@ -50,6 +52,12 @@ router.patch(
   upload.single('image'),
   validate(updateStaffSchema),
   asyncHandler(patchStaff),
+)
+router.post(
+  '/:id/reallocate-hardware',
+  requirePermission('staff:write'),
+  validate(reallocateHardwareSchema),
+  asyncHandler(reallocateHardware),
 )
 router.patch(
   '/:id/status',

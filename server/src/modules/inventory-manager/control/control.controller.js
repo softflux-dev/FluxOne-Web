@@ -64,12 +64,16 @@ function updateByType(movementType) {
   }
 }
 
+// Adjustment and damaged deletes drop the log only. Stock stays until a new adjustment.
+const HISTORY_ONLY_DELETE = new Set([MOVEMENT_TYPES.ADJUSTMENT, MOVEMENT_TYPES.DAMAGED])
+
 function removeByType(movementType) {
   return async (req, res) => {
     try {
       const { tenantId, branchId } = resolveInventoryScope(req)
       const deleted = await deleteLedgerEvent(tenantId, req.validated.params.id, movementType, {
         branchId,
+        reverseOnHand: !HISTORY_ONLY_DELETE.has(movementType),
       })
       if (!deleted) return fail(res, 'Record not found', 404)
       return success(res, { deleted: true })
@@ -94,24 +98,10 @@ export async function getSummary(req, res) {
 }
 
 export const listStockIn = listByType(MOVEMENT_TYPES.IN)
+export const listStockOut = listByType(MOVEMENT_TYPES.OUT)
 export const listAdjustments = listByType(MOVEMENT_TYPES.ADJUSTMENT)
 export const listDamaged = listByType(MOVEMENT_TYPES.DAMAGED)
 export const listOthers = listByType(MOVEMENT_TYPES.OTHER)
-
-// Stock-out history: sales + damaged + expired (no manual create).
-export async function listStockOut(req, res) {
-  try {
-    const { tenantId, branchId } = resolveInventoryScope(req)
-    const result = await listLedger(tenantId, {
-      ...req.validated.query,
-      movementTypes: [MOVEMENT_TYPES.OUT, MOVEMENT_TYPES.DAMAGED, MOVEMENT_TYPES.EXPIRED],
-      branchId,
-    })
-    return success(res, paginatedResult(result.items, result))
-  } catch (err) {
-    return scopeError(res, err)
-  }
-}
 
 // Process past-due stock-in lots, then list expired history.
 export async function listExpired(req, res) {
@@ -292,14 +282,7 @@ export async function exportControl(req, res) {
     const filters = {
       ...query,
       branchId,
-      movementType:
-        movementType === MOVEMENT_TYPES.OUT
-          ? undefined
-          : movementType,
-      movementTypes:
-        movementType === MOVEMENT_TYPES.OUT
-          ? [MOVEMENT_TYPES.OUT, MOVEMENT_TYPES.DAMAGED, MOVEMENT_TYPES.EXPIRED]
-          : undefined,
+      movementType,
     }
     const rows = await exportLedgerRows(tenantId, filters)
     return success(res, { rows, exported: rows.length, movementType })
@@ -318,6 +301,31 @@ export async function importControl(req, res) {
       branchId,
     })
     return success(res, data)
+  } catch (err) {
+    return scopeError(res, err)
+  }
+}
+
+export async function getBranchStockPriceRule(req, res) {
+  try {
+    const data = await getPriceUtilizationRule(req.tenantId)
+    return success(res, {
+      priceRequiresStockUtilized: data.priceRequiresStockUtilized,
+      updateAllStock: !data.priceRequiresStockUtilized,
+    })
+  } catch (err) {
+    return scopeError(res, err)
+  }
+}
+
+export async function patchBranchStockPriceRule(req, res) {
+  try {
+    const keepOld = !req.validated.body.updateAllStock
+    const data = await setPriceUtilizationRule(req.tenantId, keepOld)
+    return success(res, {
+      priceRequiresStockUtilized: data.priceRequiresStockUtilized,
+      updateAllStock: !data.priceRequiresStockUtilized,
+    })
   } catch (err) {
     return scopeError(res, err)
   }

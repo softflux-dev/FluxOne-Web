@@ -74,13 +74,32 @@ function holderTimeRange(holder) {
   return { start, end, startMin: parseTimeToMinutes(start), endMin: parseTimeToMinutes(end) }
 }
 
+function holderSnapshot(holder) {
+  if (!holder) return null
+  const range = holderTimeRange(holder)
+  return {
+    staffId: holder.staffId || null,
+    staffName: holder.staffName || null,
+    staffRole: holder.staffRole || null,
+    workingDays: normalizeWorkingDays(holder.workingDays),
+    startTime: range.start || null,
+    endTime: range.end || null,
+  }
+}
+
 // Free slots valid on every employee working day (subtract all day-specific occupiers).
 export function computeFreeSlotsForCandidate(candidate, holders) {
   const days = normalizeWorkingDays(candidate.workingDays)
   const shiftStart = parseTimeToMinutes(candidate.scheduleStart)
   const shiftEnd = parseTimeToMinutes(candidate.scheduleEnd)
   if (!days.length || shiftStart == null || shiftEnd == null || shiftStart >= shiftEnd) {
-    return { freeSlots: [], occupiedIntervals: [], availability: 'unavailable', available: false }
+    return {
+      freeSlots: [],
+      occupiedIntervals: [],
+      availability: 'unavailable',
+      available: false,
+      holder: null,
+    }
   }
 
   const exclusive = holders.find((h) => isExclusiveHardwareMode(h.mode))
@@ -99,12 +118,14 @@ export function computeFreeSlotsForCandidate(candidate, holders) {
       occupiedBy: exclusive.staffName || 'Inventory Manager',
       occupiedSlot: exclusive.slotLabel || null,
       mode: HARDWARE_MODES.EXCLUSIVE,
+      holder: holderSnapshot(exclusive),
     }
   }
 
   const shiftWindow = { start: shiftStart, end: shiftEnd }
   let freeAcrossDays = [{ start: shiftStart, end: shiftEnd }]
   const occupiedIntervals = []
+  let primaryHolder = null
 
   for (const day of days) {
     const dayOccupied = []
@@ -114,6 +135,7 @@ export function computeFreeSlotsForCandidate(candidate, holders) {
       if (startMin == null || endMin == null) continue
       if (!timesOverlap(candidate.scheduleStart, candidate.scheduleEnd, start, end)) continue
       dayOccupied.push({ start: startMin, end: endMin })
+      if (!primaryHolder) primaryHolder = holderSnapshot(h)
       occupiedIntervals.push({
         start: minutesToTimeLabel(Math.max(shiftStart, startMin)),
         end: minutesToTimeLabel(Math.min(shiftEnd, endMin)),
@@ -165,6 +187,7 @@ export function computeFreeSlotsForCandidate(candidate, holders) {
       ? occupiedUnique.map((o) => `${o.start}–${o.end}`).join(' · ')
       : null,
     mode: availability === 'partial' ? HARDWARE_MODES.SHARED : null,
+    holder: primaryHolder,
   }
 }
 

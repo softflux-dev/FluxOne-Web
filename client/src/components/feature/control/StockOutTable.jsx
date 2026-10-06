@@ -17,7 +17,7 @@ export function StockOutTable({
   return (
     <MovementHistoryTable
       title="Stock out history"
-      description="Inventory leaving stock via sales and related outbound movements"
+      description="Outgoing stock recorded automatically when items are sold"
       items={items}
       loading={loading}
       pagination={pagination}
@@ -34,7 +34,7 @@ export function StockOutTable({
         />
       )}
       emptyTitle="No stock-out records"
-      emptyHint="POS sales and outbound movements appear here automatically."
+      emptyHint="Sales stock-out records appear here automatically."
       className={className}
     />
   )

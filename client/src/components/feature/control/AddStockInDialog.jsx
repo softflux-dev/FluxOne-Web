@@ -69,6 +69,7 @@ function emptyDraft() {
     scale: 'unit',
     quantity: '1',
     unitCost: '',
+    sellingPrice: '',
     expiresAt: '',
   }
 }
@@ -236,6 +237,10 @@ export function AddStockInDialog({
           draft.unitCost === '' || draft.unitCost == null
             ? undefined
             : Number(draft.unitCost),
+        sellingPrice:
+          draft.sellingPrice === '' || draft.sellingPrice == null
+            ? undefined
+            : Number(draft.sellingPrice),
         expiresAt: draft.expiresAt || undefined,
       },
     ])
@@ -295,6 +300,7 @@ export function AddStockInDialog({
         scale: row.scale,
         quantity: row.quantity,
         unitCost: row.unitCost,
+        sellingPrice: row.sellingPrice,
         expiresAt: row.expiresAt,
       })),
     }
@@ -462,6 +468,14 @@ export function AddStockInDialog({
                   className={fieldErrorClass(fieldErrors.quantity)}
                 />
                 <FieldError message={fieldErrors.quantity} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Selling price (optional)</Label>
+                <WholeNumberInput
+                  min={0}
+                  value={draft.sellingPrice}
+                  onChange={(e) => patchDraft('sellingPrice', e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Unit cost (optional)</Label>

@@ -38,6 +38,7 @@ export async function hardwareList(req, res) {
       workingDays: req.validated.query.workingDays || null,
       excludeStaffId: req.validated.query.excludeStaffId || null,
       includeBusy: req.validated.query.includeBusy ?? false,
+      includeInactive: req.validated.query.includeInactive ?? false,
       forRole: req.validated.query.forRole || null,
     })
     return success(res, rows)

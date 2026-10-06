@@ -17,6 +17,8 @@ function availabilityLabel(device) {
       return 'Not available'
     case 'locked_exclusive':
       return 'Locked'
+    case 'inactive':
+      return 'Inactive'
     default:
       return device.available ? 'Available' : 'Not available'
   }
@@ -47,17 +49,21 @@ export function HardwareAvailabilityBoard({
   onSelectDevice,
   onSelectSlot,
   onClearSelection,
+  onUnavailable,
 }) {
   const mode = hardwareModeForRole(role)
   const showSlotPicker = mode === HARDWARE_MODES.SHARED
 
+  const query = search.trim().toLowerCase()
   const filtered = devices.filter((d) => {
     if (hardwareType && d.type !== hardwareType) return false
-    if (!search.trim()) return true
-    const q = search.trim().toLowerCase()
+    const selectable =
+      d.available || d.availability === 'partial' || (Array.isArray(d.freeSlots) && d.freeSlots.length > 0)
+    if (!query && !selectable) return false
+    if (!query) return true
     return (
-      String(d.name || '').toLowerCase().includes(q) ||
-      String(d.code || '').toLowerCase().includes(q)
+      String(d.name || '').toLowerCase().includes(query) ||
+      String(d.code || '').toLowerCase().includes(query)
     )
   })
 
@@ -156,6 +162,12 @@ export function HardwareAvailabilityBoard({
                   {device.occupiedSlot ? (
                     <p className="text-xs text-slate-500">Busy: {device.occupiedSlot}</p>
                   ) : null}
+                  {!selectable && device.holder?.staffName ? (
+                    <p className="text-xs text-amber-800">
+                      Unavailable — assigned to {device.holder.staffName}
+                      {device.occupiedSlot ? ` · ${device.occupiedSlot}` : ''}
+                    </p>
+                  ) : null}
                   {device.availability === 'available' && device.freeSlots?.[0] ? (
                     <p className="text-xs text-emerald-700">
                       Available: {formatSlotLabel(device.freeSlots[0].start, device.freeSlots[0].end)}
@@ -174,8 +186,15 @@ export function HardwareAvailabilityBoard({
                   type="button"
                   size="sm"
                   variant={isSelected ? 'brand' : 'outline'}
-                  disabled={!selectable}
-                  onClick={() => onSelectDevice?.(device)}
+                  aria-disabled={!selectable}
+                  className={!selectable ? 'opacity-60' : undefined}
+                  onClick={() => {
+                    if (!selectable) {
+                      onUnavailable?.(device)
+                      return
+                    }
+                    onSelectDevice?.(device)
+                  }}
                 >
                   {isSelected ? 'Selected' : 'Select'}
                 </Button>

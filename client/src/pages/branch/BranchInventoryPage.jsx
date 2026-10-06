@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
+import { Send, Settings2 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
@@ -28,6 +28,7 @@ import { CategoryLines } from '@/components/shared/CategoryLines'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { CATEGORY_ACTIVE_QUERY } from '@/lib/productCatalogCache'
 import { filterActiveCategories } from '@/lib/mapProduct'
+import { StockControlPriceDialog } from '@/components/feature/branch/inventory/StockControlPriceDialog'
 
 export function BranchInventoryPage() {
   const [products, setProducts] = useState([])
@@ -57,6 +58,7 @@ export function BranchInventoryPage() {
   const subcategories = categories.filter((c) => !!c.parentId)
 
   // Stock request dialog state
+  const [priceRuleOpen, setPriceRuleOpen] = useState(false)
   const [requestTarget, setRequestTarget] = useState(null)
   const [requiredQty, setRequiredQty] = useState(1)
   const [submitting, setSubmitting] = useState(false)
@@ -237,9 +239,17 @@ export function BranchInventoryPage() {
         <PageHeader
           eyebrow="Roster Inventory"
           title="Inventory Monitoring"
-          description="Monitor real-time shelf stock levels and send stock replenishment requests."
+          description="Monitor real-time shelf stock levels and manage price settings for new stock."
+          actions={
+            <Button type="button" variant="outline" onClick={() => setPriceRuleOpen(true)}>
+              <Settings2 className="size-4" />
+              Stock Control Price
+            </Button>
+          }
         />
       </MotionHeader>
+
+      <StockControlPriceDialog open={priceRuleOpen} onOpenChange={setPriceRuleOpen} />
 
       {/* Category → Sub Category → Product → Variant → Clear Filters */}
       <MotionReveal delay={0.02}>

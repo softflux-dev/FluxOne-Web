@@ -17,6 +17,10 @@ import { FieldError } from '@/components/shared/FieldError'
 import { StaffScheduleFields } from '@/components/feature/branch/staff/StaffScheduleFields'
 import { StaffHardwareAssignFields } from '@/components/feature/branch/staff/StaffHardwareAssignFields'
 import {
+  HardwareReallocateDialog,
+  ResourceAssignedDialog,
+} from '@/components/feature/branch/staff/HardwareReallocateDialog'
+import {
   defaultStaffWorkingDays,
   getBranchHoursSoftWarning,
   isStaffScheduleReadyForHardware,
@@ -122,6 +126,8 @@ export function StaffFormDialog({
   const [hardwareSearch, setHardwareSearch] = useState('')
   // Bump to force availability reload after concurrent 409 (QA G4).
   const [availabilityTick, setAvailabilityTick] = useState(0)
+  const [blockedDevice, setBlockedDevice] = useState(null)
+  const [reallocateOpen, setReallocateOpen] = useState(false)
   const { fieldErrors, formError, setFormError, resetErrors, clearField, applyErrors } =
     useFieldErrors()
   const { captureBaseline, isDirty } = useFormBaseline(open)
@@ -238,12 +244,13 @@ export function StaffFormDialog({
         scheduleEnd: form.scheduleEnd,
         workingDays: days.join(','),
       }
-      if (usesBoard) {
-        params.includeBusy = true
-        params.forRole = form.role
-      }
+      if (usesBoard) params.forRole = form.role
       if (form.hardwareType) params.type = form.hardwareType
-      if (hardwareSearch.trim()) params.q = hardwareSearch.trim()
+      if (hardwareSearch.trim()) {
+        params.q = hardwareSearch.trim()
+        params.includeBusy = true
+        params.includeInactive = true
+      }
       if (isEdit && initialStaff?.id) params.excludeStaffId = initialStaff.id
 
       const res = await apiClient.get(endpoints.branch.resources.hardware.list, params)
@@ -479,6 +486,7 @@ export function StaffFormDialog({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange} dirty={isDirty(form)}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
@@ -607,6 +615,10 @@ export function StaffFormDialog({
               onSelectDevice={handleSelectDevice}
               onSelectSlot={handleSelectSlot}
               onClearSelection={clearHardwareSelection}
+              onUnavailable={(device) => {
+                setReallocateOpen(false)
+                setBlockedDevice(device)
+              }}
               ids={{
                 hardwareType: FIELD_IDS.hardwareType,
                 hardwareDeviceId: FIELD_IDS.hardwareDeviceId,
@@ -640,5 +652,32 @@ export function StaffFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <ResourceAssignedDialog
+      open={Boolean(blockedDevice) && !reallocateOpen}
+      device={blockedDevice}
+      onOpenChange={(next) => {
+        if (!next) setBlockedDevice(null)
+      }}
+      onReallocate={() => setReallocateOpen(true)}
+    />
+    <HardwareReallocateDialog
+      open={reallocateOpen}
+      holder={blockedDevice?.holder}
+      onOpenChange={setReallocateOpen}
+      onReallocated={(result) => {
+        const freedId = result?.releasedHardwareId || blockedDevice?.id
+        setBlockedDevice(null)
+        setReallocateOpen(false)
+        if (freedId) {
+          setForm((prev) => ({
+            ...prev,
+            hardwareDeviceId: freedId,
+            hardwareSlotKey: '',
+          }))
+        }
+        setAvailabilityTick((tick) => tick + 1)
+      }}
+    />
+    </>
   )
 }

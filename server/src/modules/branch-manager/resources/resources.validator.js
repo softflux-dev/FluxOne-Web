@@ -46,6 +46,7 @@ export const listHardwareSchema = z.object({
     workingDays: optionalWorkingDaysQuery,
     excludeStaffId: optionalUuid,
     includeBusy: optionalBooleanQuery,
+    includeInactive: optionalBooleanQuery,
     forRole: staffRoleForHardwareEnum.optional(),
   }),
 })

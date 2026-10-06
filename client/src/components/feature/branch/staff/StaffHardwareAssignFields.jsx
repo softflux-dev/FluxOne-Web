@@ -27,6 +27,7 @@ export function StaffHardwareAssignFields({
   onSelectDevice,
   onSelectSlot,
   onClearSelection,
+  onUnavailable,
   ids = {
     hardwareType: 'staff-hardware-type',
     hardwareDeviceId: 'staff-hardware',
@@ -71,6 +72,7 @@ export function StaffHardwareAssignFields({
             onSelectDevice={onSelectDevice}
             onSelectSlot={onSelectSlot}
             onClearSelection={onClearSelection}
+            onUnavailable={onUnavailable}
           />
           <FieldError message={fieldErrors.hardwareDeviceId} />
           <FieldError message={fieldErrors.hardwareSlotKey} />

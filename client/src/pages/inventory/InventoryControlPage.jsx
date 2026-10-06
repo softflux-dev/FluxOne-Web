@@ -66,6 +66,20 @@ const TABS_WITH_EDIT = new Set([
   MOVEMENT_TYPES.OTHER,
 ])
 
+// Matches server HISTORY_ONLY_DELETE — log removed, on-hand unchanged.
+const HISTORY_ONLY_DELETE = new Set([
+  MOVEMENT_TYPES.ADJUSTMENT,
+  MOVEMENT_TYPES.DAMAGED,
+])
+
+function deleteConfirmCopy(tab, row) {
+  const name = row?.productName || 'item'
+  if (HISTORY_ONLY_DELETE.has(tab)) {
+    return `Remove this ${tab} record for ${name}? On-hand stock stays unchanged. Record a new adjustment if the count needs correcting.`
+  }
+  return `Remove this ${tab} entry for ${name}? On-hand stock will be reversed.`
+}
+
 const TABS_WITH_IMPORT = new Set([
   MOVEMENT_TYPES.IN,
   MOVEMENT_TYPES.ADJUSTMENT,
@@ -222,6 +236,10 @@ export function InventoryControlPage() {
           scale: payload.scale || 'unit',
           quantity: payload.quantity,
           unitCost,
+          sellingPrice:
+            payload.sellingPrice == null || Number.isNaN(Number(payload.sellingPrice))
+              ? undefined
+              : Number(payload.sellingPrice),
           reason: payload.reason || payload.notes || undefined,
         },
       ],
@@ -247,7 +265,13 @@ export function InventoryControlPage() {
         productPatch,
       )
       if (!patchRes.success) {
-        toastError(patchRes.error || 'Stock added, but price/tax update failed')
+        const message = String(patchRes.error || '')
+        const keptOldPrice = /utilized|previous stock/i.test(message)
+        if (keptOldPrice) {
+          toastSuccess('Stock added. Existing units keep their price until they sell out.')
+        } else {
+          toastError(message || 'Stock added, but price/tax update failed')
+        }
         setUpdateStockTarget(null)
         return { success: true }
       }
@@ -647,11 +671,7 @@ export function InventoryControlPage() {
             if (!open) setDeleteTarget(null)
           }}
           title="Delete this record?"
-          description={
-            deleteTarget
-              ? `Remove this ${tab} entry for ${deleteTarget.productName || 'item'}? On-hand stock will be reversed.`
-              : undefined
-          }
+          description={deleteTarget ? deleteConfirmCopy(tab, deleteTarget) : undefined}
           confirmLabel="Delete"
           loading={mutating}
           onConfirm={handleConfirmDelete}

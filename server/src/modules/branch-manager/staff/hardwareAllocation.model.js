@@ -1,4 +1,4 @@
-import { tenantClientQuery, tenantQuery } from '../../../config/db.js'
+import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
 import {
   HARDWARE_MODES,
   hardwareModeForRole,
@@ -348,6 +348,95 @@ export async function upsertStaffHardwareAllocation(
   return mapAllocationRow(rows[0])
 }
 
+// Swap the holder's device in place. The old device stays assigned until the replacement is saved.
+export async function reallocateStaffHardware(
+  tenantId,
+  staffId,
+  { hardwareDeviceId, hardwareAllocationStart = null, hardwareAllocationEnd = null },
+) {
+  return withTransaction(async (client) => {
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT
+          s.id,
+          s.branch_id AS "branchId",
+          s.schedule_start AS "scheduleStart",
+          s.schedule_end AS "scheduleEnd",
+          s.working_days AS "workingDays",
+          r.slug AS role
+        FROM staff s
+        JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+        JOIN roles r ON r.id = u.role_id
+        WHERE s.tenant_id = $1 AND s.id = $2
+        FOR UPDATE OF s
+      `,
+      [staffId],
+    )
+    const staff = rows[0]
+    if (!staff) throw httpError(404, 'Staff not found')
+
+    const current = await getActiveAllocationForStaff(client, tenantId, staffId)
+    if (!current) {
+      throw httpError(409, 'This employee has no active hardware to reallocate')
+    }
+    if (String(current.hardwareId) === String(hardwareDeviceId)) {
+      throw httpError(400, 'Choose a different hardware device')
+    }
+
+    await assertHardwareAllocationAvailable(client, tenantId, {
+      branchId: staff.branchId,
+      hardwareDeviceId,
+      role: staff.role,
+      workingDays: staff.workingDays,
+      scheduleStart: staff.scheduleStart,
+      scheduleEnd: staff.scheduleEnd,
+      allocationStart: hardwareAllocationStart,
+      allocationEnd: hardwareAllocationEnd,
+      excludeStaffId: staffId,
+    })
+
+    const mode = hardwareModeForRole(staff.role)
+    const persistStart =
+      staff.role === ROLES.CASHIER ? hardwareAllocationStart : staff.scheduleStart
+    const persistEnd = staff.role === ROLES.CASHIER ? hardwareAllocationEnd : staff.scheduleEnd
+
+    const { rowCount } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        UPDATE hardware_allocations
+        SET hardware_id = $3::uuid,
+            start_time = $4::time,
+            end_time = $5::time,
+            mode = $6,
+            updated_at = now()
+        WHERE tenant_id = $1 AND id = $2 AND status = 'active'
+      `,
+      [current.id, hardwareDeviceId, persistStart, persistEnd, mode],
+    )
+    if (!rowCount) throw httpError(409, 'Could not reallocate hardware')
+
+    await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        UPDATE staff
+        SET hardware_device_id = $3
+        WHERE tenant_id = $1 AND id = $2
+      `,
+      [staffId, String(hardwareDeviceId)],
+    )
+
+    return {
+      staffId,
+      hardwareDeviceId,
+      releasedHardwareId: current.hardwareId,
+    }
+  })
+}
+
 // Availability for listHardware (partial slots + IM lock).
 export function classifyDeviceAvailability(candidate, holders) {
   const detail = computeFreeSlotsForCandidate(candidate, holders)
@@ -359,6 +448,7 @@ export function classifyDeviceAvailability(candidate, holders) {
     mode: detail.mode,
     freeSlots: detail.freeSlots,
     occupiedIntervals: detail.occupiedIntervals,
+    holder: detail.holder || null,
   }
 }
 

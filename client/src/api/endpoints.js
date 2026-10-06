@@ -73,6 +73,7 @@ export const endpoints = {
       detail: (id) => `/branch/staff/${id}`,
       update: (id) => `/branch/staff/${id}`,
       status: (id) => `/branch/staff/${id}/status`,
+      reallocate: (id) => `/branch/staff/${id}/reallocate-hardware`,
       delete: (id) => `/branch/staff/${id}`,
     },
     designations: {
@@ -120,6 +121,7 @@ export const endpoints = {
     activityLogs: {
       list: '/branch/activity-logs',
     },
+    priceRule: '/branch/inventory/price-rule',
   },
   products: {
     list: '/inventory/products',

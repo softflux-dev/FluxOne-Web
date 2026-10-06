@@ -1,5 +1,9 @@
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
 import { MOVEMENT_TYPES } from '../../../config/constants.js'
+import {
+  applyPriceLayersForMovement,
+  shouldKeepExistingStockPrice,
+} from './priceLayers.js'
 
 // products.quantity = company-wide on-hand.
 // branch_inventory = per-branch allocation (subset of total).
@@ -108,14 +112,46 @@ export async function assertPriceChangeAllowedForProduct(
   )
 }
 
-async function applyPurchaseSnapshot(client, tenantId, { productId, supplierId, unitCost }) {
+async function applyPurchaseSnapshot(
+  client,
+  tenantId,
+  { productId, supplierId, unitCost, addedQty = 0 },
+) {
   if (unitCost == null && !supplierId) return
 
-  // Gate purchase snapshot when leftover stock exists and setting is on.
-  if (unitCost != null) {
-    await assertPriceChangeAllowed(client, tenantId, productId, {
-      purchasePrice: unitCost,
-    })
+  // Keep-old: do not overwrite the active purchase price while older units remain.
+  let skipPrice = false
+  if (unitCost != null && (await shouldKeepExistingStockPrice(client, tenantId))) {
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT quantity, purchase_price AS "purchasePrice"
+        FROM products
+        WHERE tenant_id = $1 AND id = $2
+      `,
+      [productId],
+    )
+    const onHand = Number(rows[0]?.quantity) || 0
+    const previous = onHand - Number(addedQty || 0)
+    if (previous > 0 && Number(unitCost) !== Number(rows[0]?.purchasePrice)) {
+      skipPrice = true
+    }
+  }
+
+  if (skipPrice) {
+    if (!supplierId) return
+    await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        UPDATE products
+        SET current_purchase_supplier_id = $3
+        WHERE tenant_id = $1 AND id = $2
+      `,
+      [productId, supplierId],
+    )
+    return
   }
 
   await tenantClientQuery(
@@ -647,9 +683,7 @@ export async function getControlSummary(tenantId, filters = {}) {
     `
       SELECT
         count(*) FILTER (WHERE l.movement_type = 'in')::int AS "in",
-        count(*) FILTER (
-          WHERE l.movement_type IN ('out', 'damaged', 'expired')
-        )::int AS "out",
+        count(*) FILTER (WHERE l.movement_type = 'out')::int AS "out",
         count(*) FILTER (WHERE l.movement_type = 'adjustment')::int AS "adjustment",
         count(*) FILTER (WHERE l.movement_type = 'damaged')::int AS "damaged",
         count(*) FILTER (WHERE l.movement_type = 'expired')::int AS "expired",
@@ -888,7 +922,14 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
     ],
   )
 
-  await applyOnHand(client, tenantId, event.productId, onHandDelta(event.movementType, event.quantity))
+  const handDelta = onHandDelta(event.movementType, event.quantity)
+  await applyOnHand(client, tenantId, event.productId, handDelta)
+  await applyPriceLayersForMovement(client, tenantId, {
+    productId: event.productId,
+    delta: handDelta,
+    sellingPrice: event.sellingPrice ?? null,
+    purchasePrice: event.unitCost ?? null,
+  })
 
   // Stock-in received at a branch: allocate to branch_inventory (company total already bumped)
   if (event.movementType === MOVEMENT_TYPES.IN && destinationBranchId && !event.posEventId) {
@@ -900,6 +941,7 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
       productId: event.productId,
       supplierId: event.supplierId,
       unitCost: event.unitCost,
+      addedQty: Math.abs(qty),
     })
   }
 
@@ -1015,6 +1057,10 @@ export async function updateLedgerEvent(
     )
     const updated = rows[0]
     await applyOnHand(client, tenantId, existing.productId, delta)
+    await applyPriceLayersForMovement(client, tenantId, {
+      productId: existing.productId,
+      delta,
+    })
 
     // Reverse/apply branch allocation when stock-in was received at a branch
     if (existing.toBranchId && 'quantity' in payload) {
@@ -1034,11 +1080,12 @@ export async function updateLedgerEvent(
   })
 }
 
+// reverseOnHand false drops the log only. On-hand stays until a new adjustment.
 export async function deleteLedgerEvent(
   tenantId,
   id,
   expectedMovementType = null,
-  { branchId = null } = {},
+  { branchId = null, reverseOnHand = true } = {},
 ) {
   return withTransaction(async (client) => {
     const existing = await getLedgerById(tenantId, id, client, { branchId })
@@ -1047,10 +1094,15 @@ export async function deleteLedgerEvent(
       return false
     }
 
-    const reverseDelta = -onHandDelta(existing.movementType, existing.quantity)
-    await lockProduct(client, tenantId, existing.productId)
-    if (reverseDelta < 0) {
-      await assertSufficientStock(client, tenantId, existing.productId, Math.abs(reverseDelta))
+    const reverseDelta = reverseOnHand
+      ? -onHandDelta(existing.movementType, existing.quantity)
+      : 0
+
+    if (reverseOnHand) {
+      await lockProduct(client, tenantId, existing.productId)
+      if (reverseDelta < 0) {
+        await assertSufficientStock(client, tenantId, existing.productId, Math.abs(reverseDelta))
+      }
     }
 
     const { rowCount } = await tenantClientQuery(
@@ -1059,8 +1111,12 @@ export async function deleteLedgerEvent(
       `DELETE FROM inventory_ledger WHERE tenant_id = $1 AND id = $2`,
       [id],
     )
-    if (rowCount > 0) {
+    if (rowCount > 0 && reverseOnHand) {
       await applyOnHand(client, tenantId, existing.productId, reverseDelta)
+      await applyPriceLayersForMovement(client, tenantId, {
+        productId: existing.productId,
+        delta: reverseDelta,
+      })
       if (existing.toBranchId && existing.movementType === MOVEMENT_TYPES.IN) {
         await adjustBranchInventory(
           client,
