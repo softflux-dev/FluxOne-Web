@@ -603,7 +603,7 @@ export async function ingestRefundEvent(client, tenantId, syncEvent, userId) {
 }
 
 // POS Items Rate → cloud products.selling_price (Policy A: branch-scoped product row).
-// Final Price is derived on read (selling × discount × offer × tax) — no stored final column.
+// Final Price is derived on read (selling × discount/offer once × tax) — no stored final column.
 export async function ingestProductPriceUpdate(client, tenantId, syncEvent) {
   const parsed = validateProductPricePayload(syncEvent.payload)
   if (!parsed.success) {

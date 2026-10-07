@@ -18,6 +18,7 @@ import { useProducts } from '@/hooks/useProducts'
 import {
   ADD_ITEM_TABS,
   PRODUCT_KIND,
+  assertSellingGtePurchase,
   buildCombinations,
   buildEditItemApiPayload,
   combinationMatchKey,
@@ -49,6 +50,9 @@ function emptyForm() {
     openingStock: '0',
     lowStockThreshold: '',
     dailyPriceChange: false,
+    offerId: '',
+    discountPercent: '',
+    offerName: '',
     status: 'active',
     image: null,
     imageUrl: null,
@@ -164,8 +168,7 @@ export function EditItemPage() {
       }
       const product = result.data || {}
       if (product.type === PRODUCT_TYPES.BUNDLE) {
-        toastInfo('Bundles are edited from the products catalog modal.')
-        navigate(PATHS.inventory.products)
+        navigate(PATHS.inventory.bundlesEdit(product.id))
         return
       }
       if (product.parentId) {
@@ -199,6 +202,12 @@ export function EditItemPage() {
             ? String(product.reorderPoint)
             : '',
         dailyPriceChange: Boolean(product.dailyPriceChange),
+        offerId: product.offerId || '',
+        discountPercent:
+          product.discountPercent === 0 || product.discountPercent
+            ? String(Math.round(Number(product.discountPercent)))
+            : '',
+        offerName: product.offerName || '',
         status: product.status === 'inactive' ? 'inactive' : 'active',
         image: null,
         imageUrl: product.imageUrl || null,
@@ -281,6 +290,9 @@ export function EditItemPage() {
 
   function patch(field, value) {
     setForm((prev) => {
+      if (field && typeof field === 'object' && value === undefined) {
+        return { ...prev, ...field }
+      }
       const next = { ...prev, [field]: value }
       if (field === 'categoryId') next.subcategoryId = ''
       return next
@@ -333,6 +345,8 @@ export function EditItemPage() {
         if (row.purchasePrice === '' || row.sellingPrice === '') {
           return `Fill purchase & selling price for active row “${row.label}”`
         }
+        const priceErr = assertSellingGtePurchase(row.purchasePrice, row.sellingPrice)
+        if (priceErr) return `“${row.label}”: ${priceErr}`
       }
       if (!combinations.some((r) => r.status === 'active')) {
         return 'At least one active combination is required'
@@ -342,6 +356,8 @@ export function EditItemPage() {
       if (form.purchasePrice === '' || form.sellingPrice === '') {
         return 'Purchase and selling price are required'
       }
+      const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
+      if (priceErr) return priceErr
     }
     return null
   }
@@ -398,6 +414,7 @@ export function EditItemPage() {
         form,
         productKind: form.productKind,
         combinations,
+        offers: catalog.offers || [],
       })
       if (form.image) payload.image = form.image
       const result = await updateProduct(id, payload)
@@ -665,6 +682,7 @@ export function EditItemPage() {
               selectedKeys={selectedComboKeys}
               onSelectedKeysChange={setSelectedComboKeys}
               stockMode="edit"
+              offers={catalog.offers || []}
             />
           ) : null}
 
@@ -690,7 +708,12 @@ export function EditItemPage() {
               </div>
 
               {isNormal ? (
-                <NormalProductFields form={form} patch={patch} stockMode="edit" />
+                <NormalProductFields
+                  form={form}
+                  patch={patch}
+                  stockMode="edit"
+                  offers={catalog.offers || []}
+                />
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm text-slate-600">

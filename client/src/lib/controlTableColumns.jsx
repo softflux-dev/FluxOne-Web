@@ -153,6 +153,13 @@ export function controlColumnsForTab(tab) {
   if (tab === MOVEMENT_TYPES.ADJUSTMENT) {
     return [
       ...shared,
+      {
+        key: 'ledgerKind',
+        label: 'Kind',
+        render: (row) => (
+          <span className="capitalize text-slate-700">{row.movementType || 'adjustment'}</span>
+        ),
+      },
       { key: 'type', label: 'Type', render: typeBadge },
       {
         key: 'qty',

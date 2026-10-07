@@ -39,7 +39,7 @@ export const NAV_BY_ROLE = {
     // { to: PATHS.branch.customer, label: 'Customer Management', end: false },
     { to: PATHS.branch.inventory, label: 'Inventory Monitoring', end: false },
     { to: PATHS.branch.resources, label: 'Resources', end: false },
-    // { to: PATHS.branch.discounts, label: 'Discounts', end: false },
+    { to: PATHS.branch.discounts, label: 'Discounts', end: false },
   ],
   [ROLES.INVENTORY_MANAGER]: INVENTORY_NAV,
   [ROLES.B2B_ADMIN]: ADMIN_NAV,

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAppDispatch, useAppSelector } from '@/rtk/hooks'
 import { asResult, catalogActiveOnly } from '@/rtk/asResult'
+import { CONTROL_UI_TAB } from '@/lib/controlTabs'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 import {
   CONTROL_PAGE_SIZE,
@@ -12,6 +13,7 @@ import {
   setControlPage,
   loadControlCatalog,
   fetchControlMovements,
+  fetchControlThresholds,
   fetchControlSummary,
   createMovement as createMovementThunk,
   updateMovement as updateMovementThunk,
@@ -92,13 +94,22 @@ export function useInventoryControl(movementType, initialFilters = EMPTY_FILTERS
 
   useEffect(() => {
     if (!movementType) return
-    void dispatch(
-      fetchControlMovements({
-        movementType,
-        filters: bucketFilters,
-        globalFilters,
-      }),
-    )
+    if (movementType === CONTROL_UI_TAB.THRESHOLDS) {
+      void dispatch(
+        fetchControlThresholds({
+          filters: bucketFilters,
+          globalFilters,
+        }),
+      )
+    } else {
+      void dispatch(
+        fetchControlMovements({
+          movementType,
+          filters: bucketFilters,
+          globalFilters,
+        }),
+      )
+    }
     // filtersKey serializes globalFilters + bucketFilters (page/limit)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional serialized key
   }, [dispatch, movementType, filtersKey])
@@ -142,6 +153,13 @@ export function useInventoryControl(movementType, initialFilters = EMPTY_FILTERS
     (body) =>
       asResult(dispatch(createMovementThunk({ movementType, body })).unwrap()),
     [dispatch, movementType],
+  )
+
+  // Post to a specific ledger bucket (e.g. damaged from Add Adjustment).
+  const createMovementForType = useCallback(
+    (targetType, body) =>
+      asResult(dispatch(createMovementThunk({ movementType: targetType, body })).unwrap()),
+    [dispatch],
   )
 
   // Always posts to stock-in regardless of active tab (global Add Stock In CTA).
@@ -199,17 +217,25 @@ export function useInventoryControl(movementType, initialFilters = EMPTY_FILTERS
     clearFilters,
     setPage,
     reload: () =>
-      dispatch(
-        fetchControlMovements({
-          movementType,
-          filters: bucketFilters,
-          globalFilters,
-        }),
-      ),
+      movementType === CONTROL_UI_TAB.THRESHOLDS
+        ? dispatch(
+            fetchControlThresholds({
+              filters: bucketFilters,
+              globalFilters,
+            }),
+          )
+        : dispatch(
+            fetchControlMovements({
+              movementType,
+              filters: bucketFilters,
+              globalFilters,
+            }),
+          ),
     reloadSummary: () => dispatch(fetchControlSummary({ globalFilters })),
     loadCatalog: ({ force = false } = {}) =>
       dispatch(loadControlCatalog({ force })).unwrap(),
     createMovement,
+    createMovementForType,
     createStockIn,
     updateMovement,
     deleteMovement,

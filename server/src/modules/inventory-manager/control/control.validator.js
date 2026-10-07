@@ -21,11 +21,20 @@ const optionalText = z.preprocess(
   z.string().optional(),
 )
 
+// Scale optional — SKU is selected via product / variant axes; server defaults from product.
+const optionalScale = z.preprocess(
+  (value) => (value === '' || value === null ? undefined : value),
+  z.string().min(1).optional(),
+)
+
+const ledgerKindEnum = z.enum(['adjustment', 'damaged', 'expired', 'other'])
+
 export const listLedgerSchema = z.object({
   body: empty,
   params: empty,
   query: catalogFilters.merge(paginationQuery).extend({
     movementType: z.string().optional(),
+    ledgerKind: ledgerKindEnum.optional(),
     productId: optionalUuid,
     from: optionalDateString,
     to: optionalDateString,
@@ -59,7 +68,7 @@ export const stockInSchema = z.object({
       .array(
         z.object({
           productId: z.string().uuid(),
-          scale: z.string().min(1),
+          scale: optionalScale,
           quantity: z.coerce.number().int().positive(),
           unitCost: z.coerce.number().int().nonnegative().optional(),
           sellingPrice: z.coerce.number().nonnegative().optional(),
@@ -85,7 +94,7 @@ export const stockMovementSchema = z.object({
   body: z.object({
     productId: z.string().uuid(),
     quantity: z.coerce.number().int(),
-    scale: z.string().min(1),
+    scale: optionalScale,
     reason: z.string().min(3).optional(),
     supplierId: z.string().uuid().optional(),
     damagedByUserId: z.string().uuid().optional(),
@@ -140,7 +149,7 @@ export const transferSchema = z.object({
     fromBranchId: z.string().uuid(),
     toBranchId: z.string().uuid(),
     quantity: z.coerce.number().int().positive(),
-    scale: z.string().min(1),
+    scale: optionalScale,
     reason: z.string().min(3).optional(),
   }),
   query: empty,
@@ -209,6 +218,7 @@ export const exportLedgerSchema = z.object({
   params: empty,
   query: catalogFilters.merge(
     z.object({
+      // adjustment = unified ledger (adjustment + damaged + expired + other)
       movementType: z.enum([
         'in',
         'out',
@@ -217,6 +227,7 @@ export const exportLedgerSchema = z.object({
         'expired',
         'other',
       ]),
+      ledgerKind: ledgerKindEnum.optional(),
       productId: optionalUuid,
       from: optionalDateString,
       to: optionalDateString,

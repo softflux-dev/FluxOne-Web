@@ -18,6 +18,7 @@ import { ComingSoonPage } from '@/pages/workspace/ComingSoonPage'
 import { DashboardPage as InventoryDashboardPage } from '@/pages/inventory/DashboardPage'
 import { ProductsPage } from '@/pages/inventory/ProductsPage'
 import { AddBundlePage } from '@/pages/inventory/AddBundlePage'
+import { EditBundlePage } from '@/pages/inventory/EditBundlePage'
 import { AddItemPage } from '@/pages/inventory/AddItemPage'
 import { EditItemPage } from '@/pages/inventory/EditItemPage'
 import { InventoryControlPage } from '@/pages/inventory/InventoryControlPage'
@@ -102,6 +103,7 @@ const router = createBrowserRouter([
               { path: 'products/new', element: <AddItemPage /> },
               { path: 'products/:id/edit', element: <EditItemPage /> },
               { path: 'bundles', element: <AddBundlePage /> },
+              { path: 'bundles/:id/edit', element: <EditBundlePage /> },
               { path: 'control', element: <InventoryControlPage /> },
               { path: 'suppliers', element: <SuppliersPage /> },
               { path: 'orders', element: <PurchaseOrdersPage /> },
@@ -133,7 +135,7 @@ const router = createBrowserRouter([
               // Phase 2 — restore when Reports module ships
               // { path: 'reports', element: <ReportsPage /> },
               { path: 'resources', element: <ResourcesPage /> },
-              // { path: 'discounts', element: <DiscountsPage /> },
+              { path: 'discounts', element: <DiscountsPage /> },
               { path: 'logs', element: <ActivityLogsPage /> },
               { path: 'notifications', element: <NotificationsPage /> },
               { path: 'profile', element: <ProfilePage /> },

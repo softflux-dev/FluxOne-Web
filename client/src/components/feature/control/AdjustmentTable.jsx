@@ -1,5 +1,7 @@
+import { Plus } from 'lucide-react'
 import { MovementHistoryTable } from '@/components/feature/control/MovementHistoryTable'
 import { MovementRowMenu } from '@/components/feature/control/MovementRowMenu'
+import { Button } from '@/components/ui/button'
 import { controlColumnsForTab } from '@/lib/controlTableColumns'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 
@@ -9,17 +11,20 @@ export function AdjustmentTable({
   pagination,
   onPageChange,
   onPageSizeChange,
-  onUpdateThreshold,
-  onUpdatePrice,
+  onAddAdjustment,
   onViewDetails,
-  onEdit,
-  onDelete,
   className,
 }) {
   return (
     <MovementHistoryTable
       title="Adjustment history"
-      description="Manual quantity corrections"
+      description="Manual corrections, damaged, expired, and other stock movements"
+      actions={
+        <Button type="button" variant="brand" onClick={onAddAdjustment}>
+          <Plus className="size-4" />
+          Add adjustment
+        </Button>
+      }
       items={items}
       loading={loading}
       pagination={pagination}
@@ -30,11 +35,7 @@ export function AdjustmentTable({
         <MovementRowMenu
           row={row}
           tab={MOVEMENT_TYPES.ADJUSTMENT}
-          onUpdateThreshold={onUpdateThreshold}
-          onUpdatePrice={onUpdatePrice}
           onViewDetails={onViewDetails}
-          onEdit={onEdit}
-          onDelete={onDelete}
         />
       )}
       emptyTitle="No adjustments"

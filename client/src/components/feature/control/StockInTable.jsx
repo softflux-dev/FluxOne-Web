@@ -1,5 +1,7 @@
+import { ClipboardList, Plus } from 'lucide-react'
 import { MovementHistoryTable } from '@/components/feature/control/MovementHistoryTable'
 import { MovementRowMenu } from '@/components/feature/control/MovementRowMenu'
+import { Button } from '@/components/ui/button'
 import { controlColumnsForTab } from '@/lib/controlTableColumns'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 
@@ -9,16 +11,32 @@ export function StockInTable({
   pagination,
   onPageChange,
   onPageSizeChange,
+  onAddStock,
+  onOrderDemand,
   onUpdateStock,
-  onUpdateThreshold,
-  onUpdatePrice,
   onViewDetails,
   className,
 }) {
+  const headerActions = (
+    <>
+      {onOrderDemand ? (
+        <Button type="button" variant="outline" className="cursor-pointer" onClick={onOrderDemand}>
+          <ClipboardList className="size-4" />
+          By Order Demand
+        </Button>
+      ) : null}
+      <Button type="button" variant="brand" onClick={onAddStock}>
+        <Plus className="size-4" />
+        Add Stock
+      </Button>
+    </>
+  )
+
   return (
     <MovementHistoryTable
       title="Stock in history"
       description="Inbound ledger movements for this company"
+      actions={headerActions}
       items={items}
       loading={loading}
       pagination={pagination}
@@ -30,8 +48,6 @@ export function StockInTable({
           row={row}
           tab={MOVEMENT_TYPES.IN}
           onUpdateStock={onUpdateStock}
-          onUpdateThreshold={onUpdateThreshold}
-          onUpdatePrice={onUpdatePrice}
           onViewDetails={onViewDetails}
         />
       )}

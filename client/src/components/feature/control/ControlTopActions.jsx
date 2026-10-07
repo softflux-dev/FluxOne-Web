@@ -3,7 +3,6 @@ import {
   ClipboardList,
   Download,
   Plus,
-  Settings2,
   Upload,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -44,7 +43,6 @@ export function ControlPrimaryAction({
 
 export function ControlSecondaryActions({
   alertCount = 0,
-  onManageThresholds,
   onStockAlerts,
   onExport,
   onImport,
@@ -55,17 +53,6 @@ export function ControlSecondaryActions({
 
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      <Button
-        type="button"
-        variant="outline"
-        className="cursor-pointer"
-        style={{ color: BRAND.deep }}
-        onClick={() => onManageThresholds?.()}
-      >
-        <Settings2 className="size-4" />
-        Manage Thresholds
-      </Button>
-
       <Button
         type="button"
         variant="outline"
@@ -111,9 +98,6 @@ export function ControlSecondaryActions({
 /** Combined chrome: primary + secondary (used when not splitting into PageHeader). */
 export function ControlTopActions({
   alertCount = 0,
-  onAddStockIn,
-  onOrderDemand,
-  onManageThresholds,
   onStockAlerts,
   onExport,
   onImport,
@@ -122,13 +106,8 @@ export function ControlTopActions({
 }) {
   return (
     <div className={cn('flex flex-col items-stretch gap-3 sm:items-end', className)}>
-      <ControlPrimaryAction
-        onAddStockIn={onAddStockIn}
-        onOrderDemand={onOrderDemand}
-      />
       <ControlSecondaryActions
         alertCount={alertCount}
-        onManageThresholds={onManageThresholds}
         onStockAlerts={onStockAlerts}
         onExport={onExport}
         onImport={onImport}

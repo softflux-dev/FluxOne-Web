@@ -168,6 +168,7 @@ export const endpoints = {
     stockInFromOrder: '/inventory/control/stock-in/from-order',
     stockOut: '/inventory/control/stock-out',
     adjustments: '/inventory/control/adjustments',
+    adjustmentLedger: '/inventory/control/adjustment-ledger',
     adjustment: (id) => `/inventory/control/adjustments/${id}`,
     damaged: '/inventory/control/damaged',
     damagedItem: (id) => `/inventory/control/damaged/${id}`,

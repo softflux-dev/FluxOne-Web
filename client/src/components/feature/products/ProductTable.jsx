@@ -82,12 +82,17 @@ function ProductRowActions({
   )
 }
 
+function parentPriceDash(row, value) {
+  if (row.type === PRODUCT_TYPES.VARIANT) return '—'
+  return money(value)
+}
+
 function InventoryStockCell({ row, className = '' }) {
   // Variant parent has no combined stock — children are independent SKUs (task 5 breakdown)
   if (row.type === PRODUCT_TYPES.VARIANT) {
     return (
       <span className={`text-xs font-medium whitespace-nowrap text-slate-500 ${className}`.trim()}>
-        Per variant SKU
+        —
       </span>
     )
   }
@@ -248,23 +253,23 @@ export function ProductTable({
                     <div className="mt-2 space-y-1 text-xs leading-snug text-slate-600">
                       <p>
                         <span className="text-slate-400">Last purchase</span>{' '}
-                        {money(row.lastPurchasePrice)}
+                        {parentPriceDash(row, row.lastPurchasePrice)}
                         {row.lastPurchaseVendorName ? ` · ${row.lastPurchaseVendorName}` : ''}
                       </p>
                       <p>
                         <span className="text-slate-400">Current purchase</span>{' '}
-                        {money(row.purchasePrice)}
+                        {parentPriceDash(row, row.purchasePrice)}
                         {row.currentPurchaseVendorName
                           ? ` · ${row.currentPurchaseVendorName}`
                           : ''}
                       </p>
                       <p>
                         <span className="text-slate-400">Last selling</span>{' '}
-                        {money(row.lastSellingPrice)}
+                        {parentPriceDash(row, row.lastSellingPrice)}
                       </p>
                       <p>
                         <span className="text-slate-400">Current selling</span>{' '}
-                        {money(row.sellingPrice)}
+                        {parentPriceDash(row, row.sellingPrice)}
                       </p>
                       <p>
                         <span className="text-slate-400">Inventory stock</span>{' '}
@@ -358,7 +363,7 @@ export function ProductTable({
                     <TableCell className="px-2 py-3 text-xs leading-snug">
                       <p>
                         <span className="text-slate-400">Last</span>{' '}
-                        <span className="font-medium">{money(row.lastPurchasePrice)}</span>
+                        <span className="font-medium">{parentPriceDash(row, row.lastPurchasePrice)}</span>
                       </p>
                       <p
                         className="truncate text-slate-600"
@@ -368,7 +373,7 @@ export function ProductTable({
                       </p>
                       <p className="mt-1.5">
                         <span className="text-slate-400">Current</span>{' '}
-                        <span className="font-medium">{money(row.purchasePrice)}</span>
+                        <span className="font-medium">{parentPriceDash(row, row.purchasePrice)}</span>
                       </p>
                       <p
                         className="truncate text-slate-600"
@@ -381,13 +386,13 @@ export function ProductTable({
                       <p>
                         <span className="text-slate-400">Last</span>{' '}
                         <span className="font-medium text-slate-800">
-                          {money(row.lastSellingPrice)}
+                          {parentPriceDash(row, row.lastSellingPrice)}
                         </span>
                       </p>
                       <p className="mt-1">
                         <span className="text-slate-400">Current</span>{' '}
                         <span className="font-medium text-slate-800">
-                          {money(row.sellingPrice)}
+                          {parentPriceDash(row, row.sellingPrice)}
                         </span>
                       </p>
                     </TableCell>

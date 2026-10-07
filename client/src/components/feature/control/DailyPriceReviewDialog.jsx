@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 import { ProductImageCell } from '@/components/feature/products/ProductStatusToggle'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
@@ -62,8 +62,8 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
 
   async function handleSaveRow(row) {
     const draft = drafts[row.id] || {}
-    const purchasePrice = Number(draft.purchasePrice)
-    const sellingPrice = Number(draft.sellingPrice)
+    const purchasePrice = Math.trunc(Number(draft.purchasePrice))
+    const sellingPrice = Math.trunc(Number(draft.sellingPrice))
     if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
       toastError('Enter a valid purchase price')
       return
@@ -145,10 +145,8 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                     <div className="grid grid-cols-2 gap-2">
                       <label className="space-y-1">
                         <span className="text-[11px] font-medium text-slate-500">Purchase</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <WholeNumberInput
+                          min={0}
                           className="h-9 tabular-nums"
                           value={draft.purchasePrice}
                           onChange={(e) => patchDraft(row.id, 'purchasePrice', e.target.value)}
@@ -156,10 +154,8 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                       </label>
                       <label className="space-y-1">
                         <span className="text-[11px] font-medium text-slate-500">Selling</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <WholeNumberInput
+                          min={0}
                           className="h-9 tabular-nums"
                           value={draft.sellingPrice}
                           onChange={(e) => patchDraft(row.id, 'sellingPrice', e.target.value)}
@@ -221,10 +217,8 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                           </div>
                         </td>
                         <td className="px-3 py-2.5 align-middle">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                          <WholeNumberInput
+                            min={0}
                             aria-label={`Purchase price for ${row.name}`}
                             className="h-9 w-full max-w-[8.5rem] tabular-nums"
                             value={draft.purchasePrice}
@@ -234,10 +228,8 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                           />
                         </td>
                         <td className="px-3 py-2.5 align-middle">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                          <WholeNumberInput
+                            min={0}
                             aria-label={`Selling price for ${row.name}`}
                             className="h-9 w-full max-w-[8.5rem] tabular-nums"
                             value={draft.sellingPrice}

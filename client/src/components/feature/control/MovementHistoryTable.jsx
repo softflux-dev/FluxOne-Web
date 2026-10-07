@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 export function MovementHistoryTable({
   title,
   description,
+  actions = null,
   items = [],
   loading = false,
   pagination,
@@ -37,7 +38,7 @@ export function MovementHistoryTable({
   const showActions = Boolean(renderRowActions)
 
   return (
-    <SurfaceCard className={className} title={title} description={description}>
+    <SurfaceCard className={className} title={title} description={description} actions={actions}>
       {loading ? (
         <TableRowsSkeleton rows={6} />
       ) : isEmpty ? (

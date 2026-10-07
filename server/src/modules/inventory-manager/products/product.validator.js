@@ -59,29 +59,46 @@ const variantPartSchema = z.object({
   isCustomValue: optionalBool,
 })
 
-// Money = non-negative, rounded to 2dp (matches products.purchase_price NUMERIC(12,2))
+// Money = non-negative whole units (UI / POS show 100, not 100.10)
 const moneyField = z.coerce
   .number()
   .nonnegative()
-  .transform((n) => Math.round(n * 100) / 100)
+  .transform((n) => Math.round(n))
 
-const variantSkuSchema = z.object({
-  label: z.string().min(1),
-  itemCode: z.string().min(1).optional(),
-  sku: z.string().min(1).optional(),
-  // Optional — server generates when omitted (same as single-item create)
-  barcode: z.string().min(1).optional(),
-  purchasePrice: moneyField,
-  sellingPrice: moneyField,
-  quantity: z.coerce.number().int().nonnegative().optional().default(0),
-  reorderPoint: z.coerce.number().int().nonnegative().optional(),
-  dailyPriceChange: optionalBool,
-  status: z
-    .enum([PRODUCT_STATUS.ACTIVE, PRODUCT_STATUS.INACTIVE])
-    .optional()
-    .default(PRODUCT_STATUS.ACTIVE),
-  parts: z.array(variantPartSchema).min(1),
-})
+const optionalDiscountPercent = z.preprocess(
+  (v) => (v === '' || v === undefined ? undefined : v === null ? null : v),
+  z.coerce.number().int().min(0).max(100).nullable().optional(),
+)
+
+function sellingGtePurchase(purchase, selling) {
+  if (purchase == null || selling == null) return true
+  return Number(selling) >= Number(purchase)
+}
+
+const variantSkuSchema = z
+  .object({
+    label: z.string().min(1),
+    itemCode: z.string().min(1).optional(),
+    sku: z.string().min(1).optional(),
+    // Optional — server generates when omitted (same as single-item create)
+    barcode: z.string().min(1).optional(),
+    purchasePrice: moneyField,
+    sellingPrice: moneyField,
+    quantity: z.coerce.number().int().nonnegative().optional().default(0),
+    reorderPoint: z.coerce.number().int().nonnegative().optional(),
+    dailyPriceChange: optionalBool,
+    offerId: nullableLooseUuid,
+    discountPercent: optionalDiscountPercent,
+    status: z
+      .enum([PRODUCT_STATUS.ACTIVE, PRODUCT_STATUS.INACTIVE])
+      .optional()
+      .default(PRODUCT_STATUS.ACTIVE),
+    parts: z.array(variantPartSchema).min(1),
+  })
+  .refine((row) => sellingGtePurchase(row.purchasePrice, row.sellingPrice), {
+    message: 'Selling price must be greater than or equal to purchase price',
+    path: ['sellingPrice'],
+  })
 
 export const createProductSchema = z
   .object({
@@ -104,7 +121,7 @@ export const createProductSchema = z
       // Optional; omit → server uses tenants.default_profit_percent
       profitPercent: z.number().min(0).max(100).optional(),
       offerId: optionalLooseUuid,
-      discountPercent: z.number().min(0).max(100).optional(),
+      discountPercent: optionalDiscountPercent,
       confirmed: z.coerce.boolean().optional(),
       // Opening stock (single) or finished bundle count
       quantity: z.number().nonnegative().optional(),
@@ -171,6 +188,16 @@ export const createProductSchema = z
     {
       message: 'Variant products require at least one combination (variants)',
       path: ['body', 'variants'],
+    },
+  )
+  .refine(
+    ({ body }) =>
+      body.type === PRODUCT_TYPES.VARIANT ||
+      body.type === PRODUCT_TYPES.BUNDLE ||
+      sellingGtePurchase(body.purchasePrice, body.sellingPrice),
+    {
+      message: 'Selling price must be greater than or equal to purchase price',
+      path: ['body', 'sellingPrice'],
     },
   )
 
@@ -254,22 +281,29 @@ export const deleteProductSchema = z.object({
   params: idParams,
 })
 
-const variantSkuUpdateSchema = z.object({
-  id: optionalLooseUuid,
-  label: z.string().min(1),
-  itemCode: z.string().min(1).optional(),
-  sku: z.string().min(1).optional(),
-  // Optional for new child SKUs — server generates when omitted
-  barcode: z.string().min(1).optional(),
-  purchasePrice: moneyField,
-  sellingPrice: moneyField,
-  // Opening stock only for NEW child SKUs (existing stock via Control)
-  quantity: z.coerce.number().int().nonnegative().optional(),
-  reorderPoint: z.coerce.number().int().nonnegative().optional(),
-  dailyPriceChange: optionalBool,
-  status: z.enum([PRODUCT_STATUS.ACTIVE, PRODUCT_STATUS.INACTIVE]).optional(),
-  parts: z.array(variantPartSchema).min(1),
-})
+const variantSkuUpdateSchema = z
+  .object({
+    id: optionalLooseUuid,
+    label: z.string().min(1),
+    itemCode: z.string().min(1).optional(),
+    sku: z.string().min(1).optional(),
+    // Optional for new child SKUs — server generates when omitted
+    barcode: z.string().min(1).optional(),
+    purchasePrice: moneyField,
+    sellingPrice: moneyField,
+    // Opening stock only for NEW child SKUs (existing stock via Control)
+    quantity: z.coerce.number().int().nonnegative().optional(),
+    reorderPoint: z.coerce.number().int().nonnegative().optional(),
+    dailyPriceChange: optionalBool,
+    offerId: nullableLooseUuid,
+    discountPercent: optionalDiscountPercent,
+    status: z.enum([PRODUCT_STATUS.ACTIVE, PRODUCT_STATUS.INACTIVE]).optional(),
+    parts: z.array(variantPartSchema).min(1),
+  })
+  .refine((row) => sellingGtePurchase(row.purchasePrice, row.sellingPrice), {
+    message: 'Selling price must be greater than or equal to purchase price',
+    path: ['sellingPrice'],
+  })
 
 export const updateProductSchema = z
   .object({
@@ -297,10 +331,7 @@ export const updateProductSchema = z
       barcode: z.string().min(1).optional(),
       reorderPoint: z.coerce.number().int().nonnegative().optional(),
       dailyPriceChange: optionalBool,
-      discountPercent: z.preprocess(
-        (v) => (v === '' || v === undefined ? undefined : v === null ? null : v),
-        z.coerce.number().int().min(0).max(100).nullable().optional(),
-      ),
+      discountPercent: optionalDiscountPercent,
       offerId: nullableLooseUuid,
       description: z.string().optional(),
       scale: z.string().min(1).optional(),
@@ -320,10 +351,14 @@ export const updateProductSchema = z
     query: empty,
     params: idParams,
   })
+  // Bundle recipe is locked after create — do not require / accept bundleItems on update
   .refine(
-    ({ body }) => body.type !== PRODUCT_TYPES.BUNDLE || (body.bundleItems && body.bundleItems.length > 0),
+    ({ body }) => {
+      if (body.purchasePrice == null || body.sellingPrice == null) return true
+      return sellingGtePurchase(body.purchasePrice, body.sellingPrice)
+    },
     {
-      message: 'Bundle products require at least one bundle item',
-      path: ['body', 'bundleItems'],
+      message: 'Selling price must be greater than or equal to purchase price',
+      path: ['body', 'sellingPrice'],
     },
   )

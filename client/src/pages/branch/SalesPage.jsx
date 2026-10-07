@@ -43,7 +43,6 @@ export function SalesPage() {
   const [sales, setSales] = useState([])
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState([])
-  const [catalogProducts, setCatalogProducts] = useState([])
   const {
     page,
     setPage,
@@ -61,7 +60,8 @@ export function SalesPage() {
   const [filterCategory, setFilterCategory] = useState('')
   const [filterSubcategory, setFilterSubcategory] = useState('')
   const [filterProduct, setFilterProduct] = useState('')
-  const [filterVariant, setFilterVariant] = useState('')
+  const [filterVariantType, setFilterVariantType] = useState('')
+  const [filterVariantValue, setFilterVariantValue] = useState('')
   const fetchSeq = useRef(0)
 
   const [refundTarget, setRefundTarget] = useState(null)
@@ -74,17 +74,38 @@ export function SalesPage() {
     const params = {}
     if (debouncedQ.trim()) params.q = debouncedQ.trim()
     if (filterDate) params.date = filterDate
-    if (filterVariant) params.variantId = filterVariant
-    else if (filterProduct) params.productId = filterProduct
-    else if (filterSubcategory) params.subcategoryId = filterSubcategory
-    else if (filterCategory) params.categoryId = filterCategory
+    if (filterCategory) params.categoryId = filterCategory
+    if (filterSubcategory) params.subcategoryId = filterSubcategory
+    if (filterProduct) params.productId = filterProduct
+    // Sales list may ignore axes; cascade still scopes productId above.
+    if (filterVariantType) params.variantTypeId = filterVariantType
+    if (filterVariantValue) params.variantValueId = filterVariantValue
 
     const res = await apiClient.get(endpoints.branch.sales.list, params)
     if (seq !== fetchSeq.current) return
 
     setLoading(false)
     if (res.success && res.data) {
-      setSales(res.data.items || [])
+      let items = res.data.items || []
+      // Client-side axis filter when API has no variant type/value support.
+      if (filterVariantType || filterVariantValue) {
+        items = items.filter((sale) => {
+          const parts = sale.parts || sale.variantParts || []
+          if (!parts.length) return !filterVariantType && !filterVariantValue
+          const typeOk =
+            !filterVariantType ||
+            parts.some(
+              (p) => (p.variantTypeId || p.typeId) === filterVariantType,
+            )
+          const valueOk =
+            !filterVariantValue ||
+            parts.some(
+              (p) => (p.variantValueId || p.valueId) === filterVariantValue,
+            )
+          return typeOk && valueOk
+        })
+      }
+      setSales(items)
     }
   }
 
@@ -95,51 +116,40 @@ export function SalesPage() {
     }
   }
 
-  const fetchCatalogProducts = async () => {
-    const res = await apiClient.get('/inventory/products', { limit: 200, status: 'active' })
-    if (res.success && res.data) {
-      setCatalogProducts(res.data.items || res.data || [])
-    }
-  }
-
-  // Load variants for selected product (Variant filter only if they exist)
-  useEffect(() => {
-    if (!filterProduct) return
-    const existing = catalogProducts.find((p) => p.id === filterProduct)
-    if (existing?.variants?.length) return
-
-    let cancelled = false
-    ;(async () => {
-      const res = await apiClient.get(`/inventory/products/${filterProduct}`)
-      if (cancelled || !res.success || !res.data) return
-      const variants = res.data.variants || []
-      setCatalogProducts((prev) =>
-        prev.map((p) => (p.id === filterProduct ? { ...p, variants } : p)),
-      )
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [filterProduct])
-
   useEffect(() => {
     void fetchSales()
-  }, [debouncedQ, filterDate, filterCategory, filterSubcategory, filterProduct, filterVariant])
+  }, [
+    debouncedQ,
+    filterDate,
+    filterCategory,
+    filterSubcategory,
+    filterProduct,
+    filterVariantType,
+    filterVariantValue,
+  ])
 
   useEffect(() => {
     void fetchCategories()
-    void fetchCatalogProducts()
   }, [])
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedQ, filterDate, filterCategory, filterSubcategory, filterProduct, filterVariant])
+  }, [
+    debouncedQ,
+    filterDate,
+    filterCategory,
+    filterSubcategory,
+    filterProduct,
+    filterVariantType,
+    filterVariantValue,
+  ])
 
   const handleCatalogChange = (patch = {}) => {
     if ('categoryId' in patch) setFilterCategory(patch.categoryId || '')
     if ('subcategoryId' in patch) setFilterSubcategory(patch.subcategoryId || '')
     if ('productId' in patch) setFilterProduct(patch.productId || '')
-    if ('variantId' in patch) setFilterVariant(patch.variantId || '')
+    if ('variantTypeId' in patch) setFilterVariantType(patch.variantTypeId || '')
+    if ('variantValueId' in patch) setFilterVariantValue(patch.variantValueId || '')
   }
 
   const handleClearFilters = () => {
@@ -148,7 +158,8 @@ export function SalesPage() {
     setFilterCategory('')
     setFilterSubcategory('')
     setFilterProduct('')
-    setFilterVariant('')
+    setFilterVariantType('')
+    setFilterVariantValue('')
   }
 
   const handleRefund = async () => {
@@ -195,11 +206,11 @@ export function SalesPage() {
           dateValue={filterDate}
           onDateChange={setFilterDate}
           categories={categories}
-          products={catalogProducts}
           categoryId={filterCategory}
           subcategoryId={filterSubcategory}
           productId={filterProduct}
-          variantId={filterVariant}
+          variantTypeId={filterVariantType}
+          variantValueId={filterVariantValue}
           onChange={handleCatalogChange}
           onClear={handleClearFilters}
         />

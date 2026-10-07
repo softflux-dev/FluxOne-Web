@@ -1,25 +1,22 @@
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  MoreHorizontal,
-  PackageX,
   Scale,
-  TimerOff,
+  Settings2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BRAND } from '@/lib/constants'
+import { CONTROL_UI_TAB } from '@/lib/controlTabs'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 
 export const CONTROL_TABS = [
-  { id: MOVEMENT_TYPES.IN, label: 'Stock In', icon: ArrowDownToLine },
-  { id: MOVEMENT_TYPES.OUT, label: 'Stock Out', icon: ArrowUpFromLine },
-  { id: MOVEMENT_TYPES.ADJUSTMENT, label: 'Adjustment', icon: Scale },
-  { id: MOVEMENT_TYPES.DAMAGED, label: 'Damaged', icon: PackageX },
-  { id: MOVEMENT_TYPES.EXPIRED, label: 'Expired', icon: TimerOff },
-  { id: MOVEMENT_TYPES.OTHER, label: 'Others', icon: MoreHorizontal },
+  { id: CONTROL_UI_TAB.IN, label: 'Stock In', icon: ArrowDownToLine },
+  { id: CONTROL_UI_TAB.OUT, label: 'Stock Out', icon: ArrowUpFromLine },
+  { id: CONTROL_UI_TAB.ADJUSTMENT, label: 'Adjustment', icon: Scale },
+  { id: CONTROL_UI_TAB.THRESHOLDS, label: 'Manage Threshold', icon: Settings2 },
 ]
 
-// Control tabs — count badges from summary API (Phase 2).
+// Control tabs — count badges from summary API.
 export function InventoryControlTabs({
   value,
   onChange,
@@ -36,7 +33,10 @@ export function InventoryControlTabs({
     >
       {CONTROL_TABS.map((tab) => {
         const active = value === tab.id
-        const count = counts?.[tab.id]
+        const count =
+          tab.id === CONTROL_UI_TAB.THRESHOLDS
+            ? counts?.thresholds
+            : counts?.[tab.id]
         const Icon = tab.icon
         return (
           <button
@@ -78,3 +78,5 @@ export function InventoryControlTabs({
     </div>
   )
 }
+
+export default InventoryControlTabs

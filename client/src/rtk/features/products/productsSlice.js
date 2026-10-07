@@ -75,6 +75,9 @@ function defaultFilters(overrides = {}) {
     type: '',
     categoryId: '',
     subcategoryId: '',
+    productId: '',
+    variantTypeId: '',
+    variantValueId: '',
     status: 'active',
     page: 1,
     limit: PRODUCTS_PAGE_SIZE,
@@ -125,6 +128,9 @@ export const fetchProducts = createAsyncThunk(
       type: next.type || undefined,
       categoryId: next.categoryId || undefined,
       subcategoryId: next.subcategoryId || undefined,
+      productId: next.productId || undefined,
+      variantTypeId: next.variantTypeId || undefined,
+      variantValueId: next.variantValueId || undefined,
       status: next.status || 'active',
     })
     if (!result.success) {
@@ -145,13 +151,13 @@ export const fetchProducts = createAsyncThunk(
   },
 )
 
+// Parents for bundle picker: singles + variant parents (children loaded on select).
 export const loadBundleOptions = createAsyncThunk('products/loadBundleOptions', async () => {
   const collected = []
   let page = 1
   let pageCount = 1
   do {
     const result = await apiClient.get(endpoints.products.list, {
-      type: 'single',
       status: 'active',
       page,
       limit: 50,
@@ -159,7 +165,11 @@ export const loadBundleOptions = createAsyncThunk('products/loadBundleOptions', 
     if (!result.success) return []
     const data = result.data || {}
     const rows = Array.isArray(data.items) ? data.items : []
-    collected.push(...rows.map(mapProduct))
+    collected.push(
+      ...rows
+        .map(mapProduct)
+        .filter((row) => row.type !== 'bundle'),
+    )
     pageCount = data.pagination?.pageCount || 1
     page += 1
   } while (page <= pageCount)
@@ -400,6 +410,9 @@ const productsSlice = createSlice({
         patch.type !== undefined ||
         patch.categoryId !== undefined ||
         patch.subcategoryId !== undefined ||
+        patch.productId !== undefined ||
+        patch.variantTypeId !== undefined ||
+        patch.variantValueId !== undefined ||
         patch.status !== undefined ||
         patch.limit !== undefined
       if (resetsPage && patch.page === undefined) next.page = 1

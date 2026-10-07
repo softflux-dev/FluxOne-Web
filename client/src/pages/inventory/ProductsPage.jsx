@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpFromLine, Camera, Plus } from 'lucide-react'
 import { ImportItemsDialog } from '@/components/feature/products/ImportItemsDialog'
-import { ItemFormDialog } from '@/components/feature/products/ItemFormDialog'
 import { PrintBarcodeDialog } from '@/components/feature/products/PrintBarcodeDialog'
 import { ProductFilters } from '@/components/feature/products/ProductFilters'
 import { ProductTable } from '@/components/feature/products/ProductTable'
@@ -41,28 +40,17 @@ export function ProductsPage() {
     selectedCategorySubs,
     updateFilters,
     setPage,
-    createProduct,
-    updateProduct,
     setProductStatus,
     deleteProduct,
     fetchProductDeleteInfo,
     importProducts,
     scanBarcode,
-    fetchProductDetail,
     fetchBarcodePng,
     exportCsv,
-    loadBundleOptions,
-    bundleOptions,
-    bundleOptionsLoading,
     reload,
   } = useProducts()
 
   const { localQ, onSearchChange } = useDebouncedSearch(updateFilters)
-
-  // Bundle modal only (create + edit) — items use dedicated pages
-  const [bundleOpen, setBundleOpen] = useState(false)
-  const [bundleMode, setBundleMode] = useState('create')
-  const [editingBundle, setEditingBundle] = useState(null)
 
   const [importOpen, setImportOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
@@ -95,25 +83,16 @@ export function ProductsPage() {
     filters.status,
     filters.categoryId,
     filters.subcategoryId,
+    filters.productId,
+    filters.variantTypeId,
+    filters.variantValueId,
   ])
 
-  const openBundleEdit = useCallback(
-    async (row) => {
-      setBundleMode('edit')
-      setEditingBundle(row)
-      await loadBundleOptions()
-      setBundleOpen(true)
-      const detail = await fetchProductDetail(row.id)
-      if (detail.success && detail.data) setEditingBundle(detail.data)
-    },
-    [fetchProductDetail, loadBundleOptions],
-  )
-
-  // Edit split: bundle → modal, everything else → edit page
+  // Bundle → Edit Bundle page; items → Edit Item page
   function handleEdit(row) {
     if (!row?.id) return
     if (row.type === PRODUCT_TYPES.BUNDLE) {
-      void openBundleEdit(row)
+      navigate(PATHS.inventory.bundlesEdit(row.id))
       return
     }
     navigate(PATHS.inventory.productsEdit(row.id))
@@ -123,27 +102,6 @@ export function ProductsPage() {
     if (!row?.id) return
     setStockProduct(row)
     setStockOpen(true)
-  }
-
-  async function handleBundleSubmit(fields) {
-    const result =
-      bundleMode === 'edit' && editingBundle?.id
-        ? await updateProduct(editingBundle.id, fields)
-        : await createProduct(fields)
-    if (result.success) {
-      if (bundleMode === 'edit') toastSuccess('Bundle updated')
-      else toastSuccess('Bundle created')
-      void reload()
-      void loadBundleOptions()
-    } else {
-      toastError(result.error || 'Save failed')
-    }
-    return result
-  }
-
-  function handlePrintFromCreate(product) {
-    if (!product?.id) return
-    setPrintTarget(product)
   }
 
   async function handleStockInSubmit(body) {
@@ -367,6 +325,9 @@ export function ProductsPage() {
           status={filters.status || 'active'}
           categoryId={filters.categoryId || ''}
           subcategoryId={filters.subcategoryId || ''}
+          productId={filters.productId || ''}
+          variantTypeId={filters.variantTypeId || ''}
+          variantValueId={filters.variantValueId || ''}
           categories={activeParents}
           subcategories={activeSubs}
           onSearchChange={onSearchChange}
@@ -394,24 +355,6 @@ export function ProductsPage() {
           onDelete={openDelete}
         />
       </MotionReveal>
-
-      <ItemFormDialog
-        open={bundleOpen}
-        onOpenChange={setBundleOpen}
-        mode={bundleMode}
-        productType={PRODUCT_TYPES.BUNDLE}
-        initialProduct={editingBundle}
-        categories={activeParents}
-        childrenByParent={catalog.childrenByParent}
-        taxes={catalog.taxes}
-        offers={catalog.offers}
-        taxProfitDefaults={catalog.defaults}
-        catalogItems={bundleOptions}
-        catalogItemsLoading={bundleOptionsLoading}
-        loading={mutating}
-        onSubmit={handleBundleSubmit}
-        onPrintBarcode={handlePrintFromCreate}
-      />
 
       <AddStockInDialog
         open={stockOpen}
@@ -457,7 +400,9 @@ export function ProductsPage() {
         title="Deactivate product?"
         description={
           statusTarget
-            ? `${statusTarget.name || 'This product'} will be closed (hidden from open lists and POS sync). You can open it again later.`
+            ? statusTarget.type === PRODUCT_TYPES.BUNDLE
+              ? `${statusTarget.name || 'This bundle'} will be closed. Remaining bundle stock is dissolved and returned to component items.`
+              : `${statusTarget.name || 'This product'} will be closed (hidden from open lists and POS sync). You can open it again later.`
             : undefined
         }
         confirmLabel="Deactivate"

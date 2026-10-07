@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/select'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
+import { formatOfferOptionLabel, promoFromOfferId } from '@/lib/addItem'
 import { BRAND } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +13,16 @@ const EMPTY_BULK = {
   sellingPrice: '',
   openingStock: '',
   lowStockThreshold: '',
+  offerId: '',
+}
+
+function offerPatchFromId(offerId, offers) {
+  const promo = promoFromOfferId(offerId, offers)
+  return {
+    offerId: offerId || '',
+    discountPercent:
+      promo.discountPercent == null ? '' : String(promo.discountPercent),
+  }
 }
 
 // Editable matrix — row select + bulk Apply (all / selected)
@@ -21,6 +33,7 @@ export function CombinationTable({
   selectedKeys = [],
   onSelectedKeysChange,
   stockMode = 'create',
+  offers = [],
 }) {
   const [bulk, setBulk] = useState(EMPTY_BULK)
   const isEdit = stockMode === 'edit'
@@ -53,6 +66,8 @@ export function CombinationTable({
     if (bulk.sellingPrice !== '') patch.sellingPrice = bulk.sellingPrice
     if (bulk.openingStock !== '') patch.openingStock = bulk.openingStock
     if (bulk.lowStockThreshold !== '') patch.lowStockThreshold = bulk.lowStockThreshold
+    if (bulk.offerId === '__none__') Object.assign(patch, offerPatchFromId('', offers))
+    else if (bulk.offerId) Object.assign(patch, offerPatchFromId(bulk.offerId, offers))
     if (!Object.keys(patch).length) return
 
     const targets = someSelected ? selectedKeys : allKeys
@@ -119,6 +134,22 @@ export function CombinationTable({
             className="h-9 w-24"
           />
         </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-slate-500">Discount / Offer</Label>
+          <NativeSelect
+            value={bulk.offerId}
+            onChange={(e) => patchBulk('offerId', e.target.value)}
+            className="h-9 min-w-[10rem]"
+          >
+            <option value="">— leave unchanged —</option>
+            <option value="__none__">No discount</option>
+            {(offers || []).map((offer) => (
+              <option key={offer.id} value={offer.id}>
+                {formatOfferOptionLabel(offer)}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
         <Button
           type="button"
           variant="outline"
@@ -134,7 +165,7 @@ export function CombinationTable({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="min-w-[1000px] w-full text-left text-sm">
+        <table className="min-w-[1120px] w-full text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-slate-50 text-[11px] tracking-wide text-slate-500 uppercase">
               <th className="w-10 px-3 py-2.5">
@@ -154,6 +185,7 @@ export function CombinationTable({
               <th className="px-3 py-2.5 font-semibold">Barcode</th>
               <th className="px-3 py-2.5 font-semibold">Purchase</th>
               <th className="px-3 py-2.5 font-semibold">Selling</th>
+              <th className="px-3 py-2.5 font-semibold">Discount / Offer</th>
               <th className="px-3 py-2.5 font-semibold">Stock</th>
               <th className="px-3 py-2.5 font-semibold">Threshold</th>
               <th className="px-3 py-2.5 font-semibold">Daily price</th>
@@ -242,6 +274,34 @@ export function CombinationTable({
                     />
                   </td>
                   <td className="px-3 py-2">
+                    <NativeSelect
+                      value={row.offerId || ''}
+                      disabled={inactive}
+                      onChange={(e) =>
+                        onChangeRow?.(row.key, offerPatchFromId(e.target.value, offers))
+                      }
+                      className="h-8 min-w-[9.5rem]"
+                    >
+                      {!offers.length ? (
+                        <option value="">No Discount/Offer Available</option>
+                      ) : (
+                        <>
+                          <option value="">No Discount</option>
+                          {offers.map((offer) => (
+                            <option key={offer.id} value={offer.id}>
+                              {formatOfferOptionLabel(offer)}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                      {row.offerId && !offers.some((o) => o.id === row.offerId) ? (
+                        <option value={row.offerId}>
+                          {row.offerName || `Current · ${row.discountPercent || ''}%`}
+                        </option>
+                      ) : null}
+                    </NativeSelect>
+                  </td>
+                  <td className="px-3 py-2">
                     {stockLocked ? (
                       <span
                         className="inline-flex h-8 min-w-[4.5rem] items-center px-2 font-mono text-xs text-slate-600"
@@ -318,7 +378,7 @@ export function CombinationTable({
   )
 }
 
-export function NormalProductFields({ form, patch, stockMode = 'create' }) {
+export function NormalProductFields({ form, patch, stockMode = 'create', offers = [] }) {
   const stockLocked = stockMode === 'edit'
   const isEdit = stockMode === 'edit'
   return (
@@ -365,6 +425,35 @@ export function NormalProductFields({ form, patch, stockMode = 'create' }) {
           value={form.sellingPrice}
           onChange={(e) => patch('sellingPrice', e.target.value)}
         />
+      </div>
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label htmlFor="normal-discount-offer">Discount / Offer</Label>
+        <NativeSelect
+          id="normal-discount-offer"
+          value={form.offerId || ''}
+          onChange={(e) => patch(offerPatchFromId(e.target.value, offers))}
+        >
+          {!offers.length ? (
+            <option value="">No Discount/Offer Available</option>
+          ) : (
+            <>
+              <option value="">No Discount</option>
+              {offers.map((offer) => (
+                <option key={offer.id} value={offer.id}>
+                  {formatOfferOptionLabel(offer)}
+                </option>
+              ))}
+            </>
+          )}
+          {form.offerId && !offers.some((o) => o.id === form.offerId) ? (
+            <option value={form.offerId}>
+              {form.offerName || `Current · ${form.discountPercent || ''}%`}
+            </option>
+          ) : null}
+        </NativeSelect>
+        {!offers.length ? (
+          <p className="text-[11px] text-slate-400">No discount or offer configured yet.</p>
+        ) : null}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="normal-stock">{stockLocked ? 'Current stock' : 'Opening stock'}</Label>

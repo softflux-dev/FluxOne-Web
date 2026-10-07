@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   Dialog,
   DialogCancelButton,
@@ -10,16 +10,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
-import { FieldError } from '@/components/shared/FieldError'
-import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
+import { ControlCatalogFilters } from '@/components/feature/control/ControlCatalogFilters'
+import { ProductStockPickerList } from '@/components/feature/control/ProductStockPickerList'
 import { BRAND } from '@/lib/constants'
-import { fieldErrorClass } from '@/lib/validation/fieldErrors'
+import { PRODUCT_TYPES } from '@/lib/mapProduct'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
-import { SCALE_OPTIONS } from '@/lib/mapProduct'
 import {
+  fetchControlProductDetail,
   fetchControlProductOptions,
   fetchControlSuppliers,
 } from '@/hooks/useInventoryControl'
@@ -31,51 +30,31 @@ const STEPS = [
   { id: 3, label: '3. Confirm' },
 ]
 
-const STOCKIN_FIELD_IDS = {
-  productId: 'stockin-product',
-  quantity: 'stockin-quantity',
-  expiresAt: 'stockin-expires-at',
-  lines: 'stockin-lines',
-}
+const emptyFilters = () => ({
+  q: '',
+  categoryId: '',
+  subcategoryId: '',
+  productId: '',
+  variantTypeId: '',
+  variantValueId: '',
+  type: '',
+})
 
-const STOCKIN_FIELD_ORDER = ['productId', 'quantity', 'expiresAt', 'lines']
-
-function getTomorrowDateString() {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const year = tomorrow.getFullYear()
-  const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
-  const day = String(tomorrow.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function validateExpiryDate(expiryDateString) {
-  if (!expiryDateString) return true
-
-  const expiryDate = new Date(expiryDateString)
-  if (Number.isNaN(expiryDate.getTime())) return false
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  expiryDate.setHours(0, 0, 0, 0)
-  return expiryDate > today
-}
-
-function emptyDraft() {
+function lineFromProduct(product) {
   return {
-    categoryId: '',
-    subcategoryId: '',
-    productId: '',
-    scale: 'unit',
+    productId: product.id,
+    productName: product.name,
+    itemCode: product.itemCode || '',
+    scale: product.scale || 'unit',
     quantity: '1',
-    unitCost: '',
+    purchasePrice: '',
     sellingPrice: '',
-    expiresAt: '',
+    prevPurchase: product.purchasePrice,
+    prevSelling: product.sellingPrice,
   }
 }
 
-// Multi-item stock-in: one supplier, many product lines → single POST /stock-in.
-// initialProduct — optional catalog row from Product table “Add Stock” (pre-selects item).
+// Multi-item stock-in — supplier + checkbox product table → review → confirm.
 export function AddStockInDialog({
   open,
   onOpenChange,
@@ -83,193 +62,150 @@ export function AddStockInDialog({
   loading = false,
   onSubmit,
   initialProduct = null,
+  mode = 'create',
+  seedRow = null,
 }) {
-  const parents = catalog?.parents || []
-  const childrenByParent = catalog?.childrenByParent
-
+  const isUpdate = mode === 'update'
   const [step, setStep] = useState(1)
-  const [draft, setDraft] = useState(emptyDraft())
-  const [lines, setLines] = useState([])
+  const [filters, setFilters] = useState(emptyFilters())
   const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [selected, setSelected] = useState({})
   const [suppliers, setSuppliers] = useState([])
   const [supplierId, setSupplierId] = useState('')
-  const { fieldErrors, formError, setFormError, resetErrors, clearField, applyErrors } =
-    useFieldErrors()
+  const { formError, setFormError, resetErrors } = useFieldErrors()
 
-  // Treat stock-in as dirty once the user added lines or picked a supplier
-  const dirty = lines.length > 0 || Boolean(supplierId) || step > 1
-  const [loadingOptions, setLoadingOptions] = useState(false)
-
-  const subs = useMemo(() => {
-    if (!draft.categoryId || !childrenByParent?.get) return []
-    return childrenByParent.get(draft.categoryId) || []
-  }, [draft.categoryId, childrenByParent])
-
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === draft.productId) || null,
-    [products, draft.productId],
-  )
-
-  const selectedSupplier = useMemo(
-    () => suppliers.find((s) => s.id === supplierId) || null,
-    [suppliers, supplierId],
-  )
+  const selectedLines = useMemo(() => Object.values(selected), [selected])
+  const dirty = selectedLines.length > 0 || Boolean(supplierId) || step > 1
 
   useEffect(() => {
     if (!open) return
     setStep(1)
     resetErrors()
-    setLines([])
+    setFilters(emptyFilters())
+    setSelected({})
     setSupplierId('')
-    setLoadingOptions(true)
 
-    // Seed from catalog row when opened via Products → Add Stock
-    if (initialProduct?.id) {
-      setDraft({
-        ...emptyDraft(),
-        categoryId: initialProduct.categoryId || '',
-        subcategoryId: initialProduct.subcategoryId || '',
-        productId: initialProduct.id,
-        scale: initialProduct.scale || 'unit',
-        unitCost:
-          initialProduct.purchasePrice != null && initialProduct.purchasePrice !== ''
-            ? String(initialProduct.purchasePrice)
-            : '',
+    const seed = seedRow || initialProduct
+    if (seed?.productId || seed?.id) {
+      const id = seed.productId || seed.id
+      setSelected({
+        [id]: {
+          productId: id,
+          productName: seed.productName || seed.name || 'Item',
+          itemCode: seed.itemCode || '',
+          scale: seed.scale || 'unit',
+          quantity: '1',
+          purchasePrice: '',
+          sellingPrice: '',
+        },
       })
-      setProducts([initialProduct])
-    } else {
-      setDraft(emptyDraft())
-      setProducts([])
     }
 
-    void (async () => {
-      const supRes = await fetchControlSuppliers()
-      if (supRes.success) setSuppliers(supRes.items)
-      setLoadingOptions(false)
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when dialog opens / seed changes
-  }, [open, initialProduct?.id])
-
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    void fetchControlProductOptions({
-      categoryId: draft.categoryId || undefined,
-      subcategoryId: draft.subcategoryId || undefined,
-      limit: 50,
-    }).then((res) => {
-      if (cancelled || !res.success) return
-      const seedId = initialProduct?.id
-      const merged =
-        seedId && !res.items.some((p) => p.id === seedId) && initialProduct
-          ? [initialProduct, ...res.items]
-          : res.items
-      setProducts(merged)
-      setDraft((prev) => {
-        if (merged.some((p) => p.id === prev.productId)) return prev
-        if (seedId && merged.some((p) => p.id === seedId)) {
-          return { ...prev, productId: seedId }
-        }
-        return { ...prev, productId: '' }
-      })
+    void fetchControlSuppliers().then((res) => {
+      if (res.success) setSuppliers(res.items)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open reset
+  }, [open, initialProduct?.id, seedRow?.productId])
+
+  // Load selectable SKUs from catalog filters.
+  useEffect(() => {
+    if (!open) return undefined
+    let cancelled = false
+    setProductsLoading(true)
+
+    void (async () => {
+      const res = await fetchControlProductOptions({
+        categoryId: filters.categoryId || undefined,
+        subcategoryId: filters.subcategoryId || undefined,
+        q: filters.q || undefined,
+        limit: 100,
+      })
+      if (cancelled) return
+
+      let items = res.success ? res.items : []
+      items = items.filter((p) => p.type !== PRODUCT_TYPES.VARIANT)
+
+      if (filters.type) {
+        items = items.filter((p) => p.type === filters.type)
+      }
+
+      if (filters.productId) {
+        const parent = items.find((p) => p.id === filters.productId)
+        if (parent?.type === PRODUCT_TYPES.VARIANT) {
+          const detail = await fetchControlProductDetail(filters.productId)
+          const variants = detail.success && Array.isArray(detail.data?.variants)
+            ? detail.data.variants
+            : []
+          items = variants.map((v) => ({
+            id: v.id,
+            name: v.variantLabel || v.label || parent.name,
+            itemCode: v.itemCode || '',
+            scale: v.scale || parent.scale || 'unit',
+            type: PRODUCT_TYPES.VARIANT,
+            purchasePrice: v.purchasePrice ?? parent.purchasePrice,
+            sellingPrice: v.sellingPrice ?? parent.sellingPrice,
+            imageUrl: v.imageUrl || parent.imageUrl,
+          }))
+        } else {
+          items = items.filter((p) => p.id === filters.productId)
+        }
+      }
+
+      if (filters.variantTypeId || filters.variantValueId) {
+        items = items.filter((p) => {
+          if (!p.parts?.length) return true
+          const typeOk =
+            !filters.variantTypeId ||
+            p.parts.some((part) => (part.variantTypeId || part.typeId) === filters.variantTypeId)
+          const valueOk =
+            !filters.variantValueId ||
+            p.parts.some((part) => (part.variantValueId || part.valueId) === filters.variantValueId)
+          return typeOk && valueOk
+        })
+      }
+
+      setProducts(items)
+      setProductsLoading(false)
+    })()
+
     return () => {
       cancelled = true
     }
-  }, [open, draft.categoryId, draft.subcategoryId, initialProduct])
+  }, [open, filters])
 
-  function patchDraft(field, value) {
-    setDraft((prev) => {
-      const next = { ...prev, [field]: value }
-      if (field === 'categoryId') {
-        next.subcategoryId = ''
-        next.productId = ''
+  function toggleProduct(product) {
+    setSelected((prev) => {
+      const next = { ...prev }
+      if (next[product.id]) {
+        delete next[product.id]
+      } else if (isUpdate) {
+        return { [product.id]: lineFromProduct(product) }
+      } else {
+        next[product.id] = lineFromProduct(product)
       }
-      if (field === 'subcategoryId') next.productId = ''
       return next
     })
-    if (field === 'productId') clearField('productId')
-    if (field === 'quantity' || field === 'scale') clearField('quantity')
-    if (field === 'expiresAt') clearField('expiresAt')
   }
 
-  function resetDraftAfterAdd() {
-    setDraft((prev) => ({
-      ...emptyDraft(),
-      categoryId: prev.categoryId,
-      subcategoryId: prev.subcategoryId,
-    }))
-  }
-
-  function addLineToCart() {
-    const errors = {}
-    if (!draft.productId) errors.productId = 'Select a product to add'
-    if (!draft.scale || !(Number(draft.quantity) > 0)) {
-      errors.quantity = 'Enter a valid scale and positive quantity'
-    }
-    if (draft.expiresAt && !validateExpiryDate(draft.expiresAt)) {
-      errors.expiresAt = 'Expiry must be a future date'
-    }
-    if (
-      draft.productId &&
-      lines.some((row) => row.productId === draft.productId)
-    ) {
-      errors.productId =
-        'This product is already in the list — remove it first or pick another item'
-    }
-    if (Object.keys(errors).length) {
-      applyErrors(errors, STOCKIN_FIELD_IDS, STOCKIN_FIELD_ORDER)
-      return
-    }
-    resetErrors()
-
-    const product = selectedProduct || products.find((p) => p.id === draft.productId)
-    clearField('lines')
-    setLines((prev) => [
+  function patchLine(id, patch) {
+    setSelected((prev) => ({
       ...prev,
-      {
-        productId: draft.productId,
-        productName: product?.name || 'Item',
-        itemCode: product?.itemCode || '',
-        scale: draft.scale,
-        quantity: Number(draft.quantity),
-        unitCost:
-          draft.unitCost === '' || draft.unitCost == null
-            ? undefined
-            : Number(draft.unitCost),
-        sellingPrice:
-          draft.sellingPrice === '' || draft.sellingPrice == null
-            ? undefined
-            : Number(draft.sellingPrice),
-        expiresAt: draft.expiresAt || undefined,
-      },
-    ])
-    resetDraftAfterAdd()
-  }
-
-  function removeLine(productId) {
-    setLines((prev) => prev.filter((row) => row.productId !== productId))
-    clearField('lines')
+      [id]: { ...prev[id], ...patch },
+    }))
   }
 
   function goNext() {
     if (step === 1) {
-      if (!lines.length) {
-        applyErrors(
-          { lines: 'Add at least one item before continuing' },
-          STOCKIN_FIELD_IDS,
-          STOCKIN_FIELD_ORDER,
-        )
+      if (!selectedLines.length) {
+        setFormError('Select at least one item')
         return
       }
       resetErrors()
       setStep(2)
       return
     }
-
-    if (step === 2) {
-      setStep(3)
-    }
+    if (step === 2) setStep(3)
   }
 
   function goBack() {
@@ -278,49 +214,48 @@ export function AddStockInDialog({
   }
 
   async function handleSave() {
-    if (!lines.length) {
-      applyErrors({ lines: 'Add at least one item' }, STOCKIN_FIELD_IDS, STOCKIN_FIELD_ORDER)
+    if (!selectedLines.length) {
+      setFormError('Select at least one item')
       setStep(1)
       return
-    }
-
-    for (const row of lines) {
-      if (row.expiresAt && !validateExpiryDate(row.expiresAt)) {
-        setFormError(`Invalid expiry date for ${row.productName}`)
-        setStep(1)
-        return
-      }
     }
     resetErrors()
 
     const payload = {
       supplierId: supplierId || undefined,
-      lines: lines.map((row) => ({
+      lines: selectedLines.map((row) => ({
         productId: row.productId,
         scale: row.scale,
-        quantity: row.quantity,
-        unitCost: row.unitCost,
-        sellingPrice: row.sellingPrice,
-        expiresAt: row.expiresAt,
+        quantity: Number(row.quantity) || 1,
+        unitCost:
+          row.purchasePrice === '' || row.purchasePrice == null
+            ? undefined
+            : Number(row.purchasePrice),
+        sellingPrice:
+          row.sellingPrice === '' || row.sellingPrice == null
+            ? undefined
+            : Number(row.sellingPrice),
       })),
     }
 
     try {
       const result = await onSubmit?.(payload)
       if (result?.success) onOpenChange?.(false)
-      else setFormError(result?.error || 'Failed to save stock-in. Please try again.')
+      else setFormError(result?.error || 'Failed to save stock-in.')
     } catch (err) {
-      setFormError(err?.message || 'Failed to save stock-in. Please try again.')
+      setFormError(err?.message || 'Failed to save stock-in.')
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} dirty={dirty}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add New Stock</DialogTitle>
+          <DialogTitle>{isUpdate ? 'Update stock' : 'Add New Stock'}</DialogTitle>
           <DialogDescription>
-            Add one or more items from the same supplier in a single stock-in.
+            {isUpdate
+              ? 'Add quantity and optional price updates for this product.'
+              : 'Add one or more items from the same supplier in a single stock-in.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -333,11 +268,7 @@ export function AddStockInDialog({
                 key={s.id}
                 className={cn(
                   'flex-1 border-b-2 pb-2 text-center text-sm font-semibold transition-colors',
-                  active
-                    ? 'border-transparent text-[#8E238F]'
-                    : done
-                      ? 'border-transparent text-emerald-600'
-                      : 'border-transparent text-slate-400',
+                  active ? 'text-slate-900' : done ? 'text-emerald-600' : 'text-slate-400',
                 )}
                 style={
                   active
@@ -359,295 +290,73 @@ export function AddStockInDialog({
 
         {step === 1 ? (
           <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label>Company / Supplier</Label>
-              <NativeSelect value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                <option value="">Select supplier (optional)</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.companyName || s.name || s.id}
-                  </option>
-                ))}
-              </NativeSelect>
-              <p className="text-[11px] text-slate-500">
-                All items in this stock-in use the same vendor.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
+            {!isUpdate ? (
               <div className="space-y-1.5">
-                <Label>Category</Label>
-                <NativeSelect
-                  value={draft.categoryId}
-                  onChange={(e) => patchDraft('categoryId', e.target.value)}
-                >
-                  <option value="">All categories</option>
-                  {parents.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+                <Label>Company / Supplier</Label>
+                <NativeSelect value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                  <option value="">Select supplier (optional)</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.companyName || s.name || s.id}
                     </option>
                   ))}
                 </NativeSelect>
               </div>
-              <div className="space-y-1.5">
-                <Label>Sub category</Label>
-                <NativeSelect
-                  value={draft.subcategoryId}
-                  disabled={!draft.categoryId}
-                  onChange={(e) => patchDraft('subcategoryId', e.target.value)}
-                >
-                  <option value="">All</option>
-                  {subs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-            </div>
+            ) : null}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="stockin-product">Item</Label>
-              <NativeSelect
-                id="stockin-product"
-                value={draft.productId}
-                onChange={(e) => {
-                  const id = e.target.value
-                  const p = products.find((x) => x.id === id)
-                  setDraft((prev) => ({
-                    ...prev,
-                    productId: id,
-                    scale: p?.scale || prev.scale || 'unit',
-                    unitCost:
-                      p?.purchasePrice != null && prev.unitCost === ''
-                        ? String(p.purchasePrice)
-                        : prev.unitCost,
-                  }))
-                  clearField('productId')
-                }}
-                aria-invalid={Boolean(fieldErrors.productId)}
-                className={fieldErrorClass(fieldErrors.productId)}
-              >
-                <option value="">Select product</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id} disabled={lines.some((l) => l.productId === p.id)}>
-                    {p.name}
-                    {p.scale ? ` (${p.scale})` : ''}
-                    {lines.some((l) => l.productId === p.id) ? ' — added' : ''}
-                  </option>
-                ))}
-              </NativeSelect>
-              {!products.length && !loadingOptions ? (
-                <p className="text-xs text-amber-700">No products match these filters.</p>
-              ) : null}
-              <FieldError message={fieldErrors.productId} />
-            </div>
+            {!isUpdate ? (
+              <ControlCatalogFilters catalog={catalog} filters={filters} onChange={setFilters} />
+            ) : null}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Scale</Label>
-                <NativeSelect
-                  value={draft.scale}
-                  onChange={(e) => patchDraft('scale', e.target.value)}
-                >
-                  {SCALE_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="stockin-quantity">Quantity</Label>
-                <WholeNumberInput
-                  id="stockin-quantity"
-                  min={1}
-                  value={draft.quantity}
-                  onChange={(e) => patchDraft('quantity', e.target.value)}
-                  aria-invalid={Boolean(fieldErrors.quantity)}
-                  className={fieldErrorClass(fieldErrors.quantity)}
-                />
-                <FieldError message={fieldErrors.quantity} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Selling price (optional)</Label>
-                <WholeNumberInput
-                  min={0}
-                  value={draft.sellingPrice}
-                  onChange={(e) => patchDraft('sellingPrice', e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Unit cost (optional)</Label>
-                <WholeNumberInput
-                  min={0}
-                  value={draft.unitCost}
-                  onChange={(e) => patchDraft('unitCost', e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="stockin-expires-at">Expiry (optional)</Label>
-                <Input
-                  id="stockin-expires-at"
-                  type="date"
-                  value={draft.expiresAt}
-                  min={getTomorrowDateString()}
-                  onChange={(e) => patchDraft('expiresAt', e.target.value)}
-                  aria-invalid={Boolean(fieldErrors.expiresAt)}
-                  className={fieldErrorClass(fieldErrors.expiresAt)}
-                />
-                <FieldError message={fieldErrors.expiresAt} />
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full cursor-pointer"
-              style={{ color: BRAND.purple, borderColor: BRAND.purple }}
-              onClick={addLineToCart}
-            >
-              <Plus className="size-4" />
-              Add item to list
-            </Button>
-
-            <div id="stockin-lines" tabIndex={-1} className="outline-none">
-            {lines.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-slate-600">
-                  Items to stock in ({lines.length})
-                </p>
-                <ul className="max-h-40 space-y-2 overflow-y-auto">
-                  {lines.map((row) => (
-                    <li
-                      key={row.productId}
-                      className="flex items-center gap-2 rounded-lg border border-border bg-slate-50/80 px-3 py-2 text-sm"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-slate-900">{row.productName}</p>
-                        <p className="text-xs text-slate-500">
-                          {row.quantity} {row.scale}
-                          {row.itemCode ? ` · ${row.itemCode}` : ''}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="shrink-0 cursor-pointer text-red-600"
-                        onClick={() => removeLine(row.productId)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400">No items added yet.</p>
-            )}
-            <FieldError message={fieldErrors.lines} />
-            </div>
+            <ProductStockPickerList
+              products={isUpdate && seedRow ? [{ ...seedRow, id: seedRow.productId || seedRow.id }] : products}
+              selected={selected}
+              onToggle={toggleProduct}
+              onLineChange={patchLine}
+              loading={productsLoading && !isUpdate}
+            />
           </div>
         ) : null}
 
         {step === 2 ? (
-          <div className="space-y-3 pt-2">
-            {selectedSupplier ? (
-              <p className="text-sm text-slate-600">
-                <span className="font-medium text-slate-800">Supplier:</span>{' '}
-                {selectedSupplier.companyName || selectedSupplier.name}
-              </p>
-            ) : (
-              <p className="text-sm text-slate-500">No supplier selected.</p>
-            )}
-            <ul className="max-h-56 space-y-2 overflow-y-auto">
-              {lines.map((row) => (
-                <li
-                  key={row.productId}
-                  className="rounded-lg border border-border px-3 py-2 text-sm"
-                >
-                  <p className="font-medium text-slate-900">{row.productName}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {row.quantity} {row.scale}
-                    {row.unitCost != null ? ` · cost ${row.unitCost}` : ''}
-                    {row.expiresAt ? ` · expires ${row.expiresAt}` : ''}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+            {selectedLines.map((row) => (
+              <li key={row.productId} className="rounded-lg border border-border px-3 py-2">
+                <p className="font-semibold text-slate-900">{row.productName}</p>
+                <p className="text-xs text-slate-500">
+                  Qty {row.quantity} · {row.scale}
+                  {row.purchasePrice !== '' ? ` · Purchase ${row.purchasePrice}` : ''}
+                  {row.sellingPrice !== '' ? ` · Selling ${row.sellingPrice}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
         ) : null}
 
         {step === 3 ? (
-          <div className="space-y-3 pt-2">
-            <div
-              className="rounded-xl px-4 py-4 text-sm leading-relaxed text-slate-700"
-              style={{ background: BRAND.soft }}
-            >
-              <p>
-                Stock in{' '}
-                <span className="font-bold" style={{ color: BRAND.purple }}>
-                  {lines.length} item{lines.length === 1 ? '' : 's'}
-                </span>
-                {selectedSupplier ? (
-                  <>
-                    {' '}
-                    from{' '}
-                    <span className="font-bold" style={{ color: BRAND.purple }}>
-                      {selectedSupplier.companyName || selectedSupplier.name}
-                    </span>
-                  </>
-                ) : null}
-                ?
-              </p>
-              <ul className="mt-2 list-inside list-disc text-slate-800">
-                {lines.map((row) => (
-                  <li key={row.productId}>
-                    {row.productName} — {row.quantity} {row.scale}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          <p className="text-sm text-slate-600">
+            Confirm {selectedLines.length} line(s)
+            {supplierId ? ' for the selected supplier' : ''}.
+          </p>
         ) : null}
 
-        <DialogFooter className="gap-2 sm:justify-end">
+        <DialogFooter>
           {step > 1 ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer transition-none"
-              style={{ color: BRAND.purple, borderColor: BRAND.purple }}
-              disabled={loading}
-              onClick={goBack}
-            >
+            <Button type="button" variant="outline" onClick={goBack} disabled={loading}>
               <ChevronLeft className="size-4" />
               Back
             </Button>
-          ) : null}
-          <DialogCancelButton disabled={loading} className="cursor-pointer" />
+          ) : (
+            <DialogCancelButton disabled={loading} />
+          )}
           {step < 3 ? (
-            <Button
-              type="button"
-              className="cursor-pointer text-white transition-none"
-              style={{ background: `linear-gradient(135deg, ${BRAND.purple}, ${BRAND.deep})` }}
-              disabled={loading || loadingOptions || (step === 1 && !lines.length)}
-              onClick={goNext}
-            >
+            <Button type="button" variant="brand" onClick={goNext} disabled={loading}>
               Next
               <ChevronRight className="size-4" />
             </Button>
           ) : (
-            <Button
-              type="button"
-              className="cursor-pointer text-white transition-none"
-              style={{ background: `linear-gradient(135deg, ${BRAND.purple}, ${BRAND.deep})` }}
-              disabled={loading}
-              onClick={handleSave}
-            >
-              <Check className="size-4" />
-              {loading ? 'Saving…' : `Save ${lines.length} item${lines.length === 1 ? '' : 's'}`}
+            <Button type="button" variant="brand" disabled={loading} onClick={handleSave}>
+              {loading ? 'Saving…' : 'Save'}
             </Button>
           )}
         </DialogFooter>
@@ -655,3 +364,5 @@ export function AddStockInDialog({
     </Dialog>
   )
 }
+
+export default AddStockInDialog

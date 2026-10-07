@@ -253,17 +253,14 @@ export async function refresh(req, res) {
     if (!decoded?.jti || !decoded?.sub || !decoded?.tenantId) {
       return fail(res, 'Invalid refresh token', 401)
     }
-
     const stored = await findRefreshTokenByJti(decoded.jti)
     if (!stored) {
       return fail(res, 'Invalid refresh token', 401)
     }
-
     const incomingHash = hashToken(rawToken)
     if (stored.tokenHash !== incomingHash) {
       return fail(res, 'Invalid refresh token', 401)
     }
-
     // Reuse of a rotated token usually means theft. Two open tabs can present the
     // same token in the same moment, so a just-rotated token must not kill the new session.
     if (stored.revokedAt) {
@@ -275,21 +272,17 @@ export async function refresh(req, res) {
       }
       return fail(res, 'Invalid refresh token', 401)
     }
-
     if (new Date(stored.expiresAt).getTime() <= Date.now()) {
       await revokeRefreshTokenByJti(decoded.jti)
       return fail(res, 'Invalid refresh token', 401)
     }
-
     const user = await findAuthUserById(decoded.sub, decoded.tenantId)
     if (!user || !user.isActive || (user.branchId && user.branchStatus === 'blocked')) {
       await revokeAllRefreshTokensForUser(decoded.sub, decoded.tenantId)
       return fail(res, 'Invalid refresh token', 401)
     }
-
     const tokens = await issueSession(user, req)
     await revokeRefreshTokenByJti(decoded.jti, { replacedByJti: tokens.jti })
-
     const payload = authPayload(user, tokens)
     payload.branches = await branchesForUser(user)
     return success(res, payload)

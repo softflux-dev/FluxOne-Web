@@ -18,6 +18,7 @@ import { useProducts } from '@/hooks/useProducts'
 import {
   ADD_ITEM_TABS,
   PRODUCT_KIND,
+  assertSellingGtePurchase,
   buildAddItemApiPayload,
   buildCombinations,
 } from '@/lib/addItem'
@@ -44,6 +45,9 @@ function emptyForm() {
     openingStock: '0',
     lowStockThreshold: '',
     dailyPriceChange: false,
+    offerId: '',
+    discountPercent: '',
+    offerName: '',
     // Optional product image (File) — uploaded after create via PATCH
     image: null,
   }
@@ -159,6 +163,9 @@ export function AddItemPage() {
 
   function patch(field, value) {
     setForm((prev) => {
+      if (field && typeof field === 'object' && value === undefined) {
+        return { ...prev, ...field }
+      }
       const next = { ...prev, [field]: value }
       if (field === 'categoryId') next.subcategoryId = ''
       return next
@@ -220,12 +227,16 @@ export function AddItemPage() {
         if (row.purchasePrice === '' || row.sellingPrice === '') {
           return `Fill purchase & selling price for active row “${row.label}”`
         }
+        const priceErr = assertSellingGtePurchase(row.purchasePrice, row.sellingPrice)
+        if (priceErr) return `“${row.label}”: ${priceErr}`
       }
     }
     if (tabId === 'save' && isNormal) {
       if (form.purchasePrice === '' || form.sellingPrice === '') {
         return 'Purchase and selling price are required'
       }
+      const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
+      if (priceErr) return priceErr
     }
     return null
   }
@@ -284,6 +295,7 @@ export function AddItemPage() {
         combinations,
         selectedTypes,
         selectedValuesByType,
+        offers: catalog.offers || [],
       })
       // Attach optional image for create → then image PATCH
       if (form.image) payload.image = form.image
@@ -540,6 +552,7 @@ export function AddItemPage() {
               onChangeRow={patchCombination}
               selectedKeys={selectedComboKeys}
               onSelectedKeysChange={setSelectedComboKeys}
+              offers={catalog.offers || []}
             />
           ) : null}
 
@@ -563,7 +576,7 @@ export function AddItemPage() {
               </div>
 
               {isNormal ? (
-                <NormalProductFields form={form} patch={patch} />
+                <NormalProductFields form={form} patch={patch} offers={catalog.offers || []} />
               ) : (
                 <p className="text-sm text-slate-600">
                   Variant details were filled on the Combinations tab. Save creates the parent and

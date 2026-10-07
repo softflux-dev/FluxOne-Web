@@ -33,7 +33,6 @@ import { StockControlPriceDialog } from '@/components/feature/branch/inventory/S
 export function BranchInventoryPage() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [catalogProducts, setCatalogProducts] = useState([])
   const [loading, setLoading] = useState(false)
   const {
     page,
@@ -51,7 +50,8 @@ export function BranchInventoryPage() {
   const [filterCategory, setFilterCategory] = useState('')
   const [filterSubcategory, setFilterSubcategory] = useState('')
   const [filterProduct, setFilterProduct] = useState('')
-  const [filterVariant, setFilterVariant] = useState('')
+  const [filterVariantType, setFilterVariantType] = useState('')
+  const [filterVariantValue, setFilterVariantValue] = useState('')
   const fetchSeq = useRef(0)
 
   // Subcategories live in the same categories list (rows with parentId)
@@ -67,38 +67,20 @@ export function BranchInventoryPage() {
     const seq = ++fetchSeq.current
     setLoading(true)
 
-    // Variant selected → load that SKU directly
-    if (filterVariant) {
-      const res = await apiClient.get(`/inventory/products/${filterVariant}`)
-      if (seq !== fetchSeq.current) return
-      setLoading(false)
-      if (res.success && res.data) {
-        setProducts([res.data])
-      } else {
-        setProducts([])
-      }
-      return
-    }
-
-    const params = { limit: 100 }
+    const params = { limit: 100, status: 'active' }
     if (debouncedQ.trim()) params.q = debouncedQ.trim()
-    if (filterSubcategory) {
-      params.subcategoryId = filterSubcategory
-    } else if (filterCategory) {
-      params.categoryId = filterCategory
-    }
+    if (filterCategory) params.categoryId = filterCategory
+    if (filterSubcategory) params.subcategoryId = filterSubcategory
+    if (filterProduct) params.productId = filterProduct
+    if (filterVariantType) params.variantTypeId = filterVariantType
+    if (filterVariantValue) params.variantValueId = filterVariantValue
 
     const res = await apiClient.get('/inventory/products', params)
     if (seq !== fetchSeq.current) return
 
     setLoading(false)
     if (res.success && res.data) {
-      let items = res.data.items || res.data || []
-      // Product filter (parent) — client-side on returned parents
-      if (filterProduct) {
-        items = items.filter((p) => p.id === filterProduct)
-      }
-      setProducts(items)
+      setProducts(res.data.items || res.data || [])
     }
   }
 
@@ -109,51 +91,38 @@ export function BranchInventoryPage() {
     }
   }
 
-  const fetchCatalogProducts = async () => {
-    const res = await apiClient.get('/inventory/products', { limit: 200, status: 'active' })
-    if (res.success && res.data) {
-      setCatalogProducts(res.data.items || res.data || [])
-    }
-  }
-
-  // Load variants when a product is selected
-  useEffect(() => {
-    if (!filterProduct) return
-    const existing = catalogProducts.find((p) => p.id === filterProduct)
-    if (existing?.variants?.length) return
-
-    let cancelled = false
-    ;(async () => {
-      const res = await apiClient.get(`/inventory/products/${filterProduct}`)
-      if (cancelled || !res.success || !res.data) return
-      const variants = res.data.variants || []
-      setCatalogProducts((prev) =>
-        prev.map((p) => (p.id === filterProduct ? { ...p, variants } : p)),
-      )
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [filterProduct])
-
   useEffect(() => {
     void fetchInventory()
-  }, [debouncedQ, filterCategory, filterSubcategory, filterProduct, filterVariant])
+  }, [
+    debouncedQ,
+    filterCategory,
+    filterSubcategory,
+    filterProduct,
+    filterVariantType,
+    filterVariantValue,
+  ])
 
   useEffect(() => {
     void fetchCategories()
-    void fetchCatalogProducts()
   }, [])
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedQ, filterCategory, filterSubcategory, filterProduct, filterVariant])
+  }, [
+    debouncedQ,
+    filterCategory,
+    filterSubcategory,
+    filterProduct,
+    filterVariantType,
+    filterVariantValue,
+  ])
 
   const handleCatalogChange = (patch = {}) => {
     if ('categoryId' in patch) setFilterCategory(patch.categoryId || '')
     if ('subcategoryId' in patch) setFilterSubcategory(patch.subcategoryId || '')
     if ('productId' in patch) setFilterProduct(patch.productId || '')
-    if ('variantId' in patch) setFilterVariant(patch.variantId || '')
+    if ('variantTypeId' in patch) setFilterVariantType(patch.variantTypeId || '')
+    if ('variantValueId' in patch) setFilterVariantValue(patch.variantValueId || '')
   }
 
   const handleClearFilters = () => {
@@ -161,7 +130,8 @@ export function BranchInventoryPage() {
     setFilterCategory('')
     setFilterSubcategory('')
     setFilterProduct('')
-    setFilterVariant('')
+    setFilterVariantType('')
+    setFilterVariantValue('')
   }
 
   // Open dialog — suggest qty as gap to reorder point (min 1)
@@ -251,7 +221,7 @@ export function BranchInventoryPage() {
 
       <StockControlPriceDialog open={priceRuleOpen} onOpenChange={setPriceRuleOpen} />
 
-      {/* Category → Sub Category → Product → Variant → Clear Filters */}
+      {/* Category → Sub → Product → Variant type → Variant value → Reset */}
       <MotionReveal delay={0.02}>
         <ProductCatalogFilters
           searchId="stock-search"
@@ -259,11 +229,11 @@ export function BranchInventoryPage() {
           onSearchChange={setSearchQuery}
           searchPlaceholder="Item name or item code…"
           categories={categories}
-          products={catalogProducts}
           categoryId={filterCategory}
           subcategoryId={filterSubcategory}
           productId={filterProduct}
-          variantId={filterVariant}
+          variantTypeId={filterVariantType}
+          variantValueId={filterVariantValue}
           onChange={handleCatalogChange}
           onClear={handleClearFilters}
         />

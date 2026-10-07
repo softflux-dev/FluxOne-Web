@@ -1,21 +1,19 @@
-// Money helpers — align with DB NUMERIC(12,2) (purchase / selling prices).
+// Money helpers — whole units only (display & submit: 100, not 100.10).
 
-// Round to 2 decimal places (safe for API submit).
+// Round to nearest whole unit (safe for API submit).
 export function roundMoney(value, fallback = 0) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
-  return Math.round(n * 100) / 100
+  return Math.round(n)
 }
 
-// Form display: 80.00 → "80", 2.87 → "2.87" (no noisy trailing zeros).
+// Form display: always whole units.
 export function formatMoneyInput(value) {
   if (value === 0 || value === '0') return '0'
   if (value === '' || value == null) return ''
   const n = Number(value)
   if (!Number.isFinite(n)) return ''
-  // Strip trailing zeros after round to cents
-  const rounded = Math.round(n * 100) / 100
-  return String(rounded)
+  return String(Math.round(n))
 }
 
 // Typing sanitize: digits + optional one "." + up to 2 fraction digits.

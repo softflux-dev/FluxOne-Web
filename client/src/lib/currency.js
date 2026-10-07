@@ -35,8 +35,9 @@ export function formatMoney(amount, currencyCode = DEFAULT_CURRENCY) {
     return new Intl.NumberFormat('en', {
       style: 'currency',
       currency: code,
-      maximumFractionDigits: 2,
-    }).format(n)
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    }).format(Math.trunc(n))
   } catch {
     return `${meta.symbol}${n.toLocaleString()}`
   }
@@ -46,9 +47,9 @@ export function formatMoney(amount, currencyCode = DEFAULT_CURRENCY) {
 export function formatAmount(amount) {
   const n = Number(amount) || 0
   return new Intl.NumberFormat('en', {
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
     minimumFractionDigits: 0,
-  }).format(n)
+  }).format(Math.trunc(n))
 }
 
 // Compact label for table headers / exports e.g. "Price (PKR)"

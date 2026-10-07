@@ -189,7 +189,7 @@ async function assertSufficientStock(client, tenantId, productId, quantity) {
   const { rows } = await tenantClientQuery(
     client,
     tenantId,
-    `SELECT quantity, status FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+    `SELECT quantity, status, scale FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
     [productId],
   )
   if (!rows[0]) throw httpError(404, 'Product not found')
@@ -206,7 +206,7 @@ async function lockProduct(client, tenantId, productId) {
   const { rows } = await tenantClientQuery(
     client,
     tenantId,
-    `SELECT quantity, status FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+    `SELECT quantity, status, scale FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
     [productId],
   )
   if (!rows[0]) throw httpError(404, 'Product not found')
@@ -726,14 +726,22 @@ export async function getControlSummary(tenantId, filters = {}) {
     alertCount,
     dailyPricePendingCount: Number(dailyPendingRows[0]?.pending) || 0,
     priceRequiresStockUtilized: priceRule.priceRequiresStockUtilized,
-    tabCounts: {
-      in: Number(tabCounts.in) || 0,
-      out: Number(tabCounts.out) || 0,
-      adjustment: Number(tabCounts.adjustment) || 0,
-      damaged: Number(tabCounts.damaged) || 0,
-      expired: Number(tabCounts.expired) || 0,
-      other: Number(tabCounts.other) || 0,
-    },
+    tabCounts: (() => {
+      const adjustmentOnly = Number(tabCounts.adjustment) || 0
+      const damaged = Number(tabCounts.damaged) || 0
+      const expired = Number(tabCounts.expired) || 0
+      const other = Number(tabCounts.other) || 0
+      return {
+        in: Number(tabCounts.in) || 0,
+        out: Number(tabCounts.out) || 0,
+        // Adjustment tab badge = full unified ledger set
+        adjustment: adjustmentOnly + damaged + expired + other,
+        adjustmentOnly,
+        damaged,
+        expired,
+        other,
+      }
+    })(),
   }
 }
 
@@ -862,17 +870,21 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
   const qty = Number(event.quantity)
   const outboundQty = Math.abs(qty)
 
+  // Lock product + keep scale for ledger (UI uses variant type/value; scale optional on body).
+  let productRow = null
   if (OUTBOUND_TYPES.has(event.movementType)) {
-    await assertSufficientStock(client, tenantId, event.productId, outboundQty)
+    productRow = await assertSufficientStock(client, tenantId, event.productId, outboundQty)
   } else if (
     (event.movementType === MOVEMENT_TYPES.ADJUSTMENT ||
       event.movementType === MOVEMENT_TYPES.OTHER) &&
     qty < 0
   ) {
-    await assertSufficientStock(client, tenantId, event.productId, outboundQty)
-  } else if (event.movementType !== MOVEMENT_TYPES.TRANSFER) {
-    await lockProduct(client, tenantId, event.productId)
+    productRow = await assertSufficientStock(client, tenantId, event.productId, outboundQty)
+  } else {
+    productRow = await lockProduct(client, tenantId, event.productId)
   }
+
+  const scale = String(event.scale || productRow?.scale || 'unit').trim() || 'unit'
 
   const destinationBranchId = event.toBranchId || event.branchId || null
   if (event.movementType === MOVEMENT_TYPES.IN && destinationBranchId) {
@@ -905,7 +917,7 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
       event.productId,
       event.movementType,
       event.quantity,
-      event.scale,
+      scale,
       event.reason || null,
       event.damagedByUserId || null,
       event.damagedLocation || null,
@@ -1131,7 +1143,7 @@ export async function deleteLedgerEvent(
   })
 }
 
-// Convert past-due stock-in lots into expired movements (dynamic expiry).
+// Legacy safety for old lots with expires_at — new UX records expired manually via Adjustment.
 // Caps qty by current on-hand so prior sales don't fail the batch.
 export async function processDueExpirations(tenantId, createdBy = null, { branchId = null } = {}) {
   return withTransaction(async (client) => {

@@ -3,35 +3,29 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { CONTROL_UI_TAB } from '@/lib/controlTabs'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 import { cn } from '@/lib/utils'
 
-// Row ⋯ menu — tab-aware actions for Control history tables
+// Row ⋯ menu — tab-aware actions for Control history tables.
 export function MovementRowMenu({
   row,
   tab,
   onUpdateStock,
-  onUpdateThreshold,
-  onUpdatePrice,
   onViewDetails,
-  onEdit,
-  onDelete,
+  onEditThreshold,
   className,
 }) {
   const canUpdateStock = tab === MOVEMENT_TYPES.IN && Boolean(onUpdateStock)
-  const canEditRecord =
-    (tab === MOVEMENT_TYPES.ADJUSTMENT ||
-      tab === MOVEMENT_TYPES.DAMAGED ||
-      tab === MOVEMENT_TYPES.OTHER) &&
-    Boolean(onEdit)
-  const canDeleteRecord =
-    (tab === MOVEMENT_TYPES.ADJUSTMENT ||
-      tab === MOVEMENT_TYPES.DAMAGED ||
-      tab === MOVEMENT_TYPES.OTHER) &&
-    Boolean(onDelete)
+  const canViewDetails =
+    (tab === MOVEMENT_TYPES.IN || tab === MOVEMENT_TYPES.ADJUSTMENT) && Boolean(onViewDetails)
+  const canEditThreshold = tab === CONTROL_UI_TAB.THRESHOLDS && Boolean(onEditThreshold)
+
+  if (!canUpdateStock && !canViewDetails && !canEditThreshold) {
+    return <span className="text-xs text-slate-400">—</span>
+  }
 
   return (
     <div className={cn('relative inline-flex', className)}>
@@ -46,32 +40,13 @@ export function MovementRowMenu({
               Update stock
             </DropdownMenuItem>
           ) : null}
-          {onUpdateThreshold ? (
-            <DropdownMenuItem onClick={() => onUpdateThreshold?.(row)}>
-              Update threshold
-            </DropdownMenuItem>
-          ) : null}
-          {onUpdatePrice ? (
-            <DropdownMenuItem onClick={() => onUpdatePrice?.(row)}>
-              Update price
-            </DropdownMenuItem>
-          ) : null}
-          {onViewDetails ? (
+          {canViewDetails ? (
             <DropdownMenuItem onClick={() => onViewDetails?.(row)}>
               View details & history
             </DropdownMenuItem>
           ) : null}
-          {canEditRecord || canDeleteRecord ? <DropdownMenuSeparator /> : null}
-          {canEditRecord ? (
-            <DropdownMenuItem onClick={() => onEdit?.(row)}>Edit record</DropdownMenuItem>
-          ) : null}
-          {canDeleteRecord ? (
-            <DropdownMenuItem
-              className="text-red-600 hover:bg-red-50"
-              onClick={() => onDelete?.(row)}
-            >
-              Delete record
-            </DropdownMenuItem>
+          {canEditThreshold ? (
+            <DropdownMenuItem onClick={() => onEditThreshold?.(row)}>Edit</DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>

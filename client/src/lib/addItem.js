@@ -66,9 +66,44 @@ export function buildCombinations(selectedTypes) {
       openingStock: '0',
       lowStockThreshold: '',
       dailyPriceChange: false,
+      offerId: '',
+      discountPercent: '',
       status: 'active',
     }
   })
+}
+
+export function formatOfferOptionLabel(offer) {
+  if (!offer) return ''
+  const name = offer.name || 'Offer'
+  const percent = Number(offer.percent)
+  if (percent && percent > 0 && !name.includes('%')) {
+    return `${name} – ${percent}%`
+  }
+  return name
+}
+
+/** Map selected offer → { offerId, discountPercent } for API (Discount & Offer = one promo). */
+export function promoFromOfferId(offerId, offers = []) {
+  if (!offerId) return { offerId: null, discountPercent: null }
+  const selected = (offers || []).find((o) => o.id === offerId)
+  return {
+    offerId,
+    discountPercent:
+      selected?.percent != null && selected.percent !== ''
+        ? Math.round(Number(selected.percent))
+        : null,
+  }
+}
+
+export function assertSellingGtePurchase(purchasePrice, sellingPrice) {
+  const purchase = Number(purchasePrice)
+  const selling = Number(sellingPrice)
+  if (!Number.isFinite(purchase) || !Number.isFinite(selling)) return null
+  if (selling < purchase) {
+    return 'Selling price must be greater than or equal to purchase price'
+  }
+  return null
 }
 
 // Build POST /inventory/products body from wizard state
@@ -78,6 +113,7 @@ export function buildAddItemApiPayload({
   combinations = [],
   selectedTypes = [],
   selectedValuesByType = {},
+  offers = [],
 }) {
   const name = String(form.name || '').trim()
   const description = String(form.description || '').trim() || undefined
@@ -87,6 +123,7 @@ export function buildAddItemApiPayload({
   if (productKind === PRODUCT_KIND.NORMAL) {
     const itemCode = String(form.sku || '').trim()
     const barcode = String(form.barcode || '').trim()
+    const promo = promoFromOfferId(form.offerId, offers)
     return {
       name,
       description,
@@ -104,6 +141,8 @@ export function buildAddItemApiPayload({
           ? undefined
           : Number(form.lowStockThreshold),
       dailyPriceChange: Boolean(form.dailyPriceChange),
+      offerId: promo.offerId,
+      discountPercent: promo.discountPercent,
       confirmed: true,
     }
   }
@@ -112,6 +151,7 @@ export function buildAddItemApiPayload({
   const variants = activeRows.map((row) => {
     const itemCode = String(row.sku || '').trim()
     const barcode = String(row.barcode || '').trim()
+    const promo = promoFromOfferId(row.offerId, offers)
     return {
       label: row.label,
       ...(itemCode ? { itemCode } : {}),
@@ -124,6 +164,8 @@ export function buildAddItemApiPayload({
           ? undefined
           : Number(row.lowStockThreshold),
       dailyPriceChange: Boolean(row.dailyPriceChange),
+      offerId: promo.offerId,
+      discountPercent: promo.discountPercent,
       status: 'active',
       parts: (row.parts || []).map((p) => ({
         typeId: p.typeId,
@@ -257,6 +299,14 @@ export function variantsToCombinationRows(variants = []) {
       lowStockThreshold:
         v.reorderPoint === 0 || v.reorderPoint ? String(v.reorderPoint) : '',
       dailyPriceChange: Boolean(v.dailyPriceChange),
+      offerId: v.offerId || '',
+      offerName: v.offerName || '',
+      discountPercent:
+        v.discountPercent === 0 || v.discountPercent
+          ? String(Math.round(Number(v.discountPercent)))
+          : v.offerPercent === 0 || v.offerPercent
+            ? String(Math.round(Number(v.offerPercent)))
+            : '',
       status: v.status === 'inactive' ? 'inactive' : 'active',
     }
   })
@@ -339,6 +389,7 @@ export function buildEditItemApiPayload({
   form,
   productKind,
   combinations = [],
+  offers = [],
 }) {
   const name = String(form.name || '').trim()
   const description = String(form.description || '').trim() || undefined
@@ -348,6 +399,7 @@ export function buildEditItemApiPayload({
   if (productKind === PRODUCT_KIND.NORMAL) {
     const itemCode = String(form.sku || '').trim()
     const barcode = String(form.barcode || '').trim()
+    const promo = promoFromOfferId(form.offerId, offers)
     return {
       name,
       description,
@@ -364,6 +416,8 @@ export function buildEditItemApiPayload({
           ? undefined
           : Number(form.lowStockThreshold),
       dailyPriceChange: Boolean(form.dailyPriceChange),
+      offerId: promo.offerId,
+      discountPercent: promo.discountPercent,
       status: form.status === 'inactive' ? 'inactive' : 'active',
     }
   }
@@ -371,6 +425,7 @@ export function buildEditItemApiPayload({
   const variants = combinations.map((row) => {
     const itemCode = String(row.sku || '').trim()
     const barcode = String(row.barcode || '').trim()
+    const promo = promoFromOfferId(row.offerId, offers)
     const base = {
       label: row.label,
       ...(itemCode ? { itemCode } : {}),
@@ -382,6 +437,8 @@ export function buildEditItemApiPayload({
           ? undefined
           : Number(row.lowStockThreshold),
       dailyPriceChange: Boolean(row.dailyPriceChange),
+      offerId: promo.offerId,
+      discountPercent: promo.discountPercent,
       status: row.status === 'inactive' ? 'inactive' : 'active',
       parts: (row.parts || []).map((p) => ({
         typeId: p.typeId,

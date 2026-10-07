@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
-import { MOVEMENT_TYPES, PRODUCT_TYPES } from '../../../config/constants.js'
+import { MOVEMENT_TYPES, PRODUCT_STATUS, PRODUCT_TYPES } from '../../../config/constants.js'
 import { generateBarcodeValue, generateItemCode } from '../../../utils/barcode.util.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 import {
@@ -24,6 +24,31 @@ function isLooseUuid(value) {
 function mapUniqueViolation(err, message = 'Item code or barcode already exists') {
   if (err?.code === '23505') throw httpError(409, message)
   throw err
+}
+
+function assertSellingGtePurchase(purchasePrice, sellingPrice, label = 'Product') {
+  const purchase = Number(purchasePrice) || 0
+  const selling = Number(sellingPrice) || 0
+  if (selling < purchase) {
+    throw httpError(
+      422,
+      `${label}: selling price must be greater than or equal to purchase price`,
+    )
+  }
+}
+
+/** Per-SKU discount/offer (Discount & Offer are one promo). */
+function resolveVariantPromo(variant = {}, parentPayload = {}) {
+  const hasOwnOffer = Object.prototype.hasOwnProperty.call(variant, 'offerId')
+  const hasOwnDiscount = Object.prototype.hasOwnProperty.call(variant, 'discountPercent')
+  const offerId = hasOwnOffer ? variant.offerId || null : parentPayload.offerId || null
+  let discountPercent = hasOwnDiscount
+    ? variant.discountPercent
+    : parentPayload.discountPercent ?? null
+  if (discountPercent === undefined || discountPercent === '') discountPercent = null
+  // No linked offer → no discount % (one promo model)
+  if (!offerId) discountPercent = null
+  return { offerId, discountPercent }
 }
 
 // Branch scope: null = all branches (B2B admin)
@@ -343,6 +368,9 @@ export async function listProducts(tenantId, filters = {}) {
     filters.scale || null,
     statusFilter,
     filters.branchId || null,
+    filters.productId || null,
+    filters.variantTypeId || null,
+    filters.variantValueId || null,
   ]
 
   // Single round-trip: page rows + total via window count (same response shape).
@@ -376,14 +404,14 @@ export async function listProducts(tenantId, filters = {}) {
         curr_s.company_name AS "currentPurchaseVendorName",
         COALESCE(tax.tax_percent, 0) AS "taxPercent",
         COALESCE(tax.tax_names, ARRAY[]::text[]) AS "taxNames",
+        -- Discount & offer are one promo: apply % once (prefer stored discount_percent)
         round(
           (
             p.selling_price
-            * (1 - COALESCE(p.discount_percent, 0) / 100)
-            * (1 - COALESCE(o.percent, 0) / 100)
+            * (1 - COALESCE(p.discount_percent, o.percent, 0) / 100)
             * (1 + COALESCE(tax.tax_percent, 0) / 100)
           )::numeric,
-          2
+          0
         ) AS "finalPrice",
         count(*) OVER()::int AS "_total"
       FROM products p
@@ -407,8 +435,33 @@ export async function listProducts(tenantId, filters = {}) {
         AND ($6::text IS NULL OR p.scale = $6)
         AND ($7::text IS NULL OR p.status = $7)
         ${branchClause('p', 8)}
+        AND ($9::uuid IS NULL OR p.id = $9)
+        AND (
+          $10::uuid IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM products c
+            JOIN product_variant_options pvo
+              ON pvo.product_id = c.id AND pvo.tenant_id = c.tenant_id
+            WHERE c.tenant_id = p.tenant_id
+              AND c.parent_id = p.id
+              AND pvo.variant_type_id = $10
+          )
+        )
+        AND (
+          $11::uuid IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM products c
+            JOIN product_variant_options pvo
+              ON pvo.product_id = c.id AND pvo.tenant_id = c.tenant_id
+            WHERE c.tenant_id = p.tenant_id
+              AND c.parent_id = p.id
+              AND pvo.variant_value_id = $11
+          )
+        )
       ORDER BY p.created_at DESC
-      LIMIT $9 OFFSET $10
+      LIMIT $12 OFFSET $13
     `,
     [...filterParams, limit, offset],
   )
@@ -490,11 +543,10 @@ export async function getProductDetail(tenantId, id, { branchId = null } = {}) {
         round(
           (
             p.selling_price
-            * (1 - COALESCE(p.discount_percent, 0) / 100)
-            * (1 - COALESCE(o.percent, 0) / 100)
+            * (1 - COALESCE(p.discount_percent, o.percent, 0) / 100)
             * (1 + COALESCE(tax.tax_percent, 0) / 100)
           )::numeric,
-          2
+          0
         ) AS "finalPrice"
       FROM products p
       LEFT JOIN offers o ON o.id = p.offer_id AND o.tenant_id = p.tenant_id
@@ -527,7 +579,14 @@ export async function getProductDetail(tenantId, id, { branchId = null } = {}) {
         cp.name AS "itemName",
         cp.item_code AS "itemCode",
         cp.scale AS "itemScale",
-        cp.quantity AS "itemStock"
+        cp.quantity AS "itemStock",
+        cp.selling_price AS "sellingPrice",
+        cp.variant_label AS "variantLabel",
+        cp.image_url AS "imageUrl",
+        cp.category_id AS "categoryId",
+        cp.subcategory_id AS "subcategoryId",
+        cp.parent_id AS "parentId",
+        cp.scale
       FROM bundle_items bi
       JOIN products cp ON cp.id = bi.item_id AND cp.tenant_id = bi.tenant_id
       WHERE bi.tenant_id = $1 AND bi.bundle_id = $2
@@ -555,10 +614,15 @@ export async function getProductDetail(tenantId, id, { branchId = null } = {}) {
           c.daily_price_change AS "dailyPriceChange",
           c.purchase_price AS "purchasePrice",
           c.selling_price AS "sellingPrice",
+          c.discount_percent AS "discountPercent",
+          c.offer_id AS "offerId",
+          o.name AS "offerName",
+          o.percent AS "offerPercent",
           c.creation_batch_id AS "creationBatchId",
           c.parent_id AS "parentId",
           c.created_at AS "createdAt"
         FROM products c
+        LEFT JOIN offers o ON o.id = c.offer_id AND o.tenant_id = c.tenant_id
         WHERE c.tenant_id = $1 AND c.parent_id = $2
         ORDER BY c.variant_label ASC NULLS LAST, c.created_at ASC, c.id ASC
       `,
@@ -824,6 +888,31 @@ async function loadBundleRecipe(client, tenantId, bundleId) {
     [bundleId],
   )
   return rows
+}
+
+// Return remaining finished bundles to component items (deactivate / delete).
+async function disassembleBundleFully(
+  client,
+  tenantId,
+  product,
+  { createdBy = null, scopeBranchId = null } = {},
+) {
+  if (!product || product.type !== PRODUCT_TYPES.BUNDLE) return
+  const qty = Math.max(0, Number(product.quantity) || 0)
+  if (qty <= 0) return
+  const items = await loadBundleRecipe(client, tenantId, product.id)
+  if (!items.length) return
+  await applyBundleAssembleDelta(client, tenantId, {
+    bundleId: product.id,
+    bundleName: product.name,
+    bundleScale: product.scale || 'unit',
+    oldBundleQty: qty,
+    newBundleQty: 0,
+    oldItems: items,
+    newItems: items,
+    createdBy,
+    scopeBranchId,
+  })
 }
 
 async function validateProductCategories(client, tenantId, { categoryId, subcategoryId, branchId }) {
@@ -1163,11 +1252,13 @@ export async function createVariantProduct(tenantId, payload) {
           String(variant.barcode || '').trim() ||
           `${generateBarcodeValue().slice(0, 11)}${String(index + 1).padStart(2, '0')}`
 
-        const purchasePrice = Number(variant.purchasePrice) || 0
-        let sellingPrice = Number(variant.sellingPrice) || 0
+        const purchasePrice = Math.round(Number(variant.purchasePrice) || 0)
+        let sellingPrice = Math.round(Number(variant.sellingPrice) || 0)
         if ((!sellingPrice || sellingPrice === 0) && purchasePrice > 0 && profitPercent > 0) {
-          sellingPrice = Math.round(purchasePrice * (1 + profitPercent / 100) * 100) / 100
+          sellingPrice = Math.round(purchasePrice * (1 + profitPercent / 100))
         }
+        assertSellingGtePurchase(purchasePrice, sellingPrice, `Variant “${label}”`)
+        const promo = resolveVariantPromo(variant, payload)
 
         const childStatus = variant.status === 'inactive' ? 'inactive' : 'active'
         const openingQty =
@@ -1186,8 +1277,8 @@ export async function createVariantProduct(tenantId, payload) {
           purchasePrice,
           sellingPrice,
           profitPercent,
-          offerId: payload.offerId,
-          discountPercent: payload.discountPercent,
+          offerId: promo.offerId,
+          discountPercent: promo.discountPercent,
           quantity: 0,
           reorderPoint:
             variant.reorderPoint === undefined || variant.reorderPoint === null
@@ -1267,7 +1358,13 @@ export async function createProduct(tenantId, payload) {
         const requestedSelling = Number(payload.sellingPrice)
         sellingPrice = requestedSelling > 0 ? requestedSelling : derived.sellingPrice
       } else if ((!sellingPrice || sellingPrice === 0) && purchasePrice > 0 && profitPercent > 0) {
-        sellingPrice = Math.round(purchasePrice * (1 + profitPercent / 100) * 100) / 100
+        sellingPrice = Math.round(purchasePrice * (1 + profitPercent / 100))
+      }
+
+      purchasePrice = Math.round(Number(purchasePrice) || 0)
+      sellingPrice = Math.round(Number(sellingPrice) || 0)
+      if (payload.type !== PRODUCT_TYPES.BUNDLE) {
+        assertSellingGtePurchase(purchasePrice, sellingPrice, payload.name || 'Product')
       }
 
       const isBundle = payload.type === PRODUCT_TYPES.BUNDLE
@@ -1287,8 +1384,11 @@ export async function createProduct(tenantId, payload) {
         purchasePrice,
         sellingPrice,
         profitPercent,
-        offerId: payload.offerId,
-        discountPercent: payload.discountPercent,
+        offerId: payload.offerId || null,
+        discountPercent:
+          payload.discountPercent === undefined || payload.discountPercent === ''
+            ? null
+            : payload.discountPercent,
         // Opening stock applied via ledger so qty + branch_inventory stay consistent
         quantity: 0,
         reorderPoint:
@@ -1390,8 +1490,10 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
     let itemCode = String(variant.itemCode || variant.sku || '').trim()
     let barcode = String(variant.barcode || '').trim()
 
-    const purchasePrice = Number(variant.purchasePrice) || 0
-    const sellingPrice = Number(variant.sellingPrice) || 0
+    const purchasePrice = Math.round(Number(variant.purchasePrice) || 0)
+    const sellingPrice = Math.round(Number(variant.sellingPrice) || 0)
+    assertSellingGtePurchase(purchasePrice, sellingPrice, `Variant “${label}”`)
+    const promo = resolveVariantPromo(variant, payload)
     const childStatus = variant.status === 'inactive' ? 'inactive' : 'active'
     const reorderPoint =
       variant.reorderPoint === undefined || variant.reorderPoint === null
@@ -1438,6 +1540,8 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
             category_id = $12,
             subcategory_id = $13,
             image_url = $14,
+            offer_id = $15,
+            discount_percent = $16::numeric,
             updated_at = now()
           WHERE tenant_id = $1 AND id = $2
         `,
@@ -1455,6 +1559,8 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
           categoryId,
           subcategoryId,
           parentImageUrl,
+          promo.offerId,
+          promo.discountPercent,
         ],
       )
 
@@ -1492,6 +1598,8 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
         purchasePrice,
         sellingPrice,
         profitPercent: parent.profitPercent ?? 0,
+        offerId: promo.offerId,
+        discountPercent: promo.discountPercent,
         quantity: 0,
         reorderPoint,
         status: childStatus,
@@ -1537,10 +1645,13 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
             name,
             type,
             scale,
+            status,
             category_id AS "categoryId",
             subcategory_id AS "subcategoryId",
             branch_id AS "branchId",
             quantity,
+            purchase_price AS "purchasePrice",
+            selling_price AS "sellingPrice",
             image_url AS "imageUrl",
             description,
             creation_batch_id AS "creationBatchId",
@@ -1560,6 +1671,14 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         throw httpError(400, 'Edit the parent variant product to update this SKU')
       }
 
+      // TL: recipe locked after create — top-up stock only via quantity
+      if (existing.type === PRODUCT_TYPES.BUNDLE && payload.bundleItems !== undefined) {
+        throw httpError(
+          400,
+          'Bundle items cannot be changed after creation. Delete and recreate the bundle.',
+        )
+      }
+
       // Product type is locked after create (Normal ↔ Variant blocked)
       if (payload.type != null && payload.type !== existing.type) {
         throw httpError(
@@ -1576,6 +1695,13 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
           purchasePrice: 'purchasePrice' in payload ? payload.purchasePrice : undefined,
           sellingPrice: 'sellingPrice' in payload ? payload.sellingPrice : undefined,
         })
+        const nextPurchase =
+          'purchasePrice' in payload ? payload.purchasePrice : existing.purchasePrice
+        const nextSelling =
+          'sellingPrice' in payload ? payload.sellingPrice : existing.sellingPrice
+        if (existing.type !== PRODUCT_TYPES.BUNDLE) {
+          assertSellingGtePurchase(nextPurchase, nextSelling, existing.name || 'Product')
+        }
       }
 
       const effectiveBranchId = existing.branchId || branchId
@@ -1726,38 +1852,25 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
       if (payload.taxIds !== undefined) await attachTaxes(client, tenantId, id, payload.taxIds)
 
       const isBundle = existing.type === PRODUCT_TYPES.BUNDLE
-      const recipeChanging = isBundle && payload.bundleItems !== undefined
       const qtyChanging = isBundle && 'quantity' in payload
+      const nextStatus =
+        payload.status !== undefined ? payload.status : existing.status
+      const becomingInactive =
+        isBundle &&
+        existing.status !== PRODUCT_STATUS.INACTIVE &&
+        nextStatus === PRODUCT_STATUS.INACTIVE
 
-      if (recipeChanging || qtyChanging) {
+      // Deactivate → dissolve remaining finished stock back to components
+      if (becomingInactive) {
+        await disassembleBundleFully(client, tenantId, existing, {
+          createdBy: payload.createdBy || null,
+          scopeBranchId: product.branchId || branchId || null,
+        })
+      } else if (qtyChanging) {
         const oldItems = await loadBundleRecipe(client, tenantId, id)
-        const newItems = recipeChanging ? payload.bundleItems : oldItems
-        const newBundleQty = qtyChanging
-          ? Math.max(0, Number(payload.quantity) || 0)
-          : Number(existing.quantity) || 0
+        const newBundleQty = Math.max(0, Number(payload.quantity) || 0)
         const bundleName = payload.name || existing.name
         const bundleScale = payload.scale || existing.scale || 'unit'
-
-        if (recipeChanging) {
-          const recipeBranchId = product.branchId || branchId
-          await attachBundleItems(client, tenantId, id, payload.bundleItems, recipeBranchId)
-          const derived = await resolveBundlePrices(
-            client,
-            tenantId,
-            payload.bundleItems,
-            recipeBranchId,
-          )
-          await tenantClientQuery(
-            client,
-            tenantId,
-            `
-              UPDATE products
-              SET purchase_price = $3, selling_price = $4
-              WHERE tenant_id = $1 AND id = $2
-            `,
-            [id, derived.purchasePrice, derived.sellingPrice],
-          )
-        }
 
         await applyBundleAssembleDelta(client, tenantId, {
           bundleId: id,
@@ -1766,7 +1879,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
           oldBundleQty: Number(existing.quantity) || 0,
           newBundleQty,
           oldItems,
-          newItems,
+          newItems: oldItems,
           createdBy: payload.createdBy || null,
           scopeBranchId: product.branchId || branchId || null,
         })
@@ -1911,20 +2024,66 @@ export async function permanentDeleteProduct(tenantId, id, { branchId = null } =
 }
 
 export async function deleteProduct(tenantId, id, { branchId = null, permanent = false } = {}) {
+  // Soft delete (deactivate) or permanent — dissolve remaining bundle stock first
   if (permanent) {
-    return permanentDeleteProduct(tenantId, id, { branchId })
+    const eligibility = await getProductDeleteEligibility(tenantId, id, { branchId })
+    if (!eligibility.found) return false
+    if (!eligibility.canPermanentDelete) {
+      throw httpError(409, eligibility.reason || 'Product cannot be permanently deleted')
+    }
   }
 
-  const { rows } = await tenantQuery(
-    tenantId,
-    `
-      UPDATE products
-      SET status = 'inactive'
-      WHERE tenant_id = $1 AND id = $2
-        ${branchClause('', 3)}
-      RETURNING id
-    `,
-    [id, branchId],
-  )
-  return Boolean(rows[0])
+  return withTransaction(async (client) => {
+    const { rows: existingRows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT
+          id, name, type, scale, status, quantity,
+          branch_id AS "branchId"
+        FROM products
+        WHERE tenant_id = $1 AND id = $2
+          ${branchClause('', 3)}
+        LIMIT 1
+      `,
+      [id, branchId],
+    )
+    const existing = existingRows[0]
+    if (!existing) return false
+
+    if (existing.type === PRODUCT_TYPES.BUNDLE) {
+      await disassembleBundleFully(client, tenantId, existing, {
+        scopeBranchId: existing.branchId || branchId || null,
+      })
+    }
+
+    if (permanent) {
+      const { rows } = await tenantClientQuery(
+        client,
+        tenantId,
+        `
+          DELETE FROM products
+          WHERE tenant_id = $1 AND id = $2
+            ${branchClause('', 3)}
+          RETURNING id
+        `,
+        [id, branchId],
+      )
+      return Boolean(rows[0])
+    }
+
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        UPDATE products
+        SET status = 'inactive', updated_at = now()
+        WHERE tenant_id = $1 AND id = $2
+          ${branchClause('', 3)}
+        RETURNING id
+      `,
+      [id, branchId],
+    )
+    return Boolean(rows[0])
+  })
 }

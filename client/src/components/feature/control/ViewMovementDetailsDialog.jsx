@@ -16,10 +16,11 @@ import { mapStockMovement, MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 const LIST_PATH = {
   [MOVEMENT_TYPES.IN]: endpoints.control.stockIn,
   [MOVEMENT_TYPES.OUT]: endpoints.control.stockOut,
-  [MOVEMENT_TYPES.ADJUSTMENT]: endpoints.control.adjustments,
-  [MOVEMENT_TYPES.DAMAGED]: endpoints.control.damaged,
-  [MOVEMENT_TYPES.EXPIRED]: endpoints.control.expired,
-  [MOVEMENT_TYPES.OTHER]: endpoints.control.others,
+  // Unified adjustment history (includes damaged / expired / other)
+  [MOVEMENT_TYPES.ADJUSTMENT]: endpoints.control.adjustmentLedger,
+  [MOVEMENT_TYPES.DAMAGED]: endpoints.control.adjustmentLedger,
+  [MOVEMENT_TYPES.EXPIRED]: endpoints.control.adjustmentLedger,
+  [MOVEMENT_TYPES.OTHER]: endpoints.control.adjustmentLedger,
 }
 
 function DetailRow({ label, value }) {
@@ -40,7 +41,8 @@ export function ViewMovementDetailsDialog({ open, onOpenChange, row = null, tab 
 
   useEffect(() => {
     if (!open || !row?.productId) return undefined
-    const path = LIST_PATH[tab] || endpoints.control.stockIn
+    const historyTab = row?.movementType || tab
+    const path = LIST_PATH[historyTab] || endpoints.control.stockIn
     let cancelled = false
 
     void (async () => {
@@ -66,7 +68,7 @@ export function ViewMovementDetailsDialog({ open, onOpenChange, row = null, tab 
     return () => {
       cancelled = true
     }
-  }, [open, row?.productId, tab])
+  }, [open, row?.productId, row?.movementType, tab])
 
   const shownHistory = open && row?.productId ? history : []
 

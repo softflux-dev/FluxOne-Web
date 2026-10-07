@@ -2,6 +2,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { ADJUSTMENT_LEDGER_TYPES, CONTROL_UI_TAB } from '@/lib/controlTabs'
 import { mapStockMovement, MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 import { mapPurchaseOrder } from '@/lib/mapPurchaseOrder'
 import { mapProduct } from '@/lib/mapProduct'
@@ -16,7 +17,7 @@ export const CONTROL_PAGE_SIZE = 8
 export const LIST_PATH = {
   [MOVEMENT_TYPES.IN]: endpoints.control.stockIn,
   [MOVEMENT_TYPES.OUT]: endpoints.control.stockOut,
-  [MOVEMENT_TYPES.ADJUSTMENT]: endpoints.control.adjustments,
+  [MOVEMENT_TYPES.ADJUSTMENT]: endpoints.control.adjustmentLedger,
   [MOVEMENT_TYPES.DAMAGED]: endpoints.control.damaged,
   [MOVEMENT_TYPES.EXPIRED]: endpoints.control.expired,
   [MOVEMENT_TYPES.OTHER]: endpoints.control.others,
@@ -46,9 +47,9 @@ export function defaultGlobalFilters(overrides = {}) {
     categoryId: '',
     subcategoryId: '',
     productId: '',
-    variantId: '',
     variantTypeId: '',
     variantValueId: '',
+    ledgerKind: '',
     scale: '',
     from: '',
     to: '',
@@ -123,16 +124,16 @@ function ensureBucket(state, movementType) {
 // Merge global + per-tab page/limit for list API (AND across all applied fields).
 export function buildListQuery(globalFilters, bucketFilters = {}) {
   const g = globalFilters || defaultGlobalFilters()
-  const productId = g.variantId || g.productId || undefined
   return {
     page: bucketFilters.page || 1,
     limit: bucketFilters.limit || CONTROL_PAGE_SIZE,
     q: g.q || undefined,
     categoryId: g.categoryId || undefined,
     subcategoryId: g.subcategoryId || undefined,
-    productId: productId || undefined,
+    productId: g.productId || undefined,
     variantTypeId: g.variantTypeId || undefined,
     variantValueId: g.variantValueId || undefined,
+    ledgerKind: g.ledgerKind || undefined,
     scale: g.scale || undefined,
     type: g.type || undefined,
     from: g.from || undefined,
@@ -153,9 +154,43 @@ export const loadControlCatalog = createAsyncThunk(
     catalogToState(await getProductCatalog({ force, categoryActive })),
 )
 
+export const fetchControlThresholds = createAsyncThunk(
+  'control/fetchThresholds',
+  async ({ filters, globalFilters }, { getState, rejectWithValue }) => {
+    const state = getState().control
+    const g = globalFilters || state.globalFilters
+    const bucket = state.byType[CONTROL_UI_TAB.THRESHOLDS]
+    const query = buildListQuery(g, filters || bucket?.filters || defaultBucketFilters())
+    const result = await apiClient.get(endpoints.control.thresholds, {
+      q: query.q,
+      categoryId: query.categoryId,
+      subcategoryId: query.subcategoryId,
+      productId: query.productId,
+      type: query.type,
+    })
+    if (!result.success) {
+      return rejectWithValue(result.error || 'Failed to load thresholds')
+    }
+    const rows = Array.isArray(result.data?.items) ? result.data.items : []
+    return {
+      movementType: CONTROL_UI_TAB.THRESHOLDS,
+      items: rows,
+      pagination: {
+        page: 1,
+        limit: rows.length || CONTROL_PAGE_SIZE,
+        total: rows.length,
+        pageCount: 1,
+      },
+    }
+  },
+)
+
 export const fetchControlMovements = createAsyncThunk(
   'control/fetchList',
   async ({ movementType, filters, globalFilters }, { getState, rejectWithValue }) => {
+    if (movementType === CONTROL_UI_TAB.THRESHOLDS) {
+      return rejectWithValue('Use fetchControlThresholds')
+    }
     const listPath = LIST_PATH[movementType]
     if (!listPath) return rejectWithValue('Unknown movement type')
     const state = getState().control
@@ -226,6 +261,9 @@ export const createMovement = createAsyncThunk(
     const result = await apiClient.post(path, body)
     if (!result.success) return rejectWithValue(result.error || 'Create failed')
     void refetchWithState(dispatch, getState, movementType)
+    if (ADJUSTMENT_LEDGER_TYPES.includes(movementType)) {
+      void refetchWithState(dispatch, getState, MOVEMENT_TYPES.ADJUSTMENT)
+    }
     return result
   },
 )
@@ -347,9 +385,9 @@ const GLOBAL_FILTER_KEYS = new Set([
   'categoryId',
   'subcategoryId',
   'productId',
-  'variantId',
   'variantTypeId',
   'variantValueId',
+  'ledgerKind',
   'scale',
   'from',
   'to',
@@ -433,6 +471,24 @@ const controlSlice = createSlice({
       .addCase(fetchControlMovements.rejected, (state, action) => {
         const movementType = action.meta.arg.movementType
         const bucket = ensureBucket(state, movementType)
+        bucket.loading = false
+        bucket.items = []
+        bucket.error = action.payload || action.error.message
+      })
+      .addCase(fetchControlThresholds.pending, (state) => {
+        const bucket = ensureBucket(state, CONTROL_UI_TAB.THRESHOLDS)
+        bucket.loading = true
+        bucket.error = null
+      })
+      .addCase(fetchControlThresholds.fulfilled, (state, action) => {
+        const { movementType, items, pagination } = action.payload
+        const bucket = ensureBucket(state, movementType)
+        bucket.loading = false
+        bucket.items = items
+        bucket.pagination = pagination
+      })
+      .addCase(fetchControlThresholds.rejected, (state, action) => {
+        const bucket = ensureBucket(state, CONTROL_UI_TAB.THRESHOLDS)
         bucket.loading = false
         bucket.items = []
         bucket.error = action.payload || action.error.message

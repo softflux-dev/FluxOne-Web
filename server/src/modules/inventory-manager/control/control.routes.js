@@ -15,6 +15,7 @@ import {
   getThresholds,
   importControl,
   listAdjustments,
+  listAdjustmentLedger,
   listDailyPrices,
   listDamaged,
   listExpired,
@@ -141,6 +142,12 @@ router.get('/stock-out', requirePermission('stock:read'), validate(listLedgerSch
 router.post('/stock-out', requirePermission('stock:write'), validate(stockOutSchema), asyncHandler(createStockOut))
 
 router.get('/adjustments', requirePermission('stock:read'), validate(listLedgerSchema), asyncHandler(listAdjustments))
+router.get(
+  '/adjustment-ledger',
+  requirePermission('stock:read'),
+  validate(listLedgerSchema),
+  asyncHandler(listAdjustmentLedger),
+)
 router.post('/adjustments', requirePermission('stock:write'), validate(adjustmentSchema), asyncHandler(createAdjustment))
 router.patch(
   '/adjustments/:id',

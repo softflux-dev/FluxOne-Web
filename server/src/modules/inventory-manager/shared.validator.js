@@ -25,6 +25,10 @@ export const catalogFilters = z.object({
   q: z.string().optional(),
   categoryId: optionalUuid,
   subcategoryId: optionalUuid,
+  // Parent product + variant axes (Products / Control / Branch cascade).
+  productId: optionalUuid,
+  variantTypeId: optionalUuid,
+  variantValueId: optionalUuid,
   type: z
     .enum([PRODUCT_TYPES.SINGLE, PRODUCT_TYPES.BUNDLE, PRODUCT_TYPES.VARIANT])
     .optional(),

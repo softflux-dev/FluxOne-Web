@@ -20,6 +20,7 @@ import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 import { FieldError } from '@/components/shared/FieldError'
 import { CategoryLines } from '@/components/shared/CategoryLines'
 import { BRAND } from '@/lib/constants'
+import { assertSellingGtePurchase, formatOfferOptionLabel } from '@/lib/addItem'
 import { PRODUCT_TYPES, SCALE_OPTIONS, taxIdsForDefaultRate } from '@/lib/mapProduct'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFormBaseline } from '@/hooks/useFormBaseline'
@@ -43,16 +44,6 @@ const EMPTY = {
   // Finished bundles after assemble (create/edit)
   bundleQuantity: '1',
   image: null,
-}
-
-function formatOfferOptionLabel(offer) {
-  if (!offer) return ''
-  const name = offer.name || 'Offer'
-  const percent = Number(offer.percent)
-  if (percent && percent > 0 && !name.includes('%')) {
-    return `${name} – ${percent}%`
-  }
-  return name
 }
 
 //
@@ -269,6 +260,8 @@ export function ItemFormDialog({
       if (form.sellingPrice === '' || Number.isNaN(Number(form.sellingPrice)) || Number(form.sellingPrice) < 0) {
         errors.sellingPrice = 'Selling price is required'
       }
+      const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
+      if (priceErr && !errors.sellingPrice) errors.sellingPrice = priceErr
     }
 
     const order = isBundle
@@ -318,7 +311,7 @@ export function ItemFormDialog({
       offerId: form.offerId ? form.offerId : null,
       discountPercent:
         form.offerId && selectedOffer?.percent != null
-          ? Number(selectedOffer.percent)
+          ? Math.round(Number(selectedOffer.percent))
           : null,
       image: form.image,
       purchasePrice: Number(form.purchasePrice) || 0,

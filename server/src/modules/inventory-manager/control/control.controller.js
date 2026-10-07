@@ -100,6 +100,31 @@ export async function getSummary(req, res) {
 export const listStockIn = listByType(MOVEMENT_TYPES.IN)
 export const listStockOut = listByType(MOVEMENT_TYPES.OUT)
 export const listAdjustments = listByType(MOVEMENT_TYPES.ADJUSTMENT)
+
+// Unified adjustment tab — adjustment + damaged + expired + other ledger rows.
+export async function listAdjustmentLedger(req, res) {
+  try {
+    const { tenantId, branchId } = resolveInventoryScope(req)
+    const { ledgerKind, ...query } = req.validated.query
+    const movementTypes = ledgerKind
+      ? [ledgerKind]
+      : [
+          MOVEMENT_TYPES.ADJUSTMENT,
+          MOVEMENT_TYPES.DAMAGED,
+          MOVEMENT_TYPES.EXPIRED,
+          MOVEMENT_TYPES.OTHER,
+        ]
+    const result = await listLedger(tenantId, {
+      ...query,
+      movementTypes,
+      branchId,
+    })
+    return success(res, paginatedResult(result.items, result))
+  } catch (err) {
+    return scopeError(res, err)
+  }
+}
+
 export const listDamaged = listByType(MOVEMENT_TYPES.DAMAGED)
 export const listOthers = listByType(MOVEMENT_TYPES.OTHER)
 
@@ -279,11 +304,33 @@ export async function exportControl(req, res) {
     const { tenantId, branchId } = resolveInventoryScope(req)
     const query = req.validated.query || {}
     const movementType = query.movementType
-    const filters = {
-      ...query,
-      branchId,
-      movementType,
+    const { ledgerKind, ...rest } = query
+
+    // Adjustment tab export = same scope as adjustment-ledger list.
+    let filters
+    if (movementType === MOVEMENT_TYPES.ADJUSTMENT) {
+      const movementTypes = ledgerKind
+        ? [ledgerKind]
+        : [
+            MOVEMENT_TYPES.ADJUSTMENT,
+            MOVEMENT_TYPES.DAMAGED,
+            MOVEMENT_TYPES.EXPIRED,
+            MOVEMENT_TYPES.OTHER,
+          ]
+      filters = {
+        ...rest,
+        branchId,
+        movementTypes,
+      }
+      delete filters.movementType
+    } else {
+      filters = {
+        ...rest,
+        branchId,
+        movementType,
+      }
     }
+
     const rows = await exportLedgerRows(tenantId, filters)
     return success(res, { rows, exported: rows.length, movementType })
   } catch (err) {

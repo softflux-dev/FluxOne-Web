@@ -153,9 +153,12 @@ export function splitCategories(rows = []) {
 }
 
 export function money(value) {
-  return Number(value || 0).toLocaleString(undefined, {
+  if (value === null || value === undefined || value === '') return '—'
+  const n = Math.trunc(Number(value))
+  if (!Number.isFinite(n)) return '—'
+  return n.toLocaleString(undefined, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   })
 }
 
