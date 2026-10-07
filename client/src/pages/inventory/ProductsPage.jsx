@@ -6,6 +6,7 @@ import { PrintBarcodeDialog } from '@/components/feature/products/PrintBarcodeDi
 import { ProductFilters } from '@/components/feature/products/ProductFilters'
 import { ProductTable } from '@/components/feature/products/ProductTable'
 import { ScanItemDialog } from '@/components/feature/products/ScanItemDialog'
+import { VariantSkusDialog } from '@/components/feature/products/VariantSkusDialog'
 import { AddStockInDialog } from '@/components/feature/control/AddStockInDialog'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -45,6 +46,7 @@ export function ProductsPage() {
     fetchProductDeleteInfo,
     importProducts,
     scanBarcode,
+    fetchProductDetail,
     fetchBarcodePng,
     exportCsv,
     reload,
@@ -68,6 +70,9 @@ export function ProductsPage() {
   const [stockOpen, setStockOpen] = useState(false)
   const [stockProduct, setStockProduct] = useState(null)
   const [stockSaving, setStockSaving] = useState(false)
+
+  // Variant parent → View opens per-SKU stock / pricing modal
+  const [variantsTarget, setVariantsTarget] = useState(null)
 
   const activeParents = (catalog.parents || []).filter((row) => row.isActive !== false)
   const activeSubs = (selectedCategorySubs || []).filter((row) => row.isActive !== false)
@@ -353,8 +358,18 @@ export function ProductsPage() {
           onBlock={(row) => handleStatusChange(row, PRODUCT_STATUS.INACTIVE)}
           onUnblock={(row) => handleStatusChange(row, PRODUCT_STATUS.ACTIVE)}
           onDelete={openDelete}
+          onViewVariants={setVariantsTarget}
         />
       </MotionReveal>
+
+      <VariantSkusDialog
+        open={Boolean(variantsTarget)}
+        onOpenChange={(open) => {
+          if (!open) setVariantsTarget(null)
+        }}
+        product={variantsTarget}
+        fetchProductDetail={fetchProductDetail}
+      />
 
       <AddStockInDialog
         open={stockOpen}

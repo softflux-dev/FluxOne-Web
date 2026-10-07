@@ -5,7 +5,7 @@ import {
   listPolicies,
   updatePolicy,
 } from './policies.model.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
 export async function policiesList(req, res) {
@@ -24,8 +24,7 @@ export async function createPolicyHandler(req, res) {
     const row = await createPolicy(req.tenantId, req.validated.body)
     return success(res, row, 201)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -35,8 +34,7 @@ export async function patchPolicy(req, res) {
     if (!row) return fail(res, 'Policy not found', 404)
     return success(res, row)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -45,7 +43,6 @@ export async function removePolicy(req, res) {
     const result = await deletePolicy(req.tenantId, req.validated.params.id)
     return success(res, result)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }

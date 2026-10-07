@@ -2,6 +2,7 @@ import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 
+// TODO(phase2): wire into branch router when Reports module ships
 export function ReportsPage() {
   return (
     <div className="space-y-6 pb-8">

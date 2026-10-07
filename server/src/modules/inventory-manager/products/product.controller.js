@@ -19,14 +19,10 @@ import { buildProductExportRows, importCatalogRows } from './product.import-expo
 import { resolveInventoryCreateScope, resolveInventoryScope } from '../shared.access.js'
 import { PRODUCT_TYPES } from '../../../config/constants.js'
 import { generateBarcodeValue, generateItemCode, renderBarcodePng } from '../../../utils/barcode.util.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, failFromError, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
 
-function scopeError(res, err) {
-  if (err?.status) return fail(res, err.message, err.status)
-  throw err
-}
 
 export async function categories(req, res) {
   try {
@@ -35,7 +31,7 @@ export async function categories(req, res) {
     const active = req.query?.active || 'active'
     return success(res, await listCategories(tenantId, { active, branchId }))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -62,7 +58,7 @@ export async function addCategory(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -77,7 +73,7 @@ export async function patchCategory(req, res) {
     if (!row) return fail(res, 'Category not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -88,7 +84,7 @@ export async function removeCategory(req, res) {
     if (!row) return fail(res, 'Category not found', 404)
     return success(res, { id: row.id, isActive: false, deactivated: true })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -98,7 +94,7 @@ export async function products(req, res) {
     const result = await listProducts(tenantId, { ...req.validated.query, branchId })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -123,7 +119,7 @@ export async function addProduct(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -149,7 +145,7 @@ export async function importItems(req, res) {
 
     return success(res, result, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -160,7 +156,7 @@ export async function exportItems(req, res) {
     const rows = await buildProductExportRows(tenantId, { branchId })
     return success(res, { rows, exported: rows.filter((r) => r.rowKind === 'product').length })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -171,7 +167,7 @@ export async function scan(req, res) {
     if (!item) return fail(res, 'No item found for this barcode', 404)
     return success(res, item)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -182,7 +178,7 @@ export async function detail(req, res) {
     if (!row) return fail(res, 'Item not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -195,7 +191,7 @@ export async function printBarcode(req, res) {
     res.setHeader('Content-Type', 'image/png')
     return res.send(png)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -215,7 +211,7 @@ export async function update(req, res) {
     if (!row) return fail(res, 'Item not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -233,7 +229,7 @@ export async function remove(req, res) {
     }
     return success(res, { id: req.validated.params.id, status: 'inactive', deactivated: true })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -244,6 +240,6 @@ export async function deleteInfo(req, res) {
     if (!info.found) return fail(res, 'Item not found', 404)
     return success(res, info)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }

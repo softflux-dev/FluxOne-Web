@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
-import { CombinationTable, NormalProductFields } from '@/components/feature/products/add-item/CombinationTable'
+import {
+  CombinationTable,
+  NormalProductFields,
+  TaxProfitFields,
+} from '@/components/feature/products/add-item/CombinationTable'
 import { SearchableMultiSelect } from '@/components/feature/products/add-item/SearchableMultiSelect'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
@@ -30,6 +34,7 @@ import { PRODUCT_TYPES } from '@/lib/mapProduct'
 import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
+import { validatePercentage } from '@/lib/validation/formValidators'
 import { cn } from '@/lib/utils'
 
 function newId(prefix) {
@@ -53,6 +58,8 @@ function emptyForm() {
     offerId: '',
     discountPercent: '',
     offerName: '',
+    taxPercent: '',
+    profitPercent: '',
     status: 'active',
     image: null,
     imageUrl: null,
@@ -208,6 +215,8 @@ export function EditItemPage() {
             ? String(Math.round(Number(product.discountPercent)))
             : '',
         offerName: product.offerName || '',
+        taxPercent: String(Math.round(Number(product.taxPercent) || 0)),
+        profitPercent: String(Math.round(Number(product.profitPercent) || 0)),
         status: product.status === 'inactive' ? 'inactive' : 'active',
         image: null,
         imageUrl: product.imageUrl || null,
@@ -352,12 +361,32 @@ export function EditItemPage() {
         return 'At least one active combination is required'
       }
     }
-    if (tabId === 'save' && isNormal) {
-      if (form.purchasePrice === '' || form.sellingPrice === '') {
-        return 'Purchase and selling price are required'
+    if (tabId === 'save') {
+      if (form.taxPercent === '' || form.taxPercent == null) {
+        return 'Tax percentage is required'
       }
-      const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
-      if (priceErr) return priceErr
+      if (form.profitPercent === '' || form.profitPercent == null) {
+        return 'Profit percentage is required'
+      }
+      const taxErr = validatePercentage(form.taxPercent, {
+        min: 0,
+        max: 100,
+        fieldName: 'Tax percentage',
+      })
+      if (taxErr) return taxErr
+      const profitErr = validatePercentage(form.profitPercent, {
+        min: 0,
+        max: 100,
+        fieldName: 'Profit percentage',
+      })
+      if (profitErr) return profitErr
+      if (isNormal) {
+        if (form.purchasePrice === '' || form.sellingPrice === '') {
+          return 'Purchase and selling price are required'
+        }
+        const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
+        if (priceErr) return priceErr
+      }
     }
     return null
   }
@@ -399,13 +428,13 @@ export function EditItemPage() {
         setTab('combinations')
         return
       }
-    } else {
-      const saveErr = validateTab('save')
-      if (saveErr) {
-        setError(saveErr)
-        toastError(saveErr)
-        return
-      }
+    }
+    const saveErr = validateTab('save')
+    if (saveErr) {
+      setError(saveErr)
+      toastError(saveErr)
+      if (isVariant) setTab('save')
+      return
     }
 
     setSaving(true)
@@ -715,7 +744,7 @@ export function EditItemPage() {
                   offers={catalog.offers || []}
                 />
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <p className="text-sm text-slate-600">
                     Combination SKUs were edited on the Combinations tab. Parent status:
                   </p>
@@ -737,6 +766,9 @@ export function EditItemPage() {
                         </button>
                       )
                     })}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <TaxProfitFields form={form} patch={patch} idPrefix="variant-edit" />
                   </div>
                 </div>
               )}

@@ -98,6 +98,7 @@ export function mapProduct(row = {}) {
     dailyPriceChange: Boolean(row.dailyPriceChange ?? row.daily_price_change),
     purchasePrice: Number(row.purchasePrice ?? row.purchase_price ?? 0),
     sellingPrice: Number(row.sellingPrice ?? row.selling_price ?? 0),
+    profitPercent: Number(row.profitPercent ?? row.profit_percent ?? 0),
     discountPercent: Number(row.discountPercent ?? row.discount_percent ?? 0),
     offerId: row.offerId ?? row.offer_id ?? null,
     offerName: row.offerName ?? row.offer_name ?? '',
@@ -116,8 +117,31 @@ export function mapProduct(row = {}) {
       : Array.isArray(row.bundle_items)
         ? row.bundle_items
         : [],
-    variants: Array.isArray(row.variants) ? row.variants : [],
+    // Child SKUs from product detail (variant parents only)
+    variants: Array.isArray(row.variants)
+      ? row.variants.map((child) => ({
+          ...mapProduct({ ...child, variants: [] }),
+          parts: Array.isArray(child.parts) ? child.parts : [],
+        }))
+      : [],
   }
+}
+
+// Color: Purple · Size: M — from product_variant_options parts
+export function formatVariantParts(parts = []) {
+  const list = Array.isArray(parts) ? parts : []
+  if (!list.length) return ''
+  return list
+    .map((part) => {
+      const type = String(part.typeName || part.type_name || '').trim()
+      const value = String(part.valueName || part.value_name || '').trim()
+      if (!type && !value) return ''
+      if (!type) return value
+      if (!value) return type
+      return `${type}: ${value}`
+    })
+    .filter(Boolean)
+    .join(' · ')
 }
 
 export function mapCategory(row = {}) {
@@ -196,11 +220,17 @@ export function buildProductPayload(fields, { withConfirmed = true } = {}) {
     purchasePrice: Number(fields.purchasePrice ?? 0),
     sellingPrice: Number(fields.sellingPrice ?? 0),
     ...(hasTaxIdsKey ? { taxIds } : {}),
+    // Optional; when set, server find-or-creates tax at this rate (wins over taxIds)
+    ...(fields.taxPercent !== undefined &&
+    fields.taxPercent !== null &&
+    fields.taxPercent !== ''
+      ? { taxPercent: Math.round(Number(fields.taxPercent)) }
+      : {}),
     // Optional override; omit → server uses tenant default profit %
     ...(fields.profitPercent !== undefined &&
     fields.profitPercent !== null &&
     fields.profitPercent !== ''
-      ? { profitPercent: Number(fields.profitPercent) }
+      ? { profitPercent: Math.round(Number(fields.profitPercent)) }
       : {}),
     offerId: asOptionalUuid(fields.offerId),
     discountPercent:
@@ -268,16 +298,34 @@ export function buildProductUpdatePayload(fields) {
       ? null
       : String(subcategoryRaw)
 
+  const hasTaxIdsKey = Object.prototype.hasOwnProperty.call(fields, 'taxIds')
   const base = {
     name: String(fields.name || '').trim(),
     ...(categoryId ? { categoryId } : {}),
     subcategoryId,
-    type: fields.type || PRODUCT_TYPES.SINGLE,
+    // Omit type unless caller set it — defaulting to single broke variant PATCH
+    ...(fields.type ? { type: fields.type } : {}),
     scale: fields.scale || 'unit',
     description: fields.description?.trim() || undefined,
-    purchasePrice: Number(fields.purchasePrice ?? 0),
-    sellingPrice: Number(fields.sellingPrice ?? 0),
-    taxIds: cleanUuidList(fields.taxIds),
+    // Don't invent 0 prices when omitted (variant parents omit purchase/selling)
+    ...(fields.purchasePrice !== undefined && fields.purchasePrice !== ''
+      ? { purchasePrice: Number(fields.purchasePrice) }
+      : {}),
+    ...(fields.sellingPrice !== undefined && fields.sellingPrice !== ''
+      ? { sellingPrice: Number(fields.sellingPrice) }
+      : {}),
+    // Only send taxIds when explicit (avoid wiping taxes on unrelated edits)
+    ...(hasTaxIdsKey ? { taxIds: cleanUuidList(fields.taxIds) } : {}),
+    ...(fields.taxPercent !== undefined &&
+    fields.taxPercent !== null &&
+    fields.taxPercent !== ''
+      ? { taxPercent: Math.round(Number(fields.taxPercent)) }
+      : {}),
+    ...(fields.profitPercent !== undefined &&
+    fields.profitPercent !== null &&
+    fields.profitPercent !== ''
+      ? { profitPercent: Math.round(Number(fields.profitPercent)) }
+      : {}),
     offerId: asOptionalUuid(fields.offerId),
     discountPercent:
       fields.discountPercent === '' || fields.discountPercent == null

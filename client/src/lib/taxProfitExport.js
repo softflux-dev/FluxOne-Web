@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf'
 import { exportRowsToCsv } from '@/lib/csvExport'
 import { formatAmount, normalizeCurrency } from '@/lib/currency'
 import { formatDateTimeInline } from '@/lib/formatDateTime'
+import { finalPriceFromCost } from '@/lib/pricing'
 
 function categoryLabel(row = {}) {
   const cat = row.category || 'Uncategorized'
@@ -19,11 +20,7 @@ function buildRows(items = []) {
   return items.map((p) => {
     const finalPrice =
       p.finalPrice ??
-      Math.round(
-        Number(p.baseCost || 0) +
-          (Number(p.baseCost || 0) * Number(p.profitPct || 0)) / 100 +
-          (Number(p.baseCost || 0) * Number(p.taxPct || 0)) / 100,
-      )
+      finalPriceFromCost(p.baseCost, p.profitPct, p.taxPct)
     return {
       sku: p.itemCode || p.id || '',
       product: productLabel(p),

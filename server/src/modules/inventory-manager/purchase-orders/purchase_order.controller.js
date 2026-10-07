@@ -9,13 +9,9 @@ import {
   sendPurchaseOrderSms,
 } from './purchase_order.model.js'
 import { resolveInventoryCreateScope, resolveInventoryScope } from '../shared.access.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, failFromError, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
-function scopeError(res, err) {
-  if (err?.status) return fail(res, err.message, err.status)
-  throw err
-}
 
 export async function list(req, res) {
   try {
@@ -23,7 +19,7 @@ export async function list(req, res) {
     const result = await listPurchaseOrders(tenantId, { ...req.validated.query, branchId })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -47,7 +43,7 @@ export async function generate(req, res) {
 
     return success(res, { ...order, sms }, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -58,7 +54,7 @@ export async function detail(req, res) {
     if (!order) return fail(res, 'Purchase order not found', 404)
     return success(res, order)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -69,7 +65,7 @@ export async function history(req, res) {
     if (!data) return fail(res, 'Purchase order not found', 404)
     return success(res, data)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -80,7 +76,7 @@ export async function cancel(req, res) {
     if (!order) return fail(res, 'Purchase order not found', 404)
     return success(res, order)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -91,7 +87,7 @@ export async function approve(req, res) {
     if (!order) return fail(res, 'Purchase order not found', 404)
     return success(res, order)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -108,7 +104,7 @@ export async function print(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     return res.send(data.html)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -119,6 +115,6 @@ export async function sendSmsToSupplier(req, res) {
     if (!result) return fail(res, 'Purchase order not found', 404)
     return success(res, result)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }

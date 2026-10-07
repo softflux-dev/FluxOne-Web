@@ -8,6 +8,7 @@ import { mapPurchaseOrder } from '@/lib/mapPurchaseOrder'
 import { mapProduct } from '@/lib/mapProduct'
 import { mapSupplier } from '@/lib/mapSupplier'
 import {
+  catalogToState,
   getProductCatalog,
   peekProductCatalog,
 } from '@/lib/productCatalogCache'
@@ -54,29 +55,6 @@ export function defaultGlobalFilters(overrides = {}) {
     from: '',
     to: '',
     ...overrides,
-  }
-}
-
-function emptyCatalog() {
-  return {
-    parents: [],
-    childrenByParent: {},
-    all: [],
-    taxes: [],
-    offers: [],
-  }
-}
-
-function catalogToState(catalog) {
-  if (!catalog) return emptyCatalog()
-  const map = catalog.childrenByParent
-  return {
-    parents: catalog.parents || [],
-    childrenByParent:
-      map instanceof Map ? Object.fromEntries(map) : map || {},
-    all: catalog.all || [],
-    taxes: catalog.taxes || [],
-    offers: catalog.offers || [],
   }
 }
 

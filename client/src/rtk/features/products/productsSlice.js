@@ -10,6 +10,7 @@ import {
 } from '@/lib/mapProduct'
 import { productsToCsv } from '@/lib/productCsv'
 import {
+  catalogToState,
   getProductCatalog,
   patchCatalogCategoryActive,
   peekProductCatalog,
@@ -18,35 +19,6 @@ import {
 import { tokenStorage } from '@/api/tokenStorage'
 
 export const PRODUCTS_PAGE_SIZE = 8
-
-const emptyCatalog = () => ({
-  parents: [],
-  childrenByParent: {},
-  all: [],
-  taxes: [],
-  offers: [],
-  defaults: {
-    defaultProfitPercent: 0,
-    defaultTaxPercent: 0,
-  },
-})
-
-function catalogToState(catalog) {
-  if (!catalog) return emptyCatalog()
-  const map = catalog.childrenByParent
-  return {
-    parents: catalog.parents || [],
-    childrenByParent:
-      map instanceof Map ? Object.fromEntries(map) : map || {},
-    all: catalog.all || [],
-    taxes: catalog.taxes || [],
-    offers: catalog.offers || [],
-    defaults: {
-      defaultProfitPercent: Number(catalog.defaults?.defaultProfitPercent) || 0,
-      defaultTaxPercent: Number(catalog.defaults?.defaultTaxPercent) || 0,
-    },
-  }
-}
 
 // Optimistic isActive patch on Redux catalog (mirrors patchCatalogCategoryActive)
 function patchStateCatalogActive(state, id, isActive) {
@@ -215,8 +187,8 @@ export const updateProduct = createAsyncThunk(
     const patchBody = { ...json }
     delete patchBody.confirmed
     delete patchBody._customVariantMeta
-    // Variant parent: don't send dummy purchase/selling 0 unless explicitly set
-    if (fields.type === 'variant') {
+    // Variant parent: don't send dummy purchase/selling (type often omitted on edit)
+    if (fields.type === 'variant' || Array.isArray(fields.variants)) {
       delete patchBody.purchasePrice
       delete patchBody.sellingPrice
     }

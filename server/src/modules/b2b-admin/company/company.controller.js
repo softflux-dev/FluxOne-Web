@@ -1,6 +1,6 @@
 import { getCompany, updateCompany } from './company.model.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, success, failFromError } from '../../../utils/response.util.js'
 
 export async function companyDetail(req, res) {
   const row = await getCompany(req.tenantId)
@@ -31,7 +31,6 @@ export async function patchCompany(req, res) {
     if (!row) return fail(res, 'Company not found', 404)
     return success(res, row)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }

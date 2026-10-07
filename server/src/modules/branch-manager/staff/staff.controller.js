@@ -17,7 +17,7 @@ import {
 import { validateShiftAgainstBranchHours } from './schedule.validation.js'
 import { getBranchHours } from '../../b2b-admin/branches/branches.model.js'
 import { ROLE_IDS, ROLES, BCRYPT_COST } from '../../../config/constants.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
 import { reallocateStaffHardware } from './hardwareAllocation.model.js'
@@ -87,8 +87,7 @@ export async function createStaff(req, res) {
     })
     return success(res, created, 201)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -147,8 +146,7 @@ export async function patchStaff(req, res) {
     if (!row) return fail(res, 'Staff not found', 404)
     return success(res, row)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -178,8 +176,7 @@ export async function reallocateHardware(req, res) {
     })
     return success(res, data)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 

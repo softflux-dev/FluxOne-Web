@@ -138,7 +138,6 @@ export function GenerateOrderDialog({
       })),
       printAfter: andPrint,
     }
-    console.debug('[GenerateOrderDialog] submit', payload)
     try {
       const result = await onSubmit?.(payload)
       if (result?.success) onOpenChange?.(false)

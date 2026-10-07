@@ -1,4 +1,6 @@
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
+import { finalPriceFromCost } from '../../../utils/pricing.util.js'
+import { findOrCreateTaxByRate } from '../../../utils/tax.util.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 
 const SALES_WINDOW_DAYS = 30
@@ -8,11 +10,7 @@ function mapProductRow(row) {
   const baseCost = Number(row.baseCost) || 0
   const profitPct = Number(row.profitPct) || 0
   const taxPct = Number(row.taxPct) || 0
-  // Admin Tax & Profit formula: cost + profit-on-cost + tax-on-cost
-  const profitAmount = (baseCost * profitPct) / 100
-  const subTotal = baseCost + profitAmount
-  const taxAmount = (subTotal * taxPct ) / 100
-  const finalPrice = Math.round((subTotal + taxAmount) * 100) / 100
+  const finalPrice = finalPriceFromCost(baseCost, profitPct, taxPct)
 
   return {
     id: row.id,
@@ -281,7 +279,8 @@ export async function getTaxProfitMeta(tenantId) {
   }
 }
 
-export async function updateTaxProfitDefaults(tenantId, { defaultProfitPercent, defaultTaxPercent, applyToAllProducts = false }) {
+// Tenant defaults only — never mutates existing products (use bulk-profit / bulk-tax for that).
+export async function updateTaxProfitDefaults(tenantId, { defaultProfitPercent, defaultTaxPercent }) {
   return withTransaction(async (client) => {
     const setClauses = []
     const params = []
@@ -308,58 +307,6 @@ export async function updateTaxProfitDefaults(tenantId, { defaultProfitPercent, 
       )
     }
 
-    let updatedProductsCount = 0
-
-    if (applyToAllProducts) {
-      // 1. Apply default profit percentage to all products if specified
-      if (defaultProfitPercent !== undefined) {
-        const profitRate = Number(defaultProfitPercent)
-        const { rowCount } = await tenantClientQuery(
-          client,
-          tenantId,
-          `
-            UPDATE products
-            SET
-              profit_percent = $2::numeric,
-              selling_price = ROUND(purchase_price * (1 + ($2::numeric / 100)), 2),
-              updated_at = now()
-            WHERE tenant_id = $1
-          `,
-          [profitRate],
-        )
-        updatedProductsCount = rowCount || 0
-      }
-
-      // 2. Apply default tax percentage to all products if specified
-      if (defaultTaxPercent !== undefined) {
-        const taxRate = Number(defaultTaxPercent)
-
-        // Clear all existing product tax links
-        await tenantClientQuery(
-          client,
-          tenantId,
-          `DELETE FROM product_taxes WHERE tenant_id = $1`,
-        )
-
-        // If taxRate > 0, find or create tax and assign to all products of tenant
-        if (taxRate > 0) {
-          const taxId = await findOrCreateTaxByRate(client, tenantId, taxRate)
-          await tenantClientQuery(
-            client,
-            tenantId,
-            `
-              INSERT INTO product_taxes (tenant_id, product_id, tax_id)
-              SELECT $1, p.id, $2::uuid
-              FROM products p
-              WHERE p.tenant_id = $1
-              ON CONFLICT DO NOTHING
-            `,
-            [taxId],
-          )
-        }
-      }
-    }
-
     const { rows: updatedTenant } = await tenantClientQuery(
       client,
       tenantId,
@@ -376,8 +323,8 @@ export async function updateTaxProfitDefaults(tenantId, { defaultProfitPercent, 
     return {
       defaultProfitPercent: Number(row.defaultProfitPercent) || 0,
       defaultTaxPercent: Number(row.defaultTaxPercent) || 0,
-      appliedToAll: Boolean(applyToAllProducts),
-      updatedCount: updatedProductsCount,
+      appliedToAll: false,
+      updatedCount: 0,
     }
   })
 }
@@ -427,36 +374,6 @@ export async function bulkSetProfitPercent(tenantId, productIds, profitPercent) 
   })
 }
 
-async function findOrCreateTaxByRate(client, tenantId, taxPercent) {
-  const rate = Number(taxPercent)
-  const { rows: existing } = await tenantClientQuery(
-    client,
-    tenantId,
-    `
-      SELECT id
-      FROM taxes
-      WHERE tenant_id = $1
-        AND rate_percent = $2::numeric
-      ORDER BY name ASC, id ASC
-      LIMIT 1
-    `,
-    [rate],
-  )
-  if (existing[0]?.id) return existing[0].id
-
-  const { rows: created } = await tenantClientQuery(
-    client,
-    tenantId,
-    `
-      INSERT INTO taxes (tenant_id, name, rate_percent)
-      VALUES ($1, $2, $3::numeric)
-      RETURNING id
-    `,
-    [`Sales Tax ${rate}%`, rate],
-  )
-  return created[0].id
-}
-
 export async function bulkSetTaxPercent(tenantId, productIds, taxPercent) {
   const uniqueIds = [...new Set(productIds)]
   const rate = Number(taxPercent)
@@ -481,7 +398,7 @@ export async function bulkSetTaxPercent(tenantId, productIds, taxPercent) {
       return { updated: uniqueIds.length, taxPercent: rate }
     }
 
-    const taxId = await findOrCreateTaxByRate(client, tenantId, rate)
+    const taxId = await findOrCreateTaxByRate(tenantId, rate, client)
 
     await tenantClientQuery(
       client,

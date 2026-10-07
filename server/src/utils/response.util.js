@@ -19,7 +19,3 @@ export function failFromError(res, err, fallbackMessage = 'Internal server error
   }
   return fail(res, err?.message || fallbackMessage, status)
 }
-
-export function notImplemented(_req, res) {
-  return error(res, 'Not implemented', 501)
-}

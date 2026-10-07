@@ -8,18 +8,45 @@ const TTL_MS = 5 * 60 * 1000
 export const CATEGORY_ACTIVE_QUERY = { active: 'active' }
 export const CATEGORY_ALL_QUERY = { active: 'all' }
 
-const emptyCatalog = () => ({
-  parents: [],
-  childrenByParent: new Map(),
-  all: [],
-  taxes: [],
-  offers: [],
-  // Tenant defaults for new product tax/profit pre-fill
-  defaults: {
-    defaultProfitPercent: 0,
-    defaultTaxPercent: 0,
-  },
-})
+/** Shared empty defaults — keep RTK slices / asResult / cache in sync. */
+export const EMPTY_TAX_PROFIT_DEFAULTS = {
+  defaultProfitPercent: 0,
+  defaultTaxPercent: 0,
+}
+
+export function emptyCatalogDefaults(defaults) {
+  return {
+    defaultProfitPercent: Number(defaults?.defaultProfitPercent) || 0,
+    defaultTaxPercent: Number(defaults?.defaultTaxPercent) || 0,
+  }
+}
+
+/** Empty catalog shape (Map children for cache; RTK may serialize to plain object). */
+export function emptyCatalog({ childrenAsMap = true } = {}) {
+  return {
+    parents: [],
+    childrenByParent: childrenAsMap ? new Map() : {},
+    all: [],
+    taxes: [],
+    offers: [],
+    defaults: { ...EMPTY_TAX_PROFIT_DEFAULTS },
+  }
+}
+
+/** Normalize API/cache catalog into RTK-friendly state (plain childrenByParent object). */
+export function catalogToState(catalog) {
+  if (!catalog) return emptyCatalog({ childrenAsMap: false })
+  const map = catalog.childrenByParent
+  return {
+    parents: catalog.parents || [],
+    childrenByParent:
+      map instanceof Map ? Object.fromEntries(map) : map || {},
+    all: catalog.all || [],
+    taxes: catalog.taxes || [],
+    offers: catalog.offers || [],
+    defaults: emptyCatalogDefaults(catalog.defaults),
+  }
+}
 
 // Module-level cache shared across Products + Categories pages (same session).
 let cache = {
@@ -56,10 +83,7 @@ function applyFull({ categories, taxes, offers, defaults }) {
     ...split,
     taxes: Array.isArray(taxes) ? taxes : [],
     offers: Array.isArray(offers) ? offers : [],
-    defaults: {
-      defaultProfitPercent: Number(defaults?.defaultProfitPercent) || 0,
-      defaultTaxPercent: Number(defaults?.defaultTaxPercent) || 0,
-    },
+    defaults: emptyCatalogDefaults(defaults),
   }
   cache.fetchedAt = Date.now()
   return cache.data

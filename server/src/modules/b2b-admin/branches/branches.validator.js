@@ -1,14 +1,9 @@
 import { z } from 'zod'
 import { empty, timeString } from '../../branch-manager/shared.validator.js'
 import { BRANCH_STATUS } from '../../../config/constants.js'
+import { looseUuidWithMessage } from '../../../utils/zodFields.util.js'
 
-//UUID-shaped id (allows legacy seed UUIDs that are not RFC-version-strict).
-const looseUuid = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    'Invalid branch id',
-  )
+const looseUuid = looseUuidWithMessage('Invalid branch id')
 
 const optionalString = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : value),

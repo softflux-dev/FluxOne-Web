@@ -1,12 +1,8 @@
 import { z } from 'zod'
 import { empty, optionalString, paginationQuery } from '../../branch-manager/shared.validator.js'
+import { looseUuidWithMessage } from '../../../utils/zodFields.util.js'
 
-const looseUuid = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    'Invalid invoice id',
-  )
+const looseUuid = looseUuidWithMessage('Invalid invoice id')
 
 export const listInvoicesQuerySchema = z.object({
   body: empty,

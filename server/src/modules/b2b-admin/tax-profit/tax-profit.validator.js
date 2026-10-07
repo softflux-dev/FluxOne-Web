@@ -1,16 +1,8 @@
 import { z } from 'zod'
 import { empty, optionalString, optionalUuid, paginationQuery } from '../../branch-manager/shared.validator.js'
-
-const looseUuid = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    'Invalid product id',
-  )
+import { looseUuid, percentField } from '../../../utils/zodFields.util.js'
 
 const sortEnum = z.enum(['all', 'top_sales', 'top_profit', 'slow_moving']).default('all')
-
-const percentField = z.coerce.number().int().min(0).max(100)
 
 export const listTaxProfitQuerySchema = z.object({
   body: empty,
@@ -53,12 +45,12 @@ export const bulkTaxSchema = z.object({
   params: empty,
 })
 
+// Defaults apply to newly created products only — never bulk-update existing catalog.
 export const updateDefaultsSchema = z.object({
   body: z
     .object({
       defaultProfitPercent: percentField.optional(),
       defaultTaxPercent: percentField.optional(),
-      applyToAllProducts: z.coerce.boolean().optional(),
     })
     .refine(
       (data) =>
@@ -70,4 +62,3 @@ export const updateDefaultsSchema = z.object({
   query: empty,
   params: empty,
 })
-

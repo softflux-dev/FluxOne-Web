@@ -31,11 +31,10 @@ import { HolidaysPage } from '@/pages/branch/HolidaysPage'
 import { LeavesPage } from '@/pages/branch/LeavesPage'
 import { PerformancePage } from '@/pages/branch/PerformancePage'
 import { SalesPage } from '@/pages/branch/SalesPage'
-// Phase 2 — restore when Customer Management ships
-// import { CustomerPage } from '@/pages/branch/CustomerPage'
+// Phase 2 placeholders live under pages/phase2/ — restore imports when modules ship
+// import { CustomerPage } from '@/pages/phase2/CustomerPage'
+// import { ReportsPage } from '@/pages/phase2/BranchReportsPage'
 import { BranchInventoryPage } from '@/pages/branch/BranchInventoryPage'
-// Phase 2 — restore when Reports module ships
-// import { ReportsPage } from '@/pages/branch/ReportsPage'
 import { ResourcesPage } from '@/pages/branch/ResourcesPage'
 import { DiscountsPage } from '@/pages/branch/DiscountsPage'
 import { ActivityLogsPage } from '@/pages/branch/ActivityLogsPage'
@@ -129,10 +128,9 @@ const router = createBrowserRouter([
               { path: 'leaves', element: <LeavesPage /> },
               { path: 'performance', element: <PerformancePage /> },
               { path: 'sales', element: <SalesPage /> },
-              // Phase 2 — restore when Customer Management ships
+              // TODO(phase2): customer + branch reports — see pages/phase2/
               // { path: 'customer', element: <CustomerPage /> },
               { path: 'inventory', element: <BranchInventoryPage /> },
-              // Phase 2 — restore when Reports module ships
               // { path: 'reports', element: <ReportsPage /> },
               { path: 'resources', element: <ResourcesPage /> },
               { path: 'discounts', element: <DiscountsPage /> },

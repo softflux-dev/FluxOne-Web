@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { tenantQuery } from '../../../config/db.js'
 import { PRODUCT_TYPES } from '../../../config/constants.js'
 import { generateBarcodeValue } from '../../../utils/barcode.util.js'
+import { findOrCreateTaxByRate } from '../../../utils/tax.util.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 import { createCategory, createProduct } from './product.model.js'
 
@@ -136,35 +137,6 @@ async function findOfferIdByName(tenantId, offerName) {
       LIMIT 1
     `,
     [name],
-  )
-  return rows[0]?.id
-}
-
-async function findOrCreateTaxIdByPercent(tenantId, taxPercent) {
-  const rate = Number(taxPercent)
-  if (!Number.isFinite(rate) || rate < 0) return undefined
-  if (rate === 0) return null // explicit tax-exempt → taxIds: []
-
-  const { rows: existing } = await tenantQuery(
-    tenantId,
-    `
-      SELECT id FROM taxes
-      WHERE tenant_id = $1 AND rate_percent = $2::numeric
-      ORDER BY name ASC, id ASC
-      LIMIT 1
-    `,
-    [rate],
-  )
-  if (existing[0]) return existing[0].id
-
-  const { rows } = await tenantQuery(
-    tenantId,
-    `
-      INSERT INTO taxes (tenant_id, name, rate_percent)
-      VALUES ($1, $2, $3)
-      RETURNING id
-    `,
-    [`Tax ${rate}%`, rate],
   )
   return rows[0]?.id
 }
@@ -433,10 +405,9 @@ async function resolveTaxIdsForRow(tenantId, row) {
   if (row.taxPercent === undefined || row.taxPercent === null || row.taxPercent === '') {
     return undefined // tenant default
   }
-  const taxId = await findOrCreateTaxIdByPercent(tenantId, row.taxPercent)
-  if (taxId === null) return [] // 0% → exempt
-  if (taxId) return [taxId]
-  return undefined
+  const taxId = await findOrCreateTaxByRate(tenantId, row.taxPercent)
+  if (taxId === null) return [] // 0% / invalid → exempt
+  return [taxId]
 }
 
 function normalizeStatus(status) {

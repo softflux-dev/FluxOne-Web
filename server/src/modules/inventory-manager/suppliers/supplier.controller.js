@@ -6,7 +6,7 @@ import {
   updateSupplier,
 } from './supplier.model.js'
 import { resolveInventoryCreateScope, resolveInventoryScope } from '../shared.access.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, failFromError, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
 
@@ -21,10 +21,6 @@ function filesFromRequest(req) {
   }
 }
 
-function scopeError(res, err) {
-  if (err?.status) return fail(res, err.message, err.status)
-  throw err
-}
 
 export async function list(req, res) {
   try {
@@ -32,7 +28,7 @@ export async function list(req, res) {
     const result = await listSuppliers(tenantId, { ...req.validated.query, branchId })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -46,7 +42,7 @@ export async function create(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -65,7 +61,7 @@ export async function update(req, res) {
     if (!row) return fail(res, 'Supplier not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -81,7 +77,7 @@ export async function setActive(req, res) {
     if (!row) return fail(res, 'Supplier not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -93,6 +89,6 @@ export async function remove(req, res) {
     if (!deactivated) return fail(res, 'Supplier not found', 404)
     return success(res, { id: req.validated.params.id, isActive: false, deactivated: true })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }

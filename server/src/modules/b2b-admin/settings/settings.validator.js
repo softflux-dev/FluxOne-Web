@@ -6,15 +6,11 @@ import {
   paginationQuery,
 } from '../../branch-manager/shared.validator.js'
 import { SUPPORTED_CURRENCIES } from '../../../utils/currency.util.js'
+import { looseUuidWithMessage } from '../../../utils/zodFields.util.js'
 
 const currencyCodes = SUPPORTED_CURRENCIES.map((c) => c.code)
 
-const looseUuid = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    'Invalid device id',
-  )
+const looseUuid = looseUuidWithMessage('Invalid device id')
 
 const HARDWARE_TYPES = ['Computers', 'Scanners', 'Printers', 'Telephone', 'Other']
 

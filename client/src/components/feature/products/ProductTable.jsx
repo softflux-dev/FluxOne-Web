@@ -24,6 +24,7 @@ import {
 import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { formatInventoryStock, money, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
+import { BRAND } from '@/lib/constants'
 
 // Print / Add Stock / Edit / Block|Open / Delete for one catalog row
 function ProductRowActions({
@@ -87,13 +88,21 @@ function parentPriceDash(row, value) {
   return money(value)
 }
 
-function InventoryStockCell({ row, className = '' }) {
-  // Variant parent has no combined stock — children are independent SKUs (task 5 breakdown)
+function InventoryStockCell({ row, onViewVariants, className = '' }) {
+  // Variant parent qty is always 0 — open SKU breakdown modal instead
   if (row.type === PRODUCT_TYPES.VARIANT) {
     return (
-      <span className={`text-xs font-medium whitespace-nowrap text-slate-500 ${className}`.trim()}>
-        —
-      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={`h-8 cursor-pointer rounded-lg px-3 text-xs font-semibold ${className}`.trim()}
+        style={{ color: BRAND.purple, borderColor: BRAND.purple }}
+        onClick={() => onViewVariants?.(row)}
+        aria-label={`View variants for ${row.name || 'product'}`}
+      >
+        View
+      </Button>
     )
   }
   const stock = formatInventoryStock(row.quantity, row.reorderPoint, row.scale)
@@ -124,6 +133,7 @@ export function ProductTable({
   onBlock,
   onUnblock,
   onDelete,
+  onViewVariants,
   className,
 }) {
   const list = Array.isArray(items) ? items : []
@@ -271,9 +281,9 @@ export function ProductTable({
                         <span className="text-slate-400">Current selling</span>{' '}
                         {parentPriceDash(row, row.sellingPrice)}
                       </p>
-                      <p>
+                      <p className="flex flex-wrap items-center gap-1.5">
                         <span className="text-slate-400">Inventory stock</span>{' '}
-                        <InventoryStockCell row={row} />
+                        <InventoryStockCell row={row} onViewVariants={onViewVariants} />
                       </p>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-1">
@@ -397,7 +407,7 @@ export function ProductTable({
                       </p>
                     </TableCell>
                     <TableCell className="px-2 py-3">
-                      <InventoryStockCell row={row} />
+                      <InventoryStockCell row={row} onViewVariants={onViewVariants} />
                     </TableCell>
                     <TableCell className="px-2 py-3">
                       <ProductStatusToggle

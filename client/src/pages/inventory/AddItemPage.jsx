@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
-import { CombinationTable, NormalProductFields } from '@/components/feature/products/add-item/CombinationTable'
+import {
+  CombinationTable,
+  NormalProductFields,
+  TaxProfitFields,
+} from '@/components/feature/products/add-item/CombinationTable'
 import { SearchableMultiSelect } from '@/components/feature/products/add-item/SearchableMultiSelect'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
@@ -25,6 +29,7 @@ import {
 import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
+import { validatePercentage } from '@/lib/validation/formValidators'
 import { cn } from '@/lib/utils'
 
 function newId(prefix) {
@@ -48,6 +53,9 @@ function emptyForm() {
     offerId: '',
     discountPercent: '',
     offerName: '',
+    // Pre-filled from Admin Tax & Profit defaults (override per product)
+    taxPercent: '',
+    profitPercent: '',
     // Optional product image (File) — uploaded after create via PATCH
     image: null,
   }
@@ -68,6 +76,8 @@ export function AddItemPage() {
   const [selectedValuesByType, setSelectedValuesByType] = useState({})
   const [combinations, setCombinations] = useState([])
   const [selectedComboKeys, setSelectedComboKeys] = useState([])
+  // Skip re-applying catalog defaults after the user edits Tax % / Profit %
+  const [taxProfitTouched, setTaxProfitTouched] = useState(false)
 
   const isVariant = form.productKind === PRODUCT_KIND.VARIANT
   const isNormal = form.productKind === PRODUCT_KIND.NORMAL
@@ -138,6 +148,21 @@ export function AddItemPage() {
     })
   }, [selectedTypeIds])
 
+  // Create only: pre-fill Tax % / Profit % from tenant defaults once catalog loads
+  useEffect(() => {
+    if (taxProfitTouched || catalogLoading) return
+    const defaults = catalog.defaults
+    if (!defaults) return
+    setForm((prev) => {
+      if (prev.taxPercent !== '' || prev.profitPercent !== '') return prev
+      return {
+        ...prev,
+        taxPercent: String(Math.round(Number(defaults.defaultTaxPercent) || 0)),
+        profitPercent: String(Math.round(Number(defaults.defaultProfitPercent) || 0)),
+      }
+    })
+  }, [catalog.defaults, catalogLoading, taxProfitTouched])
+
   useEffect(() => {
     if (!isVariant) {
       setCombinations([])
@@ -162,6 +187,13 @@ export function AddItemPage() {
   }, [isVariant, selectedTypes, selectedValuesByType])
 
   function patch(field, value) {
+    if (
+      field === 'taxPercent' ||
+      field === 'profitPercent' ||
+      (field && typeof field === 'object' && ('taxPercent' in field || 'profitPercent' in field))
+    ) {
+      setTaxProfitTouched(true)
+    }
     setForm((prev) => {
       if (field && typeof field === 'object' && value === undefined) {
         return { ...prev, ...field }
@@ -231,12 +263,32 @@ export function AddItemPage() {
         if (priceErr) return `“${row.label}”: ${priceErr}`
       }
     }
-    if (tabId === 'save' && isNormal) {
-      if (form.purchasePrice === '' || form.sellingPrice === '') {
-        return 'Purchase and selling price are required'
+    if (tabId === 'save') {
+      if (form.taxPercent === '' || form.taxPercent == null) {
+        return 'Tax percentage is required'
       }
-      const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
-      if (priceErr) return priceErr
+      if (form.profitPercent === '' || form.profitPercent == null) {
+        return 'Profit percentage is required'
+      }
+      const taxErr = validatePercentage(form.taxPercent, {
+        min: 0,
+        max: 100,
+        fieldName: 'Tax percentage',
+      })
+      if (taxErr) return taxErr
+      const profitErr = validatePercentage(form.profitPercent, {
+        min: 0,
+        max: 100,
+        fieldName: 'Profit percentage',
+      })
+      if (profitErr) return profitErr
+      if (isNormal) {
+        if (form.purchasePrice === '' || form.sellingPrice === '') {
+          return 'Purchase and selling price are required'
+        }
+        const priceErr = assertSellingGtePurchase(form.purchasePrice, form.sellingPrice)
+        if (priceErr) return priceErr
+      }
     }
     return null
   }
@@ -278,13 +330,13 @@ export function AddItemPage() {
         setTab('combinations')
         return
       }
-    } else {
-      const saveErr = validateTab('save')
-      if (saveErr) {
-        setError(saveErr)
-        toastError(saveErr)
-        return
-      }
+    }
+    const saveErr = validateTab('save')
+    if (saveErr) {
+      setError(saveErr)
+      toastError(saveErr)
+      if (isVariant) setTab('save')
+      return
     }
 
     setSaving(true)
@@ -578,10 +630,15 @@ export function AddItemPage() {
               {isNormal ? (
                 <NormalProductFields form={form} patch={patch} offers={catalog.offers || []} />
               ) : (
-                <p className="text-sm text-slate-600">
-                  Variant details were filled on the Combinations tab. Save creates the parent and
-                  each active combination as its own SKU (shared batch timestamp).
-                </p>
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">
+                    Variant details were filled on the Combinations tab. Save creates the parent and
+                    each active combination as its own SKU (shared batch timestamp).
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <TaxProfitFields form={form} patch={patch} idPrefix="variant" />
+                  </div>
+                </div>
               )}
             </div>
           ) : null}

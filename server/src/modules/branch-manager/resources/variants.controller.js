@@ -12,12 +12,8 @@ import {
   listVariantValues,
   updateVariantValue,
 } from './variant_values.model.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, failFromError, success } from '../../../utils/response.util.js'
 
-function sendModelError(res, err, fallback) {
-  const status = err?.status || 500
-  return fail(res, err?.message || fallback, status)
-}
 
 function validatedBody(req) {
   return req.validated?.body || req.body || {}
@@ -39,7 +35,7 @@ export async function variantTypesList(req, res) {
     const rows = await listVariantTypes(req.tenantId, { q, active, includeValues })
     return success(res, rows)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to list variant types')
+    return failFromError(res, err, 'Failed to list variant types')
   }
 }
 
@@ -50,7 +46,7 @@ export async function variantTypesGet(req, res) {
     if (!row) return fail(res, 'Variant type not found', 404)
     return success(res, row)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to get variant type')
+    return failFromError(res, err, 'Failed to get variant type')
   }
 }
 
@@ -60,7 +56,7 @@ export async function variantTypesCreate(req, res) {
     const row = await createVariantType(req.tenantId, body)
     return success(res, row, 201)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to create variant type')
+    return failFromError(res, err, 'Failed to create variant type')
   }
 }
 
@@ -72,7 +68,7 @@ export async function variantTypesUpdate(req, res) {
     if (!row) return fail(res, 'Variant type not found', 404)
     return success(res, row)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to update variant type')
+    return failFromError(res, err, 'Failed to update variant type')
   }
 }
 
@@ -93,7 +89,7 @@ export async function variantTypesRemove(req, res) {
       deletedValuesCount: row.deletedValuesCount,
     })
   } catch (err) {
-    return sendModelError(res, err, 'Failed to delete variant type')
+    return failFromError(res, err, 'Failed to delete variant type')
   }
 }
 
@@ -105,7 +101,7 @@ export async function variantValuesList(req, res) {
     const rows = await listVariantValues(req.tenantId, { q, variantTypeId, active })
     return success(res, rows)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to list variant values')
+    return failFromError(res, err, 'Failed to list variant values')
   }
 }
 
@@ -116,7 +112,7 @@ export async function variantValuesGet(req, res) {
     if (!row) return fail(res, 'Variant value not found', 404)
     return success(res, row)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to get variant value')
+    return failFromError(res, err, 'Failed to get variant value')
   }
 }
 
@@ -126,7 +122,7 @@ export async function variantValuesCreate(req, res) {
     const row = await createVariantValue(req.tenantId, body)
     return success(res, row, 201)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to create variant value')
+    return failFromError(res, err, 'Failed to create variant value')
   }
 }
 
@@ -138,7 +134,7 @@ export async function variantValuesUpdate(req, res) {
     if (!row) return fail(res, 'Variant value not found', 404)
     return success(res, row)
   } catch (err) {
-    return sendModelError(res, err, 'Failed to update variant value')
+    return failFromError(res, err, 'Failed to update variant value')
   }
 }
 
@@ -152,6 +148,6 @@ export async function variantValuesRemove(req, res) {
       id: row.id,
     })
   } catch (err) {
-    return sendModelError(res, err, 'Failed to delete variant value')
+    return failFromError(res, err, 'Failed to delete variant value')
   }
 }

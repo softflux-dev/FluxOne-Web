@@ -4,7 +4,7 @@ import {
   updateCurrencySettings,
   updateDeviceStatus,
 } from './settings.model.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
 export async function devicesList(req, res) {
@@ -28,8 +28,7 @@ export async function patchDeviceStatus(req, res) {
     )
     return success(res, row)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -50,7 +49,6 @@ export async function currencyPatch(req, res) {
     )
     return success(res, data)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }

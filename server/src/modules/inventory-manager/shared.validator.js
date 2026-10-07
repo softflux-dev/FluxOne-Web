@@ -1,6 +1,13 @@
 import { z } from 'zod'
 import { PRODUCT_STATUS, PRODUCT_TYPES } from '../../config/constants.js'
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../utils/pagination.util.js'
+import {
+  looseUuid,
+  optionalPercentField,
+  percentField,
+} from '../../utils/zodFields.util.js'
+
+export { looseUuid, optionalPercentField, percentField }
 
 export const empty = z.object({}).optional()
 
@@ -54,11 +61,6 @@ export const optionalBool = z.preprocess((value) => {
   if (value === false || value === 'false' || value === '0' || value === 0) return false
   return value
 }, z.boolean().optional())
-
-// Accepts UUID-shaped ids (including demo seed ids that are not RFC variant-strict).
-export const looseUuid = z.string().regex(
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-)
 
 // Empty / null → omitted so optional FK fields do not 422.
 export const optionalLooseUuid = z.preprocess(

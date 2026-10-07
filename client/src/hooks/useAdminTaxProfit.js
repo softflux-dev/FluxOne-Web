@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { invalidateProductCatalog } from '@/lib/productCatalogCache'
 
 export const ADMIN_TAX_PROFIT_PAGE_SIZE = 8
 
@@ -107,9 +108,9 @@ export function useAdminTaxProfit({
   }, [load])
 
   const updateDefaults = useCallback(
-    async ({ defaultProfitPercent, defaultTaxPercent, applyToAllProducts = false }) => {
+    async ({ defaultProfitPercent, defaultTaxPercent }) => {
       setMutating(true)
-      const payload = { applyToAllProducts }
+      const payload = {}
       if (defaultProfitPercent !== undefined) {
         payload.defaultProfitPercent = Number(defaultProfitPercent)
       }
@@ -119,6 +120,8 @@ export function useAdminTaxProfit({
       const result = await apiClient.patch(endpoints.admin.taxProfit.defaults, payload)
       setMutating(false)
       if (result.success) {
+        // IM Add Item catalog cache must pick up new defaults for pre-fill
+        invalidateProductCatalog()
         await Promise.all([load(), loadMeta()])
       }
       return result

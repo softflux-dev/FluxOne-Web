@@ -5,7 +5,7 @@ import {
   listTaxProfitProducts,
   updateTaxProfitDefaults,
 } from './tax-profit.model.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
 export async function taxProfitProductsList(req, res) {
@@ -23,8 +23,7 @@ export async function updateDefaultsHandler(req, res) {
     const result = await updateTaxProfitDefaults(req.tenantId, req.validated.body)
     return success(res, result)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -34,8 +33,7 @@ export async function bulkProfitHandler(req, res) {
     const result = await bulkSetProfitPercent(req.tenantId, productIds, profitPercent)
     return success(res, result)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -45,8 +43,7 @@ export async function bulkTaxHandler(req, res) {
     const result = await bulkSetTaxPercent(req.tenantId, productIds, taxPercent)
     return success(res, result)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 

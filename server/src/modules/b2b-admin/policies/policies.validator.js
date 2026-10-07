@@ -1,17 +1,13 @@
 import { z } from 'zod'
 import { empty, paginationQuery } from '../../branch-manager/shared.validator.js'
+import { looseUuidWithMessage } from '../../../utils/zodFields.util.js'
 
 const optionalString = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : value),
   z.string().optional(),
 )
 
-const looseUuid = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    'Invalid policy id',
-  )
+const looseUuid = looseUuidWithMessage('Invalid policy id')
 
 export const listPoliciesQuerySchema = z.object({
   body: empty,

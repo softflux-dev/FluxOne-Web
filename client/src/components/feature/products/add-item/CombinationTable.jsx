@@ -378,6 +378,40 @@ export function CombinationTable({
   )
 }
 
+/** Tax % / Profit % — pre-filled from Admin defaults on create; editable override. */
+export function TaxProfitFields({ form, patch, idPrefix = 'item' }) {
+  return (
+    <>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-tax`}>Tax %</Label>
+        <WholeNumberInput
+          id={`${idPrefix}-tax`}
+          min={0}
+          max={100}
+          value={form.taxPercent}
+          onChange={(e) => patch('taxPercent', e.target.value)}
+        />
+        <p className="text-[11px] text-slate-400">
+          Pre-filled from Admin defaults — change to override for this product only.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-profit`}>Profit %</Label>
+        <WholeNumberInput
+          id={`${idPrefix}-profit`}
+          min={0}
+          max={100}
+          value={form.profitPercent}
+          onChange={(e) => patch('profitPercent', e.target.value)}
+        />
+        <p className="text-[11px] text-slate-400">
+          Pre-filled from Admin defaults — change to override for this product only.
+        </p>
+      </div>
+    </>
+  )
+}
+
 export function NormalProductFields({ form, patch, stockMode = 'create', offers = [] }) {
   const stockLocked = stockMode === 'edit'
   const isEdit = stockMode === 'edit'
@@ -426,6 +460,7 @@ export function NormalProductFields({ form, patch, stockMode = 'create', offers 
           onChange={(e) => patch('sellingPrice', e.target.value)}
         />
       </div>
+      <TaxProfitFields form={form} patch={patch} idPrefix="normal" />
       <div className="space-y-1.5 sm:col-span-2">
         <Label htmlFor="normal-discount-offer">Discount / Offer</Label>
         <NativeSelect

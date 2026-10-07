@@ -1,3 +1,8 @@
+import {
+  emptyCatalog,
+  emptyCatalogDefaults,
+} from '@/lib/productCatalogCache'
+
 // Shared helper — normalize RTK thunk results for hooks / UI
 export function asResult(promise) {
   return promise
@@ -14,17 +19,7 @@ export function asResult(promise) {
 // Rebuild Map for UI code that calls childrenByParent.get(...)
 export function catalogForUi(catalog) {
   if (!catalog) {
-    return {
-      parents: [],
-      childrenByParent: new Map(),
-      all: [],
-      taxes: [],
-      offers: [],
-      defaults: {
-        defaultProfitPercent: 0,
-        defaultTaxPercent: 0,
-      },
-    }
+    return emptyCatalog({ childrenAsMap: true })
   }
   const raw = catalog.childrenByParent
   const childrenByParent =
@@ -35,10 +30,7 @@ export function catalogForUi(catalog) {
     all: catalog.all || [],
     taxes: catalog.taxes || [],
     offers: catalog.offers || [],
-    defaults: {
-      defaultProfitPercent: Number(catalog.defaults?.defaultProfitPercent) || 0,
-      defaultTaxPercent: Number(catalog.defaults?.defaultTaxPercent) || 0,
-    },
+    defaults: emptyCatalogDefaults(catalog.defaults),
   }
 }
 

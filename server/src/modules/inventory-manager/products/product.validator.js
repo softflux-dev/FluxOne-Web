@@ -8,6 +8,7 @@ import {
   nullableLooseUuid,
   optionalBool,
   optionalLooseUuid,
+  optionalPercentField,
   paginationQuery,
 } from '../shared.validator.js'
 
@@ -118,8 +119,10 @@ export const createProductSchema = z
       purchasePrice: moneyField.optional(),
       sellingPrice: moneyField.optional(),
       taxIds: z.array(looseUuid).optional(),
+      // Optional; omit → server uses tenants.default_tax_percent (find-or-create tax row)
+      taxPercent: optionalPercentField,
       // Optional; omit → server uses tenants.default_profit_percent
-      profitPercent: z.number().min(0).max(100).optional(),
+      profitPercent: optionalPercentField,
       offerId: optionalLooseUuid,
       discountPercent: optionalDiscountPercent,
       confirmed: z.coerce.boolean().optional(),
@@ -336,6 +339,9 @@ export const updateProductSchema = z
       description: z.string().optional(),
       scale: z.string().min(1).optional(),
       taxIds: z.array(looseUuid).optional(),
+      // Optional override; when set, find-or-create tax at this rate (takes precedence over taxIds)
+      taxPercent: optionalPercentField,
+      profitPercent: optionalPercentField,
       // Finished bundle stock — changing this assembles / disassembles components
       quantity: z.coerce.number().int().nonnegative().optional(),
       bundleItems: z

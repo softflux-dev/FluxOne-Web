@@ -58,7 +58,7 @@ export function buildCombinations(selectedTypes) {
       key: parts.map((p) => p.valueId).join('|'),
       label,
       parts,
-      // Assigned by the server on create (same as modal ItemFormDialog)
+      // Assigned by the server on create
       sku: '',
       barcode: '',
       purchasePrice: '',
@@ -106,6 +106,18 @@ export function assertSellingGtePurchase(purchasePrice, sellingPrice) {
   return null
 }
 
+/** Snapshot Tax % / Profit % from the form (defaults pre-filled; admin may override). */
+function taxProfitFromForm(form) {
+  const fields = {}
+  if (form.profitPercent !== '' && form.profitPercent != null) {
+    fields.profitPercent = Math.round(Number(form.profitPercent))
+  }
+  if (form.taxPercent !== '' && form.taxPercent != null) {
+    fields.taxPercent = Math.round(Number(form.taxPercent))
+  }
+  return fields
+}
+
 // Build POST /inventory/products body from wizard state
 export function buildAddItemApiPayload({
   form,
@@ -119,6 +131,7 @@ export function buildAddItemApiPayload({
   const description = String(form.description || '').trim() || undefined
   const categoryId = form.categoryId || undefined
   const subcategoryId = form.subcategoryId || undefined
+  const taxProfit = taxProfitFromForm(form)
 
   if (productKind === PRODUCT_KIND.NORMAL) {
     const itemCode = String(form.sku || '').trim()
@@ -143,6 +156,7 @@ export function buildAddItemApiPayload({
       dailyPriceChange: Boolean(form.dailyPriceChange),
       offerId: promo.offerId,
       discountPercent: promo.discountPercent,
+      ...taxProfit,
       confirmed: true,
     }
   }
@@ -197,6 +211,7 @@ export function buildAddItemApiPayload({
     scale: 'unit',
     confirmed: true,
     variants,
+    ...taxProfit,
     // Not sent to API — stripped in thunk; useful for console / future notify
     _customVariantMeta: customMeta,
   }
@@ -395,6 +410,7 @@ export function buildEditItemApiPayload({
   const description = String(form.description || '').trim() || undefined
   const categoryId = form.categoryId || undefined
   const subcategoryId = form.subcategoryId || undefined
+  const taxProfit = taxProfitFromForm(form)
 
   if (productKind === PRODUCT_KIND.NORMAL) {
     const itemCode = String(form.sku || '').trim()
@@ -419,6 +435,7 @@ export function buildEditItemApiPayload({
       offerId: promo.offerId,
       discountPercent: promo.discountPercent,
       status: form.status === 'inactive' ? 'inactive' : 'active',
+      ...taxProfit,
     }
   }
 
@@ -468,6 +485,7 @@ export function buildEditItemApiPayload({
     scale: 'unit',
     status: form.status === 'inactive' ? 'inactive' : 'active',
     variants,
+    ...taxProfit,
   }
 }
 

@@ -25,13 +25,9 @@ import {
   resolveInventoryScope,
 } from '../shared.access.js'
 import { MOVEMENT_TYPES } from '../../../config/constants.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, failFromError, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
-function scopeError(res, err) {
-  if (err?.status) return fail(res, err.message, err.status)
-  throw err
-}
 
 function listByType(movementType) {
   return async (req, res) => {
@@ -40,7 +36,7 @@ function listByType(movementType) {
       const result = await listLedger(tenantId, { ...req.validated.query, movementType, branchId })
       return success(res, paginatedResult(result.items, result))
     } catch (err) {
-      return scopeError(res, err)
+      return failFromError(res, err)
     }
   }
 }
@@ -59,7 +55,7 @@ function updateByType(movementType) {
       if (!row) return fail(res, 'Record not found', 404)
       return success(res, row)
     } catch (err) {
-      return scopeError(res, err)
+      return failFromError(res, err)
     }
   }
 }
@@ -78,7 +74,7 @@ function removeByType(movementType) {
       if (!deleted) return fail(res, 'Record not found', 404)
       return success(res, { deleted: true })
     } catch (err) {
-      return scopeError(res, err)
+      return failFromError(res, err)
     }
   }
 }
@@ -93,7 +89,7 @@ export async function getSummary(req, res) {
     })
     return success(res, data)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -121,7 +117,7 @@ export async function listAdjustmentLedger(req, res) {
     })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -144,7 +140,7 @@ export async function listExpired(req, res) {
     })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -154,7 +150,7 @@ export async function listStockTransfers(req, res) {
     const result = await listTransfers(tenantId, { ...req.validated.query, branchId })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -177,7 +173,7 @@ export async function createStockIn(req, res) {
     )
     return success(res, saved, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -192,7 +188,7 @@ export async function stockInFromOrder(req, res) {
     )
     return success(res, data, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -207,7 +203,7 @@ export async function createAdjustment(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -222,7 +218,7 @@ export async function createDamaged(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -237,7 +233,7 @@ export async function createOther(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -252,7 +248,7 @@ export async function createStockOut(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -267,7 +263,7 @@ export async function createExpired(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -284,7 +280,7 @@ export async function createTransfer(req, res) {
     })
     return success(res, row, 201)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -334,7 +330,7 @@ export async function exportControl(req, res) {
     const rows = await exportLedgerRows(tenantId, filters)
     return success(res, { rows, exported: rows.length, movementType })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -349,7 +345,7 @@ export async function importControl(req, res) {
     })
     return success(res, data)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -361,7 +357,7 @@ export async function getBranchStockPriceRule(req, res) {
       updateAllStock: !data.priceRequiresStockUtilized,
     })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -374,7 +370,7 @@ export async function patchBranchStockPriceRule(req, res) {
       updateAllStock: !data.priceRequiresStockUtilized,
     })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -384,7 +380,7 @@ export async function getPriceRule(req, res) {
     const data = await getPriceUtilizationRule(tenantId)
     return success(res, data)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -397,7 +393,7 @@ export async function patchPriceRule(req, res) {
     )
     return success(res, data)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -408,7 +404,7 @@ export async function listDailyPrices(req, res) {
     const items = await listDailyPricePending(tenantId, { branchId })
     return success(res, { items, count: items.length })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -422,7 +418,7 @@ export async function patchDailyPrice(req, res) {
     if (!row) return fail(res, 'Product not found or daily price change is off', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -435,7 +431,7 @@ export async function getThresholds(req, res) {
     })
     return success(res, { items, count: items.length })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -447,7 +443,7 @@ export async function saveThreshold(req, res) {
     if (!row) return fail(res, 'Product not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -458,7 +454,7 @@ export async function deleteThreshold(req, res) {
     if (!row) return fail(res, 'Product not found', 404)
     return success(res, row)
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }
 
@@ -468,6 +464,6 @@ export async function getAlerts(req, res) {
     const items = await listControlAlerts(tenantId, { branchId })
     return success(res, { items, count: items.length })
   } catch (err) {
-    return scopeError(res, err)
+    return failFromError(res, err)
   }
 }

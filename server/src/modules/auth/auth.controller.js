@@ -22,7 +22,7 @@ import {
 } from '../../utils/jwt.util.js'
 import { listBranchesForLookup } from '../inventory-manager/lookups/lookup.model.js'
 import { ROLES, BCRYPT_COST } from '../../config/constants.js'
-import { fail, success } from '../../utils/response.util.js'
+import { fail, failFromError, success } from '../../utils/response.util.js'
 import { resolveUploadUrl } from '../../utils/uploadUrl.util.js'
 import {
   clearLoginFailures,
@@ -234,8 +234,7 @@ export async function updateMe(req, res) {
       await revokeAllRefreshTokensForUser(req.user.id, req.tenantId)
     }
   } catch (err) {
-    if (err.status === 409) return fail(res, err.message, 409)
-    throw err
+    return failFromError(res, err)
   }
 
   const user = await findAuthUserById(req.user.id, req.tenantId)

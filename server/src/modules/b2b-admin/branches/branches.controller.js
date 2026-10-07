@@ -14,7 +14,7 @@ import {
 import { sendLoginCredentialsEmail } from '../../../mail/mail.service.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
 import { BCRYPT_COST } from '../../../config/constants.js'
-import { fail, success } from '../../../utils/response.util.js'
+import { fail, success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
 function normalizeManager(body) {
@@ -109,8 +109,7 @@ export async function createBranch(req, res) {
       passwordHash,
     })
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 
   const companyName = await getTenantName(req.tenantId)
@@ -165,8 +164,7 @@ export async function patchBranch(req, res) {
       manager: managerPayload,
     })
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 
   if (!row) return fail(res, 'Branch not found', 404)
@@ -182,8 +180,7 @@ export async function patchBranchStatus(req, res) {
     )
     return success(res, row)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
 
@@ -200,8 +197,7 @@ export async function resetPassword(req, res) {
       passwordHash,
     )
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 
   const companyName = await getTenantName(req.tenantId)
@@ -230,7 +226,6 @@ export async function removeBranch(req, res) {
     const result = await deleteBranch(req.tenantId, req.validated.params.id)
     return success(res, result)
   } catch (err) {
-    if (err.status) return fail(res, err.message, err.status)
-    throw err
+    return failFromError(res, err)
   }
 }
