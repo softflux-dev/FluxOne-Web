@@ -51,6 +51,7 @@ import { SettingsPage as AdminSettingsPage } from '@/pages/admin/SettingsPage'
 import { AdminProfilePage } from '@/pages/admin/AdminProfilePage'
 import { NotificationsPage } from '@/pages/shared/NotificationsPage'
 import { NotFoundPage, RootNotFoundPage } from '@/pages/shared/NotFoundPage'
+import { RouteErrorPage } from '@/pages/shared/RouteErrorPage'
 import { useAuthSession } from '@/hooks/useAuthSession'
 import CategoriesPage from '@/pages/inventory/CategoriesPage'
 
@@ -60,14 +61,16 @@ function ProfileRedirect() {
 }
 
 const router = createBrowserRouter([
-  { path: PATHS.splash, element: <SplashPage /> },
-  { path: PATHS.login, element: <LoginPage /> },
+  { path: PATHS.splash, element: <SplashPage />, errorElement: <RouteErrorPage /> },
+  { path: PATHS.login, element: <LoginPage />, errorElement: <RouteErrorPage /> },
   {
     path: PATHS.admin.root,
     element: <AdminAuthGate />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         element: <AdminLayout />,
+        errorElement: <RouteErrorPage />,
         children: [
           { index: true, element: <AdminDashboardPage /> },
           { path: 'dashboard', element: <AdminDashboardPage /> },
@@ -88,6 +91,7 @@ const router = createBrowserRouter([
   },
   {
     element: <AuthGate />,
+    errorElement: <RouteErrorPage />,
     children: [
       { path: PATHS.profile, element: <ProfileRedirect /> },
       {
@@ -96,6 +100,7 @@ const router = createBrowserRouter([
           {
             path: PATHS.inventory.root,
             element: <InventoryLayout />,
+            errorElement: <RouteErrorPage />,
             children: [
               { index: true, element: <InventoryDashboardPage /> },
               { path: 'products', element: <ProductsPage /> },
@@ -120,6 +125,7 @@ const router = createBrowserRouter([
           {
             path: PATHS.branch.root,
             element: <BranchManagerLayout />,
+            errorElement: <RouteErrorPage />,
             children: [
               { index: true, element: <BranchDashboardPage /> },
               { path: 'staff', element: <StaffPage /> },

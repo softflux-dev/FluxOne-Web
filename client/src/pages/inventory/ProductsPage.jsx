@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpFromLine, Ban, Camera, Plus } from 'lucide-react'
+import { ArrowUpFromLine, Ban as BanIcon, Camera, Plus } from 'lucide-react'
 import { ImportItemsDialog } from '@/components/feature/products/ImportItemsDialog'
 import { PrintBarcodeDialog } from '@/components/feature/products/PrintBarcodeDialog'
 import { ProductFilters } from '@/components/feature/products/ProductFilters'
@@ -425,7 +425,7 @@ export function ProductsPage() {
         }
         confirmLabel="Deactivate"
         variant="warning"
-        icon={Ban}
+        icon={BanIcon}
         loading={mutating}
         onConfirm={handleConfirmDeactivate}
       />
