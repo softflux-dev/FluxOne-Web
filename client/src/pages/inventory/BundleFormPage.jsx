@@ -617,7 +617,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
           <ImageUploadField
             id="bundle-image"
             label="Image"
-            optionalLabel="(optional, max 4MB)"
+            optionalLabel="(optional, max 10MB)"
             value={image}
             existingImageUrl={existingImageUrl}
             onChange={setImage}

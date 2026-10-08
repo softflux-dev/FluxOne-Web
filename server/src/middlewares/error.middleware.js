@@ -10,7 +10,7 @@ export function asyncHandler(fn) {
 function mapUploadError(err) {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return { status: 413, message: 'Image must be under 4 MB (JPEG, PNG, or WebP)' }
+      return { status: 413, message: 'Image must be under 10 MB (JPEG, PNG, or WebP)' }
     }
     if (err.code === 'LIMIT_UNEXPECTED_FILE') {
       return { status: 400, message: 'Unexpected file field in upload' }

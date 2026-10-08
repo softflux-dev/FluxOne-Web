@@ -1,6 +1,6 @@
 export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
-export const IMAGE_MAX_BYTES = 4 * 1024 * 1024
-export const IMAGE_MAX_LABEL = '4 MB'
+export const IMAGE_MAX_BYTES = 10 * 1024 * 1024
+export const IMAGE_MAX_LABEL = '10 MB'
 export const IMAGE_FORMATS_LABEL = 'JPEG, PNG, or WebP'
 
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
