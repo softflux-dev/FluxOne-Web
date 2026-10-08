@@ -86,9 +86,10 @@ export function formatOfferOptionLabel(offer) {
 /** Map selected offer → { offerId, discountPercent } for API (Discount & Offer = one promo). */
 export function promoFromOfferId(offerId, offers = []) {
   if (!offerId) return { offerId: null, discountPercent: null }
-  const selected = (offers || []).find((o) => o.id === offerId)
+  const id = String(offerId)
+  const selected = (offers || []).find((o) => String(o.id) === id)
   return {
-    offerId,
+    offerId: id,
     discountPercent:
       selected?.percent != null && selected.percent !== ''
         ? Math.round(Number(selected.percent))
@@ -314,7 +315,8 @@ export function variantsToCombinationRows(variants = []) {
       lowStockThreshold:
         v.reorderPoint === 0 || v.reorderPoint ? String(v.reorderPoint) : '',
       dailyPriceChange: Boolean(v.dailyPriceChange),
-      offerId: v.offerId || '',
+      // Normalize UUID to string so NativeSelect value matches <option value>
+      offerId: v.offerId != null && v.offerId !== '' ? String(v.offerId) : '',
       offerName: v.offerName || '',
       discountPercent:
         v.discountPercent === 0 || v.discountPercent

@@ -233,6 +233,15 @@ export function AddItemPage() {
     )
   }
 
+  // Bulk Apply — single setState so every selected/all row gets the same discount patch
+  function patchCombinationsBulk(patchesByKey) {
+    setCombinations((prev) =>
+      prev.map((row) =>
+        patchesByKey[row.key] ? { ...row, ...patchesByKey[row.key] } : row,
+      ),
+    )
+  }
+
   function validateTab(tabId) {
     if (tabId === 'basic') {
       if (!form.name.trim()) return 'Product name is required'
@@ -602,6 +611,7 @@ export function AddItemPage() {
             <CombinationTable
               rows={combinations}
               onChangeRow={patchCombination}
+              onChangeRows={patchCombinationsBulk}
               selectedKeys={selectedComboKeys}
               onSelectedKeysChange={setSelectedComboKeys}
               offers={catalog.offers || []}

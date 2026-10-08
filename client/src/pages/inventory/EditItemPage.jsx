@@ -331,6 +331,14 @@ export function EditItemPage() {
     )
   }
 
+  function patchCombinationsBulk(patchesByKey) {
+    setCombinations((prev) =>
+      prev.map((row) =>
+        patchesByKey[row.key] ? { ...row, ...patchesByKey[row.key] } : row,
+      ),
+    )
+  }
+
   function validateTab(tabId) {
     if (tabId === 'basic') {
       if (!form.name.trim()) return 'Product name is required'
@@ -708,6 +716,7 @@ export function EditItemPage() {
             <CombinationTable
               rows={combinations}
               onChangeRow={patchCombination}
+              onChangeRows={patchCombinationsBulk}
               selectedKeys={selectedComboKeys}
               onSelectedKeysChange={setSelectedComboKeys}
               stockMode="edit"

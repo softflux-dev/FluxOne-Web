@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils'
 const KPI_CONFIG = [
   {
     key: 'todayEarning',
-    title: 'Today Earning',
-    subtitle: 'Net earnings for selected date',
+    title: 'Period Earning',
+    subtitle: 'Net earnings for selected From–To range',
     icon: CircleDollarSign,
     gradient: 'from-purple-500/10 via-purple-500/5 to-transparent',
     iconGradient: 'from-purple-600 to-indigo-700',

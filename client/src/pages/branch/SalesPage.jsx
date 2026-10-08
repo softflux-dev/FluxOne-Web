@@ -56,7 +56,8 @@ export function SalesPage() {
   // Filters — search debounced; catalog cascade is instant
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedQ = useDebouncedValue(searchQuery, 300)
-  const [filterDate, setFilterDate] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterSubcategory, setFilterSubcategory] = useState('')
   const [filterProduct, setFilterProduct] = useState('')
@@ -73,7 +74,8 @@ export function SalesPage() {
     setLoading(true)
     const params = {}
     if (debouncedQ.trim()) params.q = debouncedQ.trim()
-    if (filterDate) params.date = filterDate
+    if (filterFrom) params.from = filterFrom
+    if (filterTo) params.to = filterTo
     if (filterCategory) params.categoryId = filterCategory
     if (filterSubcategory) params.subcategoryId = filterSubcategory
     if (filterProduct) params.productId = filterProduct
@@ -120,7 +122,8 @@ export function SalesPage() {
     void fetchSales()
   }, [
     debouncedQ,
-    filterDate,
+    filterFrom,
+    filterTo,
     filterCategory,
     filterSubcategory,
     filterProduct,
@@ -136,7 +139,8 @@ export function SalesPage() {
     setPage(1)
   }, [
     debouncedQ,
-    filterDate,
+    filterFrom,
+    filterTo,
     filterCategory,
     filterSubcategory,
     filterProduct,
@@ -150,11 +154,14 @@ export function SalesPage() {
     if ('productId' in patch) setFilterProduct(patch.productId || '')
     if ('variantTypeId' in patch) setFilterVariantType(patch.variantTypeId || '')
     if ('variantValueId' in patch) setFilterVariantValue(patch.variantValueId || '')
+    if ('from' in patch) setFilterFrom(patch.from || '')
+    if ('to' in patch) setFilterTo(patch.to || '')
   }
 
   const handleClearFilters = () => {
     setSearchQuery('')
-    setFilterDate('')
+    setFilterFrom('')
+    setFilterTo('')
     setFilterCategory('')
     setFilterSubcategory('')
     setFilterProduct('')
@@ -201,10 +208,9 @@ export function SalesPage() {
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search sale ID (SAL-INV-… or INV-…)"
-          showDate
-          dateId="sales-date"
-          dateValue={filterDate}
-          onDateChange={setFilterDate}
+          showDates
+          from={filterFrom}
+          to={filterTo}
           categories={categories}
           categoryId={filterCategory}
           subcategoryId={filterSubcategory}

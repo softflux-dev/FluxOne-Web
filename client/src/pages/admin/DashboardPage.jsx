@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { DateRangeFields } from '@/components/shared/DateRangeFields'
 import { SlowLoadingBanner, useSlowLoadingHint } from '@/components/shared/SlowLoadingBanner'
 import { AdminWelcomeBanner } from '@/components/feature/admin/dashboard/AdminWelcomeBanner'
 import { AdminKpiCards } from '@/components/feature/admin/dashboard/AdminKpiCards'
@@ -14,8 +15,10 @@ import { useAuthSession } from '@/hooks/useAuthSession'
 
 export function DashboardPage() {
   const { user } = useAuthSession()
+  const today = new Date().toISOString().slice(0, 10)
   // Page-header filters — drive full dashboard (KPIs, Branch Overview, Inventory)
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
   const [selectedBranch, setSelectedBranch] = useState('all')
 
   const {
@@ -25,7 +28,7 @@ export function DashboardPage() {
     kpis,
     branchProfitOverview,
     branchInventoryStatus,
-  } = useAdminDashboard({ date, branchId: selectedBranch })
+  } = useAdminDashboard({ from, to, branchId: selectedBranch })
 
   // Resolve label for Branch Overview description when a single branch is selected
   const selectedBranchName =
@@ -59,15 +62,16 @@ export function DashboardPage() {
                 </NativeSelect>
               </label>
 
-              <label className="flex w-full items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm shadow-sm sm:w-auto">
-                <span className="shrink-0 text-slate-500">Date</span>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  className="min-w-0 flex-1 border-0 bg-transparent font-semibold text-slate-800 outline-none sm:flex-none"
-                />
-              </label>
+              <DateRangeFields
+                compact
+                from={from}
+                to={to}
+                max={today}
+                onChange={({ from: nextFrom, to: nextTo }) => {
+                  setFrom(nextFrom || today)
+                  setTo(nextTo || today)
+                }}
+              />
             </div>
           }
         />
@@ -100,7 +104,7 @@ export function DashboardPage() {
           {loading && !branchProfitOverview ? (
             <div className="h-96 animate-pulse rounded-2xl border border-slate-200 bg-white" />
           ) : (
-            // Branch Overview uses page-header Branch + Date (API-scoped net profit)
+            // Branch Overview uses page-header Branch + From/To (API-scoped net profit)
             <BranchProfitOverviewChart
               data={branchProfitOverview || {}}
               branchId={selectedBranch}

@@ -8,6 +8,8 @@ export async function salesList(req, res) {
     const filters = {
       q: req.validated.query.q,
       date: req.validated.query.date,
+      from: req.validated.query.from,
+      to: req.validated.query.to,
       categoryId: req.validated.query.categoryId,
       subcategoryId: req.validated.query.subcategoryId,
       productId: req.validated.query.productId,

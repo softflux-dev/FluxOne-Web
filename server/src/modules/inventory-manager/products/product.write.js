@@ -1168,7 +1168,13 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
         client,
         tenantId,
         `
-          SELECT id, item_code AS "itemCode", barcode
+          SELECT
+            id,
+            item_code AS "itemCode",
+            barcode,
+            daily_price_change AS "dailyPriceChange",
+            purchase_price AS "purchasePrice",
+            selling_price AS "sellingPrice"
           FROM products
           WHERE tenant_id = $1 AND id = $2 AND parent_id = $3
           LIMIT 1
@@ -1180,6 +1186,19 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
       }
       itemCode = itemCode || owned[0].itemCode
       barcode = barcode || owned[0].barcode
+
+      const nextDaily = Boolean(variant.dailyPriceChange)
+      const wasDaily = Boolean(owned[0].dailyPriceChange)
+      const pricesChanged =
+        Number(owned[0].purchasePrice) !== Number(purchasePrice) ||
+        Number(owned[0].sellingPrice) !== Number(sellingPrice)
+      // Enable → pending (NULL). Already-on + price edit → stamped today.
+      let dailyUpdatedOnSql = 'daily_price_updated_on'
+      if (nextDaily && !wasDaily) {
+        dailyUpdatedOnSql = 'daily_price_updated_on = NULL'
+      } else if (nextDaily && pricesChanged) {
+        dailyUpdatedOnSql = 'daily_price_updated_on = CURRENT_DATE'
+      }
 
       await tenantClientQuery(
         client,
@@ -1196,7 +1215,8 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
             END,
             selling_price = $7::numeric,
             reorder_point = $8,
-            daily_price_change = $9,
+            daily_price_change = $9::boolean,
+            ${dailyUpdatedOnSql},
             status = $10,
             variant_label = $11,
             category_id = $12,
@@ -1216,7 +1236,7 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
           purchasePrice,
           sellingPrice,
           reorderPoint,
-          Boolean(variant.dailyPriceChange),
+          nextDaily,
           childStatus,
           label,
           categoryId,
@@ -1320,7 +1340,8 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
             description,
             creation_batch_id AS "creationBatchId",
             profit_percent AS "profitPercent",
-            parent_id AS "parentId"
+            parent_id AS "parentId",
+            daily_price_change AS "dailyPriceChange"
           FROM products
           WHERE tenant_id = $1 AND id = $2
             ${branchClause('', 3)}
@@ -1445,8 +1466,13 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         } else if (payloadKey === 'reorderPoint') {
           setClauses.push(`reorder_point = $${paramIndex}::numeric`)
         } else if (payloadKey === 'dailyPriceChange') {
+          const enabled = Boolean(value)
           setClauses.push(`daily_price_change = $${paramIndex}::boolean`)
-          params.push(Boolean(value))
+          params.push(enabled)
+          // Only on false→true: clear stamp so SKU joins today's pending queue
+          if (enabled && !Boolean(existing.dailyPriceChange)) {
+            setClauses.push('daily_price_updated_on = NULL')
+          }
           continue
         } else {
           setClauses.push(`${column} = $${paramIndex}`)

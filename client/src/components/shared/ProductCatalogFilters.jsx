@@ -16,6 +16,11 @@ export function ProductCatalogFilters({
   onDateChange,
   dateId = 'catalog-date',
 
+  // Preferred UX: From / To range (maps to CatalogCascadeFilters showDates).
+  showDates = false,
+  from = '',
+  to = '',
+
   categoryId = '',
   subcategoryId = '',
   productId = '',
@@ -54,6 +59,8 @@ export function ProductCatalogFilters({
       productId: '',
       variantTypeId: '',
       variantValueId: '',
+      from: '',
+      to: '',
     })
   }
 
@@ -65,9 +72,12 @@ export function ProductCatalogFilters({
       productId={productId}
       variantTypeId={variantTypeId}
       variantValueId={variantValueId}
+      from={from}
+      to={to}
       dateValue={dateValue}
       showSearch={showSearch}
-      showDate={showDate}
+      showDates={showDates}
+      showDate={showDate && !showDates}
       title={title}
       description={description}
       idPrefix={searchId || dateId || 'catalog'}

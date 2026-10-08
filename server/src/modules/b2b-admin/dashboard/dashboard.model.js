@@ -148,13 +148,21 @@ async function salesProfit(tenantId, { from, to, branchId }) {
   }
 }
 
-async function buildKpis(tenantId, { date, branchId }) {
-  const asOf = date
-  const yesterday = shiftDays(asOf, -1)
+function daySpanInclusive(from, to) {
+  const a = new Date(`${from}T12:00:00.000Z`)
+  const b = new Date(`${to}T12:00:00.000Z`)
+  return Math.max(1, Math.round((b - a) / 86400000) + 1)
+}
+
+async function buildKpis(tenantId, { from, to, branchId }) {
+  const asOf = to
+  const spanDays = daySpanInclusive(from, to)
+  const prevTo = shiftDays(from, -1)
+  const prevFrom = shiftDays(prevTo, -(spanDays - 1))
   const thisMonthFrom = monthStart(asOf)
   const prevMonthAnchor = addMonths(thisMonthFrom, -1)
   const prevMonthFrom = monthStart(prevMonthAnchor)
-  // Last closed calendar month relative to selected date
+  // Last closed calendar month relative to range end
   const lastMonthTo = shiftDays(thisMonthFrom, -1)
   const year = Number(asOf.slice(0, 4))
   const ytdFrom = yearStart(year)
@@ -173,16 +181,16 @@ async function buildKpis(tenantId, { date, branchId }) {
   const netOpts = { branchId, ratesToPkr, targetCurrency: currency }
 
   const [
-    today,
-    yesterdaySales,
+    period,
+    previousPeriod,
     lastMonth,
     priorMonth,
     thisYear,
     prevYearYtd,
     allTime,
   ] = await Promise.all([
-    salesNet(tenantId, { from: asOf, to: asOf, ...netOpts }),
-    salesNet(tenantId, { from: yesterday, to: yesterday, ...netOpts }),
+    salesNet(tenantId, { from, to, ...netOpts }),
+    salesNet(tenantId, { from: prevFrom, to: prevTo, ...netOpts }),
     salesNet(tenantId, { from: prevMonthFrom, to: lastMonthTo, ...netOpts }),
     salesNet(tenantId, {
       from: monthStart(addMonths(prevMonthFrom, -1)),
@@ -196,13 +204,15 @@ async function buildKpis(tenantId, { date, branchId }) {
 
   const avgTicket =
     allTime.saleCount > 0 ? Math.round(allTime.earning / allTime.saleCount) : 0
+  const periodLabel = from === to ? from : `${from} → ${to}`
 
   return {
+    // Key kept for AdminKpiCards; value is selected From–To period.
     todayEarning: buildKpiBlock({
-      value: today.earning,
-      previous: yesterdaySales.earning,
-      comparisonText: `vs. previous day (${formatRs(yesterdaySales.earning, currency)})`,
-      sublabel: `As of ${asOf}`,
+      value: period.earning,
+      previous: previousPeriod.earning,
+      comparisonText: `vs. prior ${spanDays}-day window (${formatRs(previousPeriod.earning, currency)})`,
+      sublabel: periodLabel,
       target: null,
       currency,
     }),
@@ -227,8 +237,8 @@ async function buildKpis(tenantId, { date, branchId }) {
         value: allTime.earning,
         previous: thisYear.earning,
         comparisonText: branchId
-          ? 'Selected branch · all-time through date'
-          : 'All branches · all-time through date',
+          ? 'Selected branch · all-time through range end'
+          : 'All branches · all-time through range end',
         sublabel: `Avg ticket: ${formatRs(avgTicket, currency)}`,
         target: null,
         currency,
@@ -239,9 +249,7 @@ async function buildKpis(tenantId, { date, branchId }) {
   }
 }
 
-async function monthlyBranchSeries(tenantId, { year, branchId }) {
-  const from = yearStart(year)
-  const to = `${year}-12-31`
+async function monthlyBranchSeries(tenantId, { from, to, branchId }) {
 
   const { rows } = await tenantQuery(
     tenantId,
@@ -306,19 +314,24 @@ async function monthlyBranchSeries(tenantId, { year, branchId }) {
   }))
 }
 
-async function buildBranchProfitOverview(tenantId, { year, branchId, branches, currency }) {
+async function buildBranchProfitOverview(tenantId, { from, to, branchId, branches, currency }) {
   const code = normalizeCurrency(currency || DEFAULT_CURRENCY)
-  const series = await monthlyBranchSeries(tenantId, { year, branchId })
+  const series = await monthlyBranchSeries(tenantId, { from, to, branchId })
   const branchList = branches.length
     ? branches
     : [...new Map(series.map((s) => [s.branchId, { id: s.branchId, name: s.branchName }])).values()]
+
+  const year = Number(to.slice(0, 4))
+  const sameYear = from.slice(0, 4) === to.slice(0, 4)
+  const monthStartIdx = sameYear ? Number(from.slice(5, 7)) : 1
+  const monthEndIdx = sameYear ? Number(to.slice(5, 7)) : 12
 
   const monthlyData = []
   let totalRevenue = 0
   let totalProfit = 0
   const branchProfitTotals = new Map()
 
-  for (let m = 1; m <= 12; m += 1) {
+  for (let m = monthStartIdx; m <= monthEndIdx; m += 1) {
     const monthRows = series.filter((s) => s.monthIndex === m)
     const revenue = monthRows.reduce((sum, r) => sum + r.revenue, 0)
     const profit = monthRows.reduce((sum, r) => sum + r.profit, 0)
@@ -375,6 +388,8 @@ async function buildBranchProfitOverview(tenantId, { year, branchId, branches, c
 
   return {
     year,
+    from,
+    to,
     branches: filterBranches,
     summary: {
       totalRevenue,
@@ -489,11 +504,25 @@ async function buildInventoryStatus(tenantId, { branchId, asOfDate, currency }) 
   }
 }
 
+// Normalize From/To (legacy `date` = single day). Ensures from <= to.
+function resolveDashboardRange(filters = {}) {
+  const today = new Date().toISOString().slice(0, 10)
+  let from =
+    toDateParam(filters.from) || toDateParam(filters.date) || today
+  let to = toDateParam(filters.to) || toDateParam(filters.date) || today
+  if (from > to) {
+    const swap = from
+    from = to
+    to = swap
+  }
+  return { from, to, date: to }
+}
+
 // Full B2B Admin dashboard payload.
-// Query: date (YYYY-MM-DD), branchId (uuid | omit/all), year (optional, defaults to date's year)
+// Query: from/to (YYYY-MM-DD), legacy date, branchId (uuid | omit/all)
 export async function getAdminDashboard(tenantId, filters = {}) {
-  const date = toDateParam(filters.date) || new Date().toISOString().slice(0, 10)
-  const year = Number(filters.year) || Number(date.slice(0, 4))
+  const { from, to, date } = resolveDashboardRange(filters)
+  const year = Number(filters.year) || Number(to.slice(0, 4))
   const branchId = filters.branchId || null
 
   const [{ rows: curRows }] = await Promise.all([
@@ -518,18 +547,21 @@ export async function getAdminDashboard(tenantId, filters = {}) {
   }
 
   const [kpis, branchProfitOverview, branchInventoryStatus] = await Promise.all([
-    buildKpis(tenantId, { date, branchId }),
+    buildKpis(tenantId, { from, to, branchId }),
     buildBranchProfitOverview(tenantId, {
-      year,
+      from,
+      to,
       branchId,
       branches: scopedBranches,
       currency,
     }),
-    buildInventoryStatus(tenantId, { branchId, asOfDate: date, currency }),
+    buildInventoryStatus(tenantId, { branchId, asOfDate: to, currency }),
   ])
 
   return {
     filters: {
+      from,
+      to,
       date,
       branchId: branchId || 'all',
       year,

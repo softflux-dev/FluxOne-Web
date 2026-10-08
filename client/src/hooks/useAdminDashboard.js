@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 
-//Live B2B Admin dashboard (`GET /api/admin/dashboard`).
-// Refetches when `date` or `branchId` changes.
-export function useAdminDashboard({ date, branchId = 'all' } = {}) {
+// Live B2B Admin dashboard (`GET /api/admin/dashboard`).
+// Refetches when From/To range or `branchId` changes.
+export function useAdminDashboard({ from, to, branchId = 'all' } = {}) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -13,7 +13,8 @@ export function useAdminDashboard({ date, branchId = 'all' } = {}) {
     setLoading(true)
     setError(null)
     const params = {
-      date: date || undefined,
+      from: from || undefined,
+      to: to || undefined,
       branchId: !branchId || branchId === 'all' ? undefined : branchId,
     }
     const result = await apiClient.get(endpoints.admin.dashboard, params)
@@ -25,7 +26,7 @@ export function useAdminDashboard({ date, branchId = 'all' } = {}) {
     }
     setData(result.data)
     setLoading(false)
-  }, [date, branchId])
+  }, [from, to, branchId])
 
   useEffect(() => {
     void load()

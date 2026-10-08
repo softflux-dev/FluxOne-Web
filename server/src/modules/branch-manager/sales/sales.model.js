@@ -60,9 +60,16 @@ export async function listSales(tenantId, filters = {}) {
     )`
   }
 
-  if (filters.date) {
-    params.push(filters.date)
-    query += ` AND s.sold_at::date = $${params.length + 1}::date`
+  // Date range: from/to inclusive. Legacy `date` = single day (from=to).
+  const rangeFrom = filters.from || filters.date || null
+  const rangeTo = filters.to || filters.date || null
+  if (rangeFrom) {
+    params.push(rangeFrom)
+    query += ` AND s.sold_at::date >= $${params.length + 1}::date`
+  }
+  if (rangeTo) {
+    params.push(rangeTo)
+    query += ` AND s.sold_at::date <= $${params.length + 1}::date`
   }
 
   // Catalog cascade: category → subcategory → product → variant (variant wins if set)

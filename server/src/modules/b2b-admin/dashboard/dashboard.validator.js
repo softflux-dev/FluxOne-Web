@@ -20,9 +20,24 @@ const branchIdQuery = z.preprocess((value) => {
 export const adminDashboardQuerySchema = z.object({
   body: empty,
   params: empty,
-  query: z.object({
-    date: dateString,
-    branchId: branchIdQuery,
-    year: z.coerce.number().int().min(2000).max(2100).optional(),
-  }),
+  query: z
+    .object({
+      // Prefer from/to range; legacy `date` still accepted as single-day (from=to).
+      date: dateString,
+      from: dateString,
+      to: dateString,
+      branchId: branchIdQuery,
+      year: z.coerce.number().int().min(2000).max(2100).optional(),
+    })
+    .superRefine((query, ctx) => {
+      const from = query.from || query.date
+      const to = query.to || query.date
+      if (from && to && from > to) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['to'],
+          message: 'to must be on or after from',
+        })
+      }
+    }),
 })
