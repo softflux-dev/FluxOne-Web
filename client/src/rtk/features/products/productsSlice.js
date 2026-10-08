@@ -348,10 +348,9 @@ export const deleteCategory = createAsyncThunk(
   async (id, { dispatch, rejectWithValue }) => {
     const result = await apiClient.delete(endpoints.products.category(id))
     if (!result.success) return rejectWithValue(result.error || 'Delete category failed')
-    // Soft-delete — patch module cache immediately, then reload from server
-    patchCatalogCategoryActive(id, false)
+    // Hard delete — reload catalog so the row disappears
     await dispatch(reloadProductCategories())
-    return { ...(result.data || {}), id, isActive: false }
+    return { ...(result.data || {}), id, deleted: true }
   },
 )
 

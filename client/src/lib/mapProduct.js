@@ -176,10 +176,13 @@ export function splitCategories(rows = []) {
   return { parents, childrenByParent, all: list }
 }
 
+// Empty / N/A display — match variant-parent catalog cells (`--`).
+export const EMPTY_DASH = '--'
+
 export function money(value) {
-  if (value === null || value === undefined || value === '') return '—'
+  if (value === null || value === undefined || value === '') return EMPTY_DASH
   const n = Math.trunc(Number(value))
-  if (!Number.isFinite(n)) return '—'
+  if (!Number.isFinite(n)) return EMPTY_DASH
   return n.toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,

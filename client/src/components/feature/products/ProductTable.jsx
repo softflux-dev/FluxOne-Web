@@ -22,11 +22,11 @@ import {
   TablePagination,
 } from '@/components/ui/table'
 import { TableRowsSkeleton } from '@/components/ui/skeleton'
-import { formatInventoryStock, money, PRODUCT_TYPES } from '@/lib/mapProduct'
+import { EMPTY_DASH, formatInventoryStock, money, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { BRAND } from '@/lib/constants'
 
-// Print / Add Stock / Edit / Block|Open / Delete for one catalog row
+// Print / Add Stock / Edit / Deactivate|Activate / Delete for one catalog row
 function ProductRowActions({
   row,
   onPrintBarcode,
@@ -66,7 +66,7 @@ function ProductRowActions({
           <PackagePlus className="size-4" />
         </Button>
       ) : null}
-      {/* clean and optimized code — reuse shared CRUD icons; Ban opens Open/Close modal */}
+      {/* Reuse shared CRUD icons; Ban opens Active/Inactive confirm */}
       <RowActionButtons
         onEdit={() => onEdit?.(row)}
         onBlock={() => onBlock?.(row)}
@@ -74,8 +74,8 @@ function ProductRowActions({
         isActive={open}
         onDelete={() => onDelete?.(row)}
         editLabel="Edit product"
-        blockLabel="Close product"
-        unblockLabel="Open product"
+        blockLabel="Deactivate product"
+        unblockLabel="Activate product"
         deleteLabel="Delete product"
         disabled={statusLoading}
       />
@@ -84,7 +84,8 @@ function ProductRowActions({
 }
 
 function parentPriceDash(row, value) {
-  if (row.type === PRODUCT_TYPES.VARIANT) return '—'
+  // Variant parent: no own price — child SKUs hold the data.
+  if (row.type === PRODUCT_TYPES.VARIANT) return EMPTY_DASH
   return money(value)
 }
 
@@ -379,7 +380,7 @@ export function ProductTable({
                         className="truncate text-slate-600"
                         title={row.lastPurchaseVendorName || undefined}
                       >
-                        {row.lastPurchaseVendorName || '—'}
+                        {row.lastPurchaseVendorName || EMPTY_DASH}
                       </p>
                       <p className="mt-1.5">
                         <span className="text-slate-400">Current</span>{' '}
@@ -389,7 +390,7 @@ export function ProductTable({
                         className="truncate text-slate-600"
                         title={row.currentPurchaseVendorName || undefined}
                       >
-                        {row.currentPurchaseVendorName || '—'}
+                        {row.currentPurchaseVendorName || EMPTY_DASH}
                       </p>
                     </TableCell>
                     <TableCell className="px-2 py-3 text-xs leading-snug text-slate-600">

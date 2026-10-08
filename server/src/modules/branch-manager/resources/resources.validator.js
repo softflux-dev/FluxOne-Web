@@ -3,7 +3,8 @@ import { empty, idParams, optionalString, optionalTime, optionalUuid } from '../
 import { normalizeWorkingDays, WEEK_DAYS } from '../staff/schedule.validation.js'
 
 const hardwareType = z.enum(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
-const hardwareStatus = z.enum(['New', 'Used', 'Good', 'Poor'])
+// Device condition (quality) — distinct from accessStatus active/blocked.
+const hardwareStatus = z.enum(['New', 'Used', 'Old', 'Good', 'Poor'])
 
 // Multipart sends strings — coerce empty to undefined
 const optionalImageUrl = z.preprocess(

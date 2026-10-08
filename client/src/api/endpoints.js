@@ -138,6 +138,7 @@ export const endpoints = {
     categories: '/inventory/products/categories',
     subcategories: '/inventory/products/subcategories',
     category: (id) => `/inventory/products/categories/${id}`,
+    categoryDependencies: (id) => `/inventory/products/categories/${id}/dependencies`,
     taxes: '/inventory/products/taxes',
     taxProfitDefaults: '/inventory/products/tax-profit-defaults',
     offers: '/inventory/products/offers',

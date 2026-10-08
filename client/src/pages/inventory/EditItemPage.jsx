@@ -669,7 +669,7 @@ export function EditItemPage() {
                 options={typeOptions}
                 value={selectedTypeIds}
                 onChange={setSelectedTypeIds}
-                customLabel="+ Custom Variant Type"
+                customLabel="Custom Variant Type"
                 onAddCustom={addCustomType}
                 placeholder="Filter variant types…"
               />
@@ -695,7 +695,7 @@ export function EditItemPage() {
                     onChange={(ids) =>
                       setSelectedValuesByType((prev) => ({ ...prev, [t.id]: ids }))
                     }
-                    customLabel="+ Custom Value"
+                    customLabel="Custom Value"
                     onAddCustom={(name) => addCustomValue(t.id, name)}
                     placeholder={`Filter ${t.name} values…`}
                   />

@@ -242,9 +242,110 @@ export async function setCategoryActive(tenantId, id, isActive, { branchId = nul
   })
 }
 
-// @deprecated Prefer setCategoryActive — hard delete kept for empty unused categories only
+// Product / child counts for delete vs deactivate decisions (QA TC-Categree deletion-087).
+export async function getCategoryDependencies(tenantId, id, { branchId = null } = {}) {
+  const { rows: existing } = await tenantQuery(
+    tenantId,
+    `
+      SELECT id, parent_id AS "parentId", name
+      FROM categories
+      WHERE tenant_id = $1 AND id = $2
+        ${branchClause('', 3)}
+      LIMIT 1
+    `,
+    [id, branchId],
+  )
+  const row = existing[0]
+  if (!row) return null
+
+  const isParent = !row.parentId
+
+  if (isParent) {
+    const { rows: subRows } = await tenantQuery(
+      tenantId,
+      `
+        SELECT COUNT(*)::int AS total
+        FROM categories
+        WHERE tenant_id = $1 AND parent_id = $2
+      `,
+      [id],
+    )
+    const { rows: productRows } = await tenantQuery(
+      tenantId,
+      `
+        SELECT COUNT(*)::int AS total
+        FROM products
+        WHERE tenant_id = $1
+          AND (category_id = $2 OR subcategory_id IN (
+            SELECT id FROM categories WHERE tenant_id = $1 AND parent_id = $2
+          ))
+      `,
+      [id],
+    )
+    return {
+      id: row.id,
+      name: row.name,
+      parentId: null,
+      subcategoryCount: subRows[0]?.total || 0,
+      productCount: productRows[0]?.total || 0,
+    }
+  }
+
+  const { rows: productRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT COUNT(*)::int AS total
+      FROM products
+      WHERE tenant_id = $1 AND subcategory_id = $2
+    `,
+    [id],
+  )
+  return {
+    id: row.id,
+    name: row.name,
+    parentId: row.parentId,
+    subcategoryCount: 0,
+    productCount: productRows[0]?.total || 0,
+  }
+}
+
+// Hard delete only when unused. Prefer setCategoryActive when products are assigned.
 export async function deleteCategory(tenantId, id, { branchId = null } = {}) {
-  return setCategoryActive(tenantId, id, false, { branchId })
+  const deps = await getCategoryDependencies(tenantId, id, { branchId })
+  if (!deps) throw httpError(404, 'Category not found')
+
+  if (deps.productCount > 0) {
+    const label = deps.parentId ? 'subcategory' : 'category'
+    throw httpError(
+      409,
+      `Cannot delete this ${label}: ${deps.productCount} product(s) assigned` +
+        (deps.subcategoryCount > 0 ? ` and ${deps.subcategoryCount} subcategor(ies)` : '') +
+        '. Deactivate or reassign products first.',
+    )
+  }
+
+  if (!deps.parentId && deps.subcategoryCount > 0) {
+    throw httpError(
+      409,
+      `Cannot delete this category: ${deps.subcategoryCount} subcategor(ies) still exist. Remove or reassign them first.`,
+    )
+  }
+
+  return withTransaction(async (client) => {
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        DELETE FROM categories
+        WHERE tenant_id = $1 AND id = $2
+          ${branchClause('', 3)}
+        RETURNING id, parent_id AS "parentId", name
+      `,
+      [id, branchId],
+    )
+    if (!rows[0]) throw httpError(404, 'Category not found')
+    return { ...rows[0], deleted: true }
+  })
 }
 
 export async function findOrCreateImportedCategory(tenantId, branchId) {

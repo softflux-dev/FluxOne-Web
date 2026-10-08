@@ -1,10 +1,12 @@
+import { EMPTY_DASH } from '@/lib/mapProduct'
+
 export function PromotionColumns({ row }) {
   const discount = Number(row.discountPercent || 0)
   const offer = Number(row.offerPercent || 0)
   const hasAny = discount > 0 || offer > 0 || row.offerName
 
   if (!hasAny) {
-    return <span className="text-xs text-slate-400">—</span>
+    return <span className="text-xs text-slate-400">{EMPTY_DASH}</span>
   }
 
   const offerLabel = row.offerName || (offer > 0 ? `${offer}% Offer` : 'Offer')

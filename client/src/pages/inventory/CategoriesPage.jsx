@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
-import { FolderTree } from 'lucide-react'
+import { Ban, FolderTree } from 'lucide-react'
+import { apiClient } from '@/api/api'
+import { endpoints } from '@/api/endpoints'
 import { CategoryDialog } from '@/components/feature/products/CategoryDialog'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DeleteEntityDialog } from '@/components/shared/DeleteEntityDialog'
@@ -50,8 +52,19 @@ export function CategoriesPage() {
   const [pickParent, setPickParent] = useState(false)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteDeps, setDeleteDeps] = useState(null)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Load product/sub counts before delete so hard delete stays blocked when used.
+  async function openDeleteTarget(row) {
+    const target = row?._raw || row
+    if (!target?.id) return
+    setDeleteTarget(target)
+    setDeleteDeps(null)
+    const result = await apiClient.get(endpoints.products.categoryDependencies(target.id))
+    if (result.success) setDeleteDeps(result.data)
+  }
 
   const treeRows = useMemo(() => {
     return (catalog.parents || []).map((parent) => {
@@ -212,6 +225,7 @@ export function CategoriesPage() {
     try {
       const result = await setCategoryActive(deleteTarget.id, false)
       setDeleteTarget(null)
+      setDeleteDeps(null)
       if (result.success) {
         toastSuccess(
           deleteTarget.parentId
@@ -232,12 +246,9 @@ export function CategoriesPage() {
     try {
       const result = await deleteCategory(deleteTarget.id)
       setDeleteTarget(null)
+      setDeleteDeps(null)
       if (result.success) {
-        toastSuccess(
-          deleteTarget.parentId
-            ? 'Sub category deleted'
-            : 'Category deleted — linked sub categories were deactivated',
-        )
+        toastSuccess(deleteTarget.parentId ? 'Sub category deleted' : 'Category deleted')
       } else {
         toastError(result.error || 'Delete failed')
       }
@@ -247,6 +258,18 @@ export function CategoriesPage() {
   }
 
   const deleteCategoryIsActive = deleteTarget?.isActive !== false
+  const deleteProductCount = Number(deleteDeps?.productCount) || 0
+  const deleteSubCount = Number(deleteDeps?.subcategoryCount) || 0
+  const canHardDeleteCategory = Boolean(deleteDeps) && deleteProductCount === 0 && deleteSubCount === 0
+  const hardDeleteBlockedReason = !deleteDeps
+    ? 'Checking linked products…'
+    : deleteProductCount > 0
+      ? `${deleteProductCount} product(s) assigned` +
+        (deleteSubCount > 0 ? ` and ${deleteSubCount} subcategor(ies)` : '') +
+        '. Deactivate or reassign products before permanent delete.'
+      : deleteSubCount > 0
+        ? `${deleteSubCount} subcategor(ies) still exist. Remove them first, or deactivate this category.`
+        : 'Linked records block permanent delete.'
 
   const emptyParentTitle = query.trim()
     ? 'No categories match that search.'
@@ -339,7 +362,7 @@ export function CategoriesPage() {
               renderNameLeading={categoryAvatar}
               onEdit={(row) => openEdit(row, 'category')}
               onToggleActive={handleStatusChange}
-              onDelete={(row) => setDeleteTarget(row._raw || row)}
+              onDelete={(row) => void openDeleteTarget(row)}
               onAddChild={openCreateSub}
               addChildLabel="Add Sub Category"
               pagination={{
@@ -366,7 +389,7 @@ export function CategoriesPage() {
               renderNameLeading={subAvatar}
               onEdit={(row) => openEdit(row, 'subcategory')}
               onToggleActive={handleStatusChange}
-              onDelete={(row) => setDeleteTarget(row)}
+              onDelete={(row) => void openDeleteTarget(row)}
               pagination={{
                 page: childPaging.page,
                 pageCount: childPaging.pageCount,
@@ -401,13 +424,17 @@ export function CategoriesPage() {
         onOpenChange={(open) => {
           if (!open) setDeactivateTarget(null)
         }}
-        title="Deactivate category?"
+        title={
+          deactivateTarget?.parentId ? 'Deactivate subcategory?' : 'Deactivate category?'
+        }
         description={
           deactivateTarget?.parentId
             ? `“${deactivateTarget.name}” will be inactive. Products keep Active; subcategory becomes N/A.`
             : `“${deactivateTarget?.name}” and its sub categories will be inactive. Products stay Active with Category N/A.`
         }
         confirmLabel="Deactivate"
+        variant="warning"
+        icon={Ban}
         loading={mutating || Boolean(statusUpdatingId)}
         onConfirm={handleConfirmDeactivate}
       />
@@ -415,24 +442,28 @@ export function CategoriesPage() {
       <DeleteEntityDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null)
+          if (!open) {
+            setDeleteTarget(null)
+            setDeleteDeps(null)
+          }
         }}
         entityName={deleteTarget?.name}
         title={
           deleteTarget?.parentId
-            ? `Remove “${deleteTarget?.name}” sub category?`
+            ? `Remove “${deleteTarget?.name}” subcategory?`
             : `Remove “${deleteTarget?.name}” category?`
         }
         description={
           deleteTarget?.parentId
-            ? `Prefer Inactive if products still reference this sub category. Permanent remove clears it from the catalog.`
-            : `Prefer Inactive for “${deleteTarget?.name}” and its sub categories. Permanent remove clears them from the active catalog.`
+            ? `Prefer Deactivate if products still reference this subcategory. Permanent delete is only allowed when unused.`
+            : `Prefer Deactivate for “${deleteTarget?.name}” when products or subcategories exist. Permanent delete is only allowed when unused.`
         }
-        softLabel="Set Inactive"
+        softLabel="Deactivate"
         softHint="Products stay Active with Category / Subcategory N/A. You can reactivate later."
         hardLabel="Permanently delete"
         showSoftAction={deleteCategoryIsActive}
-        canHardDelete
+        canHardDelete={canHardDeleteCategory}
+        hardDisabledReason={hardDeleteBlockedReason}
         loading={deleteLoading || mutating}
         onSoftDelete={handleSoftDeleteCategory}
         onHardDelete={handleHardDeleteCategory}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpFromLine, Camera, Plus } from 'lucide-react'
+import { ArrowUpFromLine, Ban, Camera, Plus } from 'lucide-react'
 import { ImportItemsDialog } from '@/components/feature/products/ImportItemsDialog'
 import { PrintBarcodeDialog } from '@/components/feature/products/PrintBarcodeDialog'
 import { ProductFilters } from '@/components/feature/products/ProductFilters'
@@ -135,7 +135,10 @@ export function ProductsPage() {
     try {
       const result = await setProductStatus(row.id, status)
       if (!result.success) toastError(result.error || 'Status update failed')
-      else toastSuccess(status === PRODUCT_STATUS.INACTIVE ? 'Product closed' : 'Product opened')
+      else
+        toastSuccess(
+          status === PRODUCT_STATUS.INACTIVE ? 'Product deactivated' : 'Product activated',
+        )
     } finally {
       setStatusUpdatingId(null)
     }
@@ -416,11 +419,13 @@ export function ProductsPage() {
         description={
           statusTarget
             ? statusTarget.type === PRODUCT_TYPES.BUNDLE
-              ? `${statusTarget.name || 'This bundle'} will be closed. Remaining bundle stock is dissolved and returned to component items.`
-              : `${statusTarget.name || 'This product'} will be closed (hidden from open lists and POS sync). You can open it again later.`
+              ? `${statusTarget.name || 'This bundle'} will be inactive. Remaining bundle stock is dissolved and returned to component items.`
+              : `${statusTarget.name || 'This product'} will be inactive (hidden from active lists and POS sync). You can activate it again later.`
             : undefined
         }
         confirmLabel="Deactivate"
+        variant="warning"
+        icon={Ban}
         loading={mutating}
         onConfirm={handleConfirmDeactivate}
       />
@@ -433,7 +438,7 @@ export function ProductsPage() {
         title="Delete selected products?"
         description={
           selectedIds.length
-            ? `${selectedIds.length} selected product${selectedIds.length === 1 ? '' : 's'} will be deactivated (hidden from open lists and POS sync). You can open them again later. Permanent delete stays per-product.`
+            ? `${selectedIds.length} selected product${selectedIds.length === 1 ? '' : 's'} will be deactivated (hidden from active lists and POS sync). You can activate them again later. Permanent delete stays per-product.`
             : undefined
         }
         confirmLabel="Deactivate selected"
@@ -462,7 +467,7 @@ export function ProductsPage() {
             : null
         }
         softLabel="Deactivate"
-        softHint="Hides from open lists and POS sync. You can open it again later."
+        softHint="Hides from active lists and POS sync. You can activate it again later."
         hardLabel="Permanently delete"
         showSoftAction={deleteIsActive}
         canHardDelete={canPermanentDelete}

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect } from '@/components/ui/select'
+import { DownwardSelect } from '@/components/shared/DownwardSelect'
 import { FieldError } from '@/components/shared/FieldError'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 import { BRAND } from '@/lib/constants'
@@ -350,24 +351,26 @@ export function AdjustmentDialog({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Product</Label>
-            <NativeSelect
+            {/* Custom list opens below — avoids native <select> flipping upward in modals */}
+            <DownwardSelect
               value={productId}
-              onChange={(e) => {
-                setProductId(e.target.value)
+              placeholder="Select product"
+              aria-invalid={Boolean(fieldErrors.productId)}
+              buttonClassName={fieldErrorClass(fieldErrors.productId)}
+              options={products.map((p) => ({
+                value: p.id,
+                label: p.itemCode ? `${p.name} (${p.itemCode})` : p.name,
+              }))}
+              onChange={(next) => {
+                setProductId(next)
                 setVariantTypeId('')
                 setVariantValueId('')
                 clearField('productId')
               }}
-              aria-invalid={Boolean(fieldErrors.productId)}
-              className={fieldErrorClass(fieldErrors.productId)}
-            >
-              <option value="">Select product</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </NativeSelect>
+            />
+            <p className="text-[11px] text-slate-400">
+              Showing active catalog products (including variants).
+            </p>
             <FieldError message={fieldErrors.productId} />
           </div>
 

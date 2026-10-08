@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Users } from 'lucide-react'
+import { displayStaffRef } from '@/lib/formatDisplayId'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 8
@@ -70,7 +71,7 @@ export function HolidayEmployeesAccordion({
               {visible.map((emp) => (
                 <div
                   key={emp.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-bold text-slate-800">
@@ -80,6 +81,12 @@ export function HolidayEmployeesAccordion({
                       {emp.designation || 'Staff'}
                     </p>
                   </div>
+                  <p
+                    className="shrink-0 font-mono text-[10px] font-semibold text-slate-500"
+                    title="Staff ID"
+                  >
+                    {displayStaffRef(emp)}
+                  </p>
                 </div>
               ))}
               {hasMore ? (

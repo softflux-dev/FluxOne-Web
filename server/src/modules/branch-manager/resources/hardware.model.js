@@ -8,7 +8,7 @@ import {
 } from '../staff/hardwareAllocation.model.js'
 
 const HARDWARE_TYPES = new Set(['Computers', 'Scanners', 'Printers', 'Telephone', 'Other'])
-const HARDWARE_STATUSES = new Set(['New', 'Used', 'Good', 'Poor'])
+const HARDWARE_STATUSES = new Set(['New', 'Used', 'Old', 'Good', 'Poor'])
 
 const hardwareSelect = `
   h.id,

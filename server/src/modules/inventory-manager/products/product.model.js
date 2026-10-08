@@ -14,6 +14,7 @@ export {
   createCategory,
   updateCategory,
   setCategoryActive,
+  getCategoryDependencies,
   deleteCategory,
   findOrCreateImportedCategory,
   createVariantProduct,

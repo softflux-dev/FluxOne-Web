@@ -1,21 +1,21 @@
-import { money, PRODUCT_TYPES } from '@/lib/mapProduct'
+import { EMPTY_DASH, money, PRODUCT_TYPES } from '@/lib/mapProduct'
 
+// Variant parents have no own price — children do. Missing values use `--`.
 export function PricingColumns({ row }) {
   const isVariantParent = row.type === PRODUCT_TYPES.VARIANT
-  const dash = '—'
 
   return (
     <div className="space-y-0.5 text-xs leading-snug">
       <p>
         <span className="text-slate-400">Purchase</span>{' '}
         <span className="font-semibold text-slate-800">
-          {isVariantParent ? dash : money(row.purchasePrice)}
+          {isVariantParent ? EMPTY_DASH : money(row.purchasePrice)}
         </span>
       </p>
       <p>
         <span className="text-slate-400">Selling</span>{' '}
         <span className="font-semibold text-slate-800">
-          {isVariantParent ? dash : money(row.sellingPrice)}
+          {isVariantParent ? EMPTY_DASH : money(row.sellingPrice)}
         </span>
       </p>
       <p>
@@ -28,7 +28,7 @@ export function PricingColumns({ row }) {
       <p>
         <span className="text-slate-400">Final</span>{' '}
         <span className="font-bold text-slate-900">
-          {isVariantParent ? dash : money(row.finalPrice)}
+          {isVariantParent ? EMPTY_DASH : money(row.finalPrice)}
         </span>
       </p>
     </div>

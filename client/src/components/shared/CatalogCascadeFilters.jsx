@@ -53,9 +53,9 @@ const DEFAULT_TYPE_OPTIONS = [
 ]
 
 const DEFAULT_STATUS_OPTIONS = [
-  { id: 'active', label: 'Open' },
-  { id: 'inactive', label: 'Close' },
   { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active' },
+  { id: 'inactive', label: 'Inactive' },
 ]
 
 // Shared catalog cascade — Search → Category → Sub → Product → Variant type/value.

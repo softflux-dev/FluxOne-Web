@@ -63,6 +63,7 @@ export function ResourcesPage() {
   const [hId, setHId] = useState('')
   const [hType, setHType] = useState('')
   const [hStatus, setHStatus] = useState('New')
+  const [hAccessStatus, setHAccessStatus] = useState('active')
   const [hImageFile, setHImageFile] = useState(null)
   const [hExistingImageUrl, setHExistingImageUrl] = useState(null)
   const [formError, setFormError] = useState(null)
@@ -73,6 +74,7 @@ export function ResourcesPage() {
     hCompany,
     hType,
     hStatus,
+    hAccessStatus,
     hImageFile: hImageFile?.name || null,
   }
   const { captureBaseline, isDirty } = useFormBaseline(hardwareOpen)
@@ -111,6 +113,7 @@ export function ResourcesPage() {
     setHId('')
     setHType('')
     setHStatus('New')
+    setHAccessStatus('active')
     setHImageFile(null)
     setHExistingImageUrl(null)
     setFormError(null)
@@ -124,7 +127,9 @@ export function ResourcesPage() {
     setHCompany(hw.companyName || '')
     setHId(hw.code || hw.id)
     setHType(hw.type || '')
-    setHStatus(hw.status || 'New')
+    // Normalize legacy Used ? Old for the Device Condition field
+    setHStatus(hw.status === 'Used' ? 'Old' : hw.status || 'New')
+    setHAccessStatus(hw.accessStatus === 'blocked' ? 'blocked' : 'active')
     setHImageFile(null)
     setHExistingImageUrl(hw.image || hw.imageUrl || null)
     setFormError(null)
@@ -154,7 +159,12 @@ export function ResourcesPage() {
     formData.append('name', hName.trim())
     formData.append('companyName', hCompany.trim())
     formData.append('type', hType)
-    formData.append('status', hStatus)
+    // DB stores Used; UI label is Old (QA device-condition wording).
+    formData.append('status', hStatus === 'Old' ? 'Used' : hStatus)
+    // Access status is independent of device condition (block/authorize must not overwrite quality).
+    if (!isCreate) {
+      formData.append('accessStatus', hAccessStatus)
+    }
     if (hImageFile instanceof File && hImageFile.size > 0) {
       formData.append('image', hImageFile)
     }
@@ -238,7 +248,12 @@ export function ResourcesPage() {
     void loadHardware(filterHardware, debouncedHwSearch)
   }
 
-  // Asset condition (New / Used / ‚Ä¶) ‚Äî pill styling matches access Blocked badge.
+  // Device condition label ó legacy "Used" shows as "Old" (QA TC-hardware-07a).
+  function conditionLabel(status) {
+    if (status === 'Used') return 'Old'
+    return status || 'ó'
+  }
+
   const getConditionBadgeClass = (status) => {
     switch (status) {
       case 'New':
@@ -246,30 +261,36 @@ export function ResourcesPage() {
       case 'Good':
         return 'border-none bg-sky-50 text-sky-700 hover:bg-sky-100'
       case 'Used':
+      case 'Old':
         return 'border-none bg-amber-50 text-amber-700 hover:bg-amber-100'
       default:
         return 'border-none bg-rose-50 text-rose-700 hover:bg-rose-100'
     }
   }
 
-  // Status column: access block wins ‚Äî only ‚ÄúBlocked‚Äù; otherwise show condition capsule.
-  function HardwareStatusBadge({ hw }) {
-    if (hw.accessStatus === 'blocked') {
-      return (
-        <Badge
-          variant="outline"
-          className="w-fit shrink-0 border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-700"
-        >
-          Blocked
-        </Badge>
-      )
-    }
+  function DeviceConditionBadge({ status }) {
     return (
       <Badge
         variant="outline"
-        className={`w-fit shrink-0 px-2.5 py-0.5 text-xs font-bold ${getConditionBadgeClass(hw.status)}`}
+        className={`w-fit shrink-0 px-2.5 py-0.5 text-xs font-bold ${getConditionBadgeClass(status)}`}
       >
-        {hw.status}
+        {conditionLabel(status)}
+      </Badge>
+    )
+  }
+
+  function AccessStatusBadge({ accessStatus }) {
+    const blocked = accessStatus === 'blocked'
+    return (
+      <Badge
+        variant="outline"
+        className={
+          blocked
+            ? 'w-fit shrink-0 border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-bold text-rose-700'
+            : 'w-fit shrink-0 border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700'
+        }
+      >
+        {blocked ? 'Blocked' : 'Active'}
       </Badge>
     )
   }
@@ -393,10 +414,13 @@ export function ResourcesPage() {
                                   {displayCode(hw)}
                                 </p>
                               </div>
-                              <HardwareStatusBadge hw={hw} />
+                              <div className="flex flex-col items-end gap-1">
+                                <DeviceConditionBadge status={hw.status} />
+                                <AccessStatusBadge accessStatus={hw.accessStatus} />
+                              </div>
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
-                              {hw.companyName} ¬∑ {hw.type}
+                              {hw.companyName} ∑ {hw.type}
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               <div className="flex gap-3">
@@ -454,7 +478,8 @@ export function ResourcesPage() {
                           <TableHead className="px-2 py-3">Name</TableHead>
                           <TableHead className="px-2 py-3">Company</TableHead>
                           <TableHead className="px-2 py-3">Type</TableHead>
-                          <TableHead className="px-2 py-3">Status</TableHead>
+                          <TableHead className="px-2 py-3">Device Condition</TableHead>
+                          <TableHead className="px-2 py-3">Access Status</TableHead>
                           <TableActionsHead />
                         </TableRow>
                       </TableHeader>
@@ -481,7 +506,10 @@ export function ResourcesPage() {
                             </TableCell>
                             <TableCell className="px-2 py-3 text-slate-600">{hw.type}</TableCell>
                             <TableCell className="px-2 py-3">
-                              <HardwareStatusBadge hw={hw} />
+                              <DeviceConditionBadge status={hw.status} />
+                            </TableCell>
+                            <TableCell className="px-2 py-3">
+                              <AccessStatusBadge accessStatus={hw.accessStatus} />
                             </TableCell>
                             <TableActionsCell>
                               <button
@@ -622,19 +650,37 @@ export function ResourcesPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="hw-form-status">Status</Label>
-              <NativeSelect
-                id="hw-form-status"
-                value={hStatus}
-                onChange={(e) => setHStatus(e.target.value)}
-                required
-              >
-                <option value="New">New</option>
-                <option value="Used">Used</option>
-                <option value="Good">Good</option>
-                <option value="Poor">Poor</option>
-              </NativeSelect>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="hw-form-status">Device Condition</Label>
+                <NativeSelect
+                  id="hw-form-status"
+                  value={hStatus}
+                  onChange={(e) => setHStatus(e.target.value)}
+                  required
+                >
+                  <option value="New">New</option>
+                  <option value="Old">Old</option>
+                  <option value="Poor">Poor</option>
+                </NativeSelect>
+                <p className="text-[11px] text-slate-400">Hardware quality (physical condition).</p>
+              </div>
+              {hardwareMode === 'edit' ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="hw-form-access">Access Status</Label>
+                  <NativeSelect
+                    id="hw-form-access"
+                    value={hAccessStatus}
+                    onChange={(e) => setHAccessStatus(e.target.value)}
+                  >
+                    <option value="active">Active</option>
+                    <option value="blocked">Blocked</option>
+                  </NativeSelect>
+                  <p className="text-[11px] text-slate-400">
+                    System authorization ó independent of device condition.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <ImageUploadField

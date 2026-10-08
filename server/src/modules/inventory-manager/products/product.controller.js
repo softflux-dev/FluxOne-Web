@@ -1,8 +1,10 @@
 import {
   createCategory,
   createProduct,
+  deleteCategory,
   deleteProduct,
   findProductByBarcode,
+  getCategoryDependencies,
   getProductById,
   getProductDeleteEligibility,
   getProductDetail,
@@ -77,12 +79,23 @@ export async function patchCategory(req, res) {
   }
 }
 
+export async function categoryDependencies(req, res) {
+  try {
+    const { tenantId, branchId } = resolveInventoryScope(req)
+    const row = await getCategoryDependencies(tenantId, req.validated.params.id, { branchId })
+    if (!row) return fail(res, 'Category not found', 404)
+    return success(res, row)
+  } catch (err) {
+    return failFromError(res, err)
+  }
+}
+
 export async function removeCategory(req, res) {
   try {
     const { tenantId, branchId } = resolveInventoryScope(req)
-    const row = await setCategoryActive(tenantId, req.validated.params.id, false, { branchId })
-    if (!row) return fail(res, 'Category not found', 404)
-    return success(res, { id: row.id, isActive: false, deactivated: true })
+    // Hard delete when unused; 409 when products/subs remain (prefer deactivate).
+    const row = await deleteCategory(tenantId, req.validated.params.id, { branchId })
+    return success(res, row)
   } catch (err) {
     return failFromError(res, err)
   }

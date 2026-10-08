@@ -84,7 +84,8 @@ export const HARDWARE_TYPE_OPTIONS = [
 ]
 
 const HARDWARE_TYPES = new Set(HARDWARE_TYPE_OPTIONS)
-const HARDWARE_STATUSES = new Set(['New', 'Used', 'Good', 'Poor'])
+// UI may send Old (maps to Used on save); Used/Good kept for legacy rows.
+const HARDWARE_STATUSES = new Set(['New', 'Used', 'Old', 'Good', 'Poor'])
 
 export function validateHardwareFormFields(fields = {}, { isCreate = true } = {}) {
   const errors = {}

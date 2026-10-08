@@ -4,6 +4,7 @@ import {
   addCategory,
   addProduct,
   categories,
+  categoryDependencies,
   detail,
   deleteInfo,
   exportItems,
@@ -63,6 +64,12 @@ router.patch(
   upload.single('image'),
   validate(updateCategorySchema),
   asyncHandler(patchCategory),
+)
+router.get(
+  '/categories/:id/dependencies',
+  requirePermission('items:read'),
+  validate(categoryIdParamsSchema),
+  asyncHandler(categoryDependencies),
 )
 router.delete(
   '/categories/:id',

@@ -24,10 +24,10 @@ import {
 } from '@/hooks/useInventoryControl'
 import { cn } from '@/lib/utils'
 
+// Review is the final step — Save runs here (no separate Confirm).
 const STEPS = [
   { id: 1, label: '1. Add items' },
   { id: 2, label: '2. Review' },
-  { id: 3, label: '3. Confirm' },
 ]
 
 const emptyFilters = () => ({
@@ -54,7 +54,7 @@ function lineFromProduct(product) {
   }
 }
 
-// Multi-item stock-in — supplier + checkbox product table → review → confirm.
+// Multi-item stock-in — supplier + checkbox product table → review & save.
 export function AddStockInDialog({
   open,
   onOpenChange,
@@ -196,16 +196,13 @@ export function AddStockInDialog({
   }
 
   function goNext() {
-    if (step === 1) {
-      if (!selectedLines.length) {
-        setFormError('Select at least one item')
-        return
-      }
-      resetErrors()
-      setStep(2)
+    if (step !== 1) return
+    if (!selectedLines.length) {
+      setFormError('Select at least one item')
       return
     }
-    if (step === 2) setStep(3)
+    resetErrors()
+    setStep(2)
   }
 
   function goBack() {
@@ -319,25 +316,24 @@ export function AddStockInDialog({
         ) : null}
 
         {step === 2 ? (
-          <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
-            {selectedLines.map((row) => (
-              <li key={row.productId} className="rounded-lg border border-border px-3 py-2">
-                <p className="font-semibold text-slate-900">{row.productName}</p>
-                <p className="text-xs text-slate-500">
-                  Qty {row.quantity} · {row.scale}
-                  {row.purchasePrice !== '' ? ` · Purchase ${row.purchasePrice}` : ''}
-                  {row.sellingPrice !== '' ? ` · Selling ${row.sellingPrice}` : ''}
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {step === 3 ? (
-          <p className="text-sm text-slate-600">
-            Confirm {selectedLines.length} line(s)
-            {supplierId ? ' for the selected supplier' : ''}.
-          </p>
+          <div className="space-y-3 pt-1">
+            <p className="text-sm text-slate-600">
+              Review {selectedLines.length} line(s)
+              {supplierId ? ' for the selected supplier' : ''}, then save to update stock.
+            </p>
+            <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
+              {selectedLines.map((row) => (
+                <li key={row.productId} className="rounded-lg border border-border px-3 py-2">
+                  <p className="font-semibold text-slate-900">{row.productName}</p>
+                  <p className="text-xs text-slate-500">
+                    Qty {row.quantity} · {row.scale}
+                    {row.purchasePrice !== '' ? ` · Purchase ${row.purchasePrice}` : ''}
+                    {row.sellingPrice !== '' ? ` · Selling ${row.sellingPrice}` : ''}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         <DialogFooter>
@@ -349,7 +345,7 @@ export function AddStockInDialog({
           ) : (
             <DialogCancelButton disabled={loading} />
           )}
-          {step < 3 ? (
+          {step < 2 ? (
             <Button type="button" variant="brand" onClick={goNext} disabled={loading}>
               Next
               <ChevronRight className="size-4" />

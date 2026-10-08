@@ -1,7 +1,7 @@
 import { EntityStatusToggle, isEntityActive } from '@/components/shared/EntityStatusToggle'
 import { BRAND } from '@/lib/constants'
 
-// Display-only Open / Close capsule by default — soft toggle lives in Actions (Ban / Unlock).
+// Display-only Active / Inactive capsule — soft toggle lives in Actions (Ban / Unlock).
 export function ProductStatusToggle({
   status,
   loading = false,
@@ -14,10 +14,10 @@ export function ProductStatusToggle({
       status={status}
       loading={loading}
       interactive={interactive}
-      activeLabel="Open"
-      inactiveLabel="Close"
-      activeTitle="Click to close"
-      inactiveTitle="Click to open"
+      activeLabel="Active"
+      inactiveLabel="Inactive"
+      activeTitle="Click to deactivate"
+      inactiveTitle="Click to activate"
       onChange={(nextActive) => onChange?.(nextActive ? 'active' : 'inactive')}
       className={className}
     />

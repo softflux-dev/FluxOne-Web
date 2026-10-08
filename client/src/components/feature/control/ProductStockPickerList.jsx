@@ -67,32 +67,35 @@ export function ProductStockPickerList({
               </div>
 
               {checked ? (
-                <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:w-auto sm:min-w-[280px] sm:grid-cols-3">
-                  <div className="space-y-0.5">
+                <div className="grid w-full min-w-0 max-w-full grid-cols-3 gap-2 sm:max-w-sm">
+                  <div className="min-w-0 space-y-0.5">
                     <Label className="text-[10px] text-slate-400">Purchase</Label>
                     <WholeNumberInput
                       value={line.purchasePrice ?? ''}
                       placeholder={money(product.purchasePrice)}
+                      className="w-full max-w-full"
                       onChange={(e) =>
                         onLineChange?.(product.id, { purchasePrice: e.target.value })
                       }
                     />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="min-w-0 space-y-0.5">
                     <Label className="text-[10px] text-slate-400">Selling</Label>
                     <WholeNumberInput
                       value={line.sellingPrice ?? ''}
                       placeholder={money(product.sellingPrice)}
+                      className="w-full max-w-full"
                       onChange={(e) =>
                         onLineChange?.(product.id, { sellingPrice: e.target.value })
                       }
                     />
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="min-w-0 space-y-0.5">
                     <Label className="text-[10px] text-slate-400">Qty</Label>
                     <WholeNumberInput
                       min={1}
                       value={line.quantity ?? '1'}
+                      className="w-full max-w-full"
                       onChange={(e) => onLineChange?.(product.id, { quantity: e.target.value })}
                     />
                   </div>
