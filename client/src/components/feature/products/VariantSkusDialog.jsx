@@ -9,17 +9,60 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { ProductImageCell } from '@/components/feature/products/ProductStatusToggle'
 import { BRAND } from '@/lib/constants'
 import { useCurrency } from '@/hooks/useCurrency'
 import { finalPriceFromSelling } from '@/lib/pricing'
 import {
+  EMPTY_DASH,
   formatInventoryStock,
-  formatVariantParts,
   money,
   PRODUCT_STATUS,
 } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
+
+// "1.5 L – mint": values only (type names are implied by the column), en dash between.
+function variantCapsuleLabel(sku) {
+  const parts = Array.isArray(sku.parts) ? sku.parts : []
+  const values = parts
+    .map((part) => String(part.valueName || part.value_name || '').trim())
+    .filter(Boolean)
+  if (values.length) return values.join(' \u2013 ')
+  return sku.variantLabel || 'Variant'
+}
+
+function promotionLabel(sku) {
+  const offer = Number(sku.offerPercent || 0)
+  const discount = Number(sku.discountPercent || 0)
+  if (sku.offerName || offer > 0) {
+    const name = sku.offerName || 'Offer'
+    const showPercent = offer > 0 && !name.includes('%')
+    return showPercent ? `${name} \u00b7 ${money(offer)}%` : name
+  }
+  if (discount > 0) return `${money(discount)}% off`
+  return 'No Discount'
+}
+
+const STATUS_PILL = {
+  in: 'border-transparent bg-emerald-50 text-emerald-700',
+  low: 'border-transparent bg-amber-50 text-amber-700',
+  out: 'border-transparent bg-rose-50 text-rose-600',
+}
+
+const STOCK_NUMBER = {
+  in: 'text-emerald-600',
+  low: 'text-amber-600',
+  out: 'text-rose-600',
+}
 
 export function VariantSkusDialog({
   open,
@@ -67,17 +110,22 @@ export function VariantSkusDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="flex max-h-[90vh] w-[96vw] max-w-[96vw] flex-col sm:max-w-6xl md:max-w-6xl">
         <DialogHeader>
-          <DialogTitle className="text-center text-base font-bold lowercase tracking-wide">
-            variants
-          </DialogTitle>
-          <DialogDescription className="text-center text-xs text-slate-500">
-            {titleName} — stock and pricing per SKU
-          </DialogDescription>
+          <div className="flex items-center gap-3 pr-8 text-left">
+            <ProductImageCell src={parentImage} name={titleName} />
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-lg font-bold text-slate-900">
+                {titleName}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Variants — stock and pricing per SKU
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto -mx-1 px-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
               <Loader2 className="size-4 animate-spin" />
@@ -92,91 +140,99 @@ export function VariantSkusDialog({
               No variant SKUs found for this product.
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
-              {variants.map((sku) => {
-                const attrs =
-                  formatVariantParts(sku.parts) ||
-                  sku.variantLabel ||
-                  'Variant'
-                const disc =
-                  Number(sku.discountPercent) || Number(sku.offerPercent) || 0
-                // Always compute — child detail has no SQL finalPrice; mapProduct
-                // falls back to sellingPrice and would ignore discount
-                const finalPrice = finalPriceFromSelling(
-                  sku.sellingPrice,
-                  disc,
-                  taxPercent,
-                )
-                const stock = formatInventoryStock(
-                  sku.quantity,
-                  sku.reorderPoint,
-                  sku.scale || detail?.scale || 'unit',
-                )
-                const inactive = sku.status === PRODUCT_STATUS.INACTIVE
+            <div className="overflow-hidden rounded-xl border border-border">
+              <Table className="min-w-[900px] text-sm">
+                <TableHeader>
+                  <TableRow className="text-xs">
+                    <TableHead className="px-3 py-3">Variant</TableHead>
+                    <TableHead className="px-3 py-3">SKU</TableHead>
+                    <TableHead className="px-3 py-3">Barcode</TableHead>
+                    <TableHead className="px-3 py-3">Purchase</TableHead>
+                    <TableHead className="px-3 py-3">Selling</TableHead>
+                    <TableHead className="px-3 py-3">Discount / Offer</TableHead>
+                    <TableHead className="px-3 py-3">Final price</TableHead>
+                    <TableHead className="px-3 py-3">Stock</TableHead>
+                    <TableHead className="px-3 py-3">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {variants.map((sku) => {
+                    const disc =
+                      Number(sku.discountPercent) || Number(sku.offerPercent) || 0
+                    // Child detail has no SQL finalPrice, so compute it here
+                    const finalPrice = finalPriceFromSelling(
+                      sku.sellingPrice,
+                      disc,
+                      taxPercent,
+                    )
+                    const stock = formatInventoryStock(
+                      sku.quantity,
+                      sku.reorderPoint,
+                      sku.scale || detail?.scale || 'unit',
+                    )
+                    const inactive = sku.status === PRODUCT_STATUS.INACTIVE
+                    const hasPromo =
+                      disc > 0 || sku.offerName || Number(sku.offerPercent) > 0
 
-                return (
-                  <li
-                    key={sku.id}
-                    className={`flex items-start gap-3 py-3.5 ${inactive ? 'opacity-60' : ''}`}
-                  >
-                    <ProductImageCell src={parentImage} name={titleName} />
-                    <div className="min-w-0 flex-1 space-y-1 text-xs leading-snug">
-                      <p className="text-sm font-semibold text-slate-900">{attrs}</p>
-                      <p className="font-mono text-[11px] text-slate-500">
-                        SKU: {displayItemCode(sku)}
-                        {sku.barcode ? (
-                          <span className="text-slate-400"> · {sku.barcode}</span>
-                        ) : null}
-                      </p>
-                      <p className="text-slate-600">
-                        Purchase{' '}
-                        <span className="font-medium text-slate-800">
+                    return (
+                      <TableRow key={sku.id} className={inactive ? 'opacity-60' : ''}>
+                        <TableCell className="px-3 py-3">
+                          <span className="inline-block whitespace-nowrap rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-900">
+                            {variantCapsuleLabel(sku)}
+                          </span>
+                          {inactive ? (
+                            <p className="mt-1 text-[11px] font-medium text-slate-400">
+                              Closed
+                            </p>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 font-mono text-xs whitespace-nowrap text-slate-500">
+                          {displayItemCode(sku)}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 font-mono text-xs whitespace-nowrap text-slate-700">
+                          {sku.barcode || EMPTY_DASH}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-slate-800">
                           {formatPlain(sku.purchasePrice)}
-                        </span>
-                        {sku.profitPercent > 0 ? (
-                          <>
-                            {' '}
-                            · Profit margin{' '}
-                            <span className="font-medium text-slate-800">
-                              {money(sku.profitPercent)}%
-                            </span>
-                          </>
-                        ) : null}
-                      </p>
-                      <p className="text-slate-600">
-                        Discount{' '}
-                        <span className="font-medium text-slate-800">
-                          {disc > 0 ? `${money(disc)}%` : '—'}
-                        </span>
-                        {' · '}
-                        <span className="font-bold text-slate-900">
-                          Final {formatPlain(finalPrice)}
-                        </span>
-                        {' · '}
-                        Quantity{' '}
-                        <span className={`font-bold ${stock.className}`}>
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-slate-800">
+                          {formatPlain(sku.sellingPrice)}
+                        </TableCell>
+                        <TableCell
+                          className={`px-3 py-3 ${hasPromo ? 'text-slate-800' : 'text-slate-500'}`}
+                        >
+                          {promotionLabel(sku)}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 font-semibold text-slate-900">
+                          {formatPlain(finalPrice)}
+                        </TableCell>
+                        <TableCell
+                          className={`px-3 py-3 font-bold ${STOCK_NUMBER[stock.key]}`}
+                        >
                           {stock.quantity}
-                        </span>
-                        <span className={`ml-1 ${stock.className}`}>
-                          ({stock.label})
-                        </span>
-                      </p>
-                      {inactive ? (
-                        <p className="text-[11px] font-medium text-slate-400">Closed</p>
-                      ) : null}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+                        </TableCell>
+                        <TableCell className="px-3 py-3">
+                          <Badge
+                            variant="outline"
+                            className={`whitespace-nowrap ${STATUS_PILL[stock.key]}`}
+                          >
+                            {stock.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
 
-        <DialogFooter className="pt-2 sm:justify-stretch">
+        <DialogFooter className="pt-2 sm:justify-end">
           <Button
             type="button"
             variant="outline"
-            className="w-full cursor-pointer font-semibold"
+            className="cursor-pointer px-8 font-semibold"
             style={{ color: BRAND.purple, borderColor: BRAND.purple }}
             onClick={() => onOpenChange?.(false)}
           >

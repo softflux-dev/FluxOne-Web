@@ -7,6 +7,7 @@ import { ControlKpiCards } from '@/components/feature/control/ControlKpiCards'
 import { ControlPriceRuleBanner } from '@/components/feature/control/ControlPriceRuleBanner'
 import { ControlSecondaryActions } from '@/components/feature/control/ControlTopActions'
 import { DailyPriceReviewDialog } from '@/components/feature/control/DailyPriceReviewDialog'
+import { ControlLowStockBanner } from '@/components/feature/control/ControlLowStock'
 import { ImportControlDialog } from '@/components/feature/control/ImportControlDialog'
 import { InventoryControlTabs } from '@/components/feature/control/InventoryControlTabs'
 import { MovementFilters } from '@/components/feature/control/MovementFilters'
@@ -223,31 +224,31 @@ export function InventoryControlPage() {
     }
   }
 
-  async function handleImport(rows) {
-    if (!TABS_WITH_IMPORT.has(tab)) {
-      return { success: false, error: 'Import is not available for this tab' }
-    }
-    setImportLoading(true)
-    try {
-      const result = await apiClient.post(endpoints.control.import, {
-        movementType: tab,
-        rows,
-      })
-      if (!result.success) {
-        return { success: false, error: result.error || 'Import failed' }
-      }
-      const data = result.data || {}
-      const imported = Number(data.imported) || 0
-      if (imported > 0) {
-        toastSuccess(`Imported ${imported} row(s)`)
-        void reloadSummary?.()
-        void reload?.()
-      }
-      return { success: imported > 0, error: imported ? null : 'No rows imported' }
-    } finally {
-      setImportLoading(false)
-    }
-  }
+  // async function handleImport(rows) {
+  //   if (!TABS_WITH_IMPORT.has(tab)) {
+  //     return { success: false, error: 'Import is not available for this tab' }
+  //   }
+  //   setImportLoading(true)
+  //   try {
+  //     const result = await apiClient.post(endpoints.control.import, {
+  //       movementType: tab,
+  //       rows,
+  //     })
+  //     if (!result.success) {
+  //       return { success: false, error: result.error || 'Import failed' }
+  //     }
+  //     const data = result.data || {}
+  //     const imported = Number(data.imported) || 0
+  //     if (imported > 0) {
+  //       toastSuccess(`Imported ${imported} row(s)`)
+  //       void reloadSummary?.()
+  //       void reload?.()
+  //     }
+  //     return { success: imported > 0, error: imported ? null : 'No rows imported' }
+  //   } finally {
+  //     setImportLoading(false)
+  //   }
+  // }
 
   function openDetails(row) {
     setDetailsTab(row?.movementType || tab)
@@ -268,8 +269,6 @@ export function InventoryControlPage() {
             description="Every movement, accounted for. Keep your stock in balance."
             actions={
               <ControlSecondaryActions
-                alertCount={alertCount}
-                onStockAlerts={() => setAlertsOpen(true)}
                 onExport={handleExport}
                 onImport={() => {
                   if (!TABS_WITH_IMPORT.has(tab)) {
@@ -302,10 +301,16 @@ export function InventoryControlPage() {
       </MotionReveal>
 
       <MotionReveal delay={0.03}>
-        <ControlDailyPriceBanner
-          pendingCount={dailyPricePendingCount}
-          onReview={() => setDailyPriceOpen(true)}
-        />
+        <div className="space-y-3">
+          <ControlDailyPriceBanner
+            pendingCount={dailyPricePendingCount}
+            onReview={() => setDailyPriceOpen(true)}
+          />
+          <ControlLowStockBanner
+            alertCount={alertCount}
+            onViewItems={() => setAlertsOpen(true)}
+          />
+        </div>
       </MotionReveal>
 
       <MotionReveal delay={0.04}>
@@ -443,13 +448,13 @@ export function InventoryControlPage() {
         onChanged={() => void reloadSummary?.()}
       />
 
-      <ImportControlDialog
+      {/* <ImportControlDialog
         open={importOpen}
         onOpenChange={setImportOpen}
         movementType={tab}
         loading={importLoading}
         onSubmit={handleImport}
-      />
+      /> */}
     </div>
   )
 }

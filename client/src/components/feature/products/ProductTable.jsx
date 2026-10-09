@@ -319,7 +319,6 @@ export function ProductTable({
                     />
                   </TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Name</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Scale</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Item code</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Barcode</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Prices</TableHead>
@@ -348,17 +347,21 @@ export function ProductTable({
                       />
                     </TableCell>
                     <TableCell className="px-2 py-3">
-                      <div className="flex items-center gap-2">
-                        <ProductImageCell src={row.imageUrl} name={row.name} />
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-slate-900" title={row.name}>
+                      <div className="flex w-[220px] items-center gap-2">
+                        <div className="shrink-0">
+                          <ProductImageCell src={row.imageUrl} name={row.name} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate font-medium text-slate-900"
+                            title={row.name}
+                          >
                             {row.name}
                           </p>
                           <p className="text-[11px] capitalize text-slate-400">{row.type}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="px-2 py-3 text-slate-700">{row.scale}</TableCell>
                     <TableCell className="px-2 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
                       {displayItemCode(row)}
                     </TableCell>

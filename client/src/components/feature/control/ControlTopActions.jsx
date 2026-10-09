@@ -81,7 +81,7 @@ export function ControlSecondaryActions({
         {exportLoading ? 'Exporting…' : 'Export'}
       </Button>
 
-      <Button
+      {/* <Button
         type="button"
         variant="outline"
         className="cursor-pointer"
@@ -90,7 +90,7 @@ export function ControlSecondaryActions({
       >
         <Upload className="size-4" />
         Import
-      </Button>
+      </Button> */}
     </div>
   )
 }

@@ -40,7 +40,6 @@ export function ProductStockPickerList({
         {list.map((product) => {
           const isParentVariant = product.type === PRODUCT_TYPES.VARIANT
           if (isParentVariant) return null
-
           const line = selected[product.id]
           const checked = Boolean(line)
           const meta = [product.scale, displayItemCode(product)].filter(Boolean).join(' · ')
@@ -57,12 +56,12 @@ export function ProductStockPickerList({
                 <Checkbox
                   checked={checked}
                   onChange={() => onToggle?.(product)}
-                  aria-label={`Select ${product.name}`}
+                  aria-label={`Select ${product.productName}`}
                 />
-                <ProductImageCell src={product.imageUrl} name={product.name} />
+                <ProductImageCell src={product.imageUrl} name={product.productName} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
-                  <p className="truncate text-xs text-slate-500">{meta}</p>
+                  <p className="truncate text-sm font-semibold text-slate-900">{product.productName}</p>
+                  {/* <p className="truncate text-xs text-slate-500">{meta}</p> */}
                 </div>
               </div>
 
@@ -73,7 +72,7 @@ export function ProductStockPickerList({
                     <WholeNumberInput
                       value={line.purchasePrice ?? ''}
                       placeholder={money(product.purchasePrice)}
-                      className="w-full max-w-full"
+                      className="w-24 h-8 max-w-full"
                       onChange={(e) =>
                         onLineChange?.(product.id, { purchasePrice: e.target.value })
                       }
@@ -84,7 +83,7 @@ export function ProductStockPickerList({
                     <WholeNumberInput
                       value={line.sellingPrice ?? ''}
                       placeholder={money(product.sellingPrice)}
-                      className="w-full max-w-full"
+                      className="w-16 h-8 max-w-full"
                       onChange={(e) =>
                         onLineChange?.(product.id, { sellingPrice: e.target.value })
                       }
@@ -95,7 +94,7 @@ export function ProductStockPickerList({
                     <WholeNumberInput
                       min={1}
                       value={line.quantity ?? '1'}
-                      className="w-full max-w-full"
+                      className="w-16 h-8 max-w-full"
                       onChange={(e) => onLineChange?.(product.id, { quantity: e.target.value })}
                     />
                   </div>
