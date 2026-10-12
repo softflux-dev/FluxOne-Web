@@ -171,9 +171,14 @@ export function StaffPage() {
             disabled={loading || exporting}
             label="Export"
             title="Export staff roster to CSV (current filters)"
-            className="w-full sm:w-auto"
+            className="h-10 w-full rounded-lg sm:w-auto"
           />
-          <Button type="button" variant="brand" onClick={openCreate} className="w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="brand"
+            onClick={openCreate}
+            className="h-10 w-full rounded-lg sm:w-auto"
+          >
             <Plus className="size-4" />
             Add Staff
           </Button>

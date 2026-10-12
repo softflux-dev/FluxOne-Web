@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RotateCcw, Search } from 'lucide-react'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
+import { SearchableSelect } from '@/components/shared/SearchableSelect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { NativeSelect } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { PRODUCT_TYPES } from '@/lib/mapProduct'
 import { LEDGER_KIND_OPTIONS } from '@/lib/controlTabs'
@@ -14,7 +14,7 @@ import {
 } from '@/hooks/useInventoryControl'
 import { cn } from '@/lib/utils'
 
-// Labeled select — always visible; disable until cascade unlocks it.
+// Labeled searchable select — fixed width; long labels clamp to 2 lines in the list
 function FilterSelect({
   id,
   label,
@@ -29,19 +29,16 @@ function FilterSelect({
   return (
     <div className={cn('w-full space-y-1.5 sm:w-44 lg:w-48', className)}>
       <Label htmlFor={id}>{label}</Label>
-      <NativeSelect
+      <SearchableSelect
         id={id}
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange?.(event.target.value)}
-      >
-        {includeEmpty ? <option value="">{placeholder}</option> : null}
-        {options.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </NativeSelect>
+        placeholder={placeholder}
+        searchPlaceholder={`Search ${label.toLowerCase()}…`}
+        options={options}
+        includeEmpty={includeEmpty}
+        onChange={onChange}
+      />
     </div>
   )
 }

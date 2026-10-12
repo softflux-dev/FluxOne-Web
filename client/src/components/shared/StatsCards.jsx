@@ -34,7 +34,7 @@ export function StatCard({
       whileHover={reduceMotion ? undefined : { y: -3, transition: { duration: 0.2 } }}
       onClick={onClick}
       className={cn(
-        'group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4.5 shadow-[0_4px_20px_rgba(15,23,42,0.03)] transition-all duration-300 hover:border-purple-300 hover:shadow-[0_12px_32px_rgba(142,35,143,0.09)]',
+        'group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4.5 shadow-[0_4px_20px_rgba(15,23,42,0.03)] transition-all duration-300 hover:border-purple-300 hover:shadow-[0_12px_32px_rgba(142,35,143,0.09)] dark:border-border dark:bg-card dark:hover:border-[#c084c1]/50 dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)]',
         className,
       )}
     >
@@ -70,17 +70,17 @@ export function StatCard({
           {/* KPI Details (Right of Icon) */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {label}
               </span>
               {badge && (
-                <span className="shrink-0 rounded-md border border-purple-100 bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                <span className="shrink-0 rounded-md border border-purple-100 bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 dark:border-accent dark:bg-accent dark:text-[#c084c1]">
                   {badge}
                 </span>
               )}
             </div>
 
-            <p className="mt-0.5 truncate text-xl sm:text-2xl font-semibold tracking-tight text-slate-800 leading-tight">
+            <p className="mt-0.5 truncate text-xl sm:text-2xl font-semibold tracking-tight text-slate-800 leading-tight dark:text-slate-100">
               {value}
             </p>
 
@@ -113,15 +113,17 @@ export function StatCard({
 
         {/* Optional Footer */}
         {(footer || showProgress) && (
-          <div className="mt-3 border-t border-slate-100 pt-2.5">
+          <div className="mt-3 border-t border-slate-100 pt-2.5 dark:border-border">
             <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-slate-400">
               <span className="truncate pr-2">{footer}</span>
               {showProgress ? (
-                <span className="shrink-0 font-semibold text-purple-700">{progressPct}%</span>
+                <span className="shrink-0 font-semibold text-purple-700 dark:text-[#c084c1]">
+                  {progressPct}%
+                </span>
               ) : null}
             </div>
             {showProgress ? (
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-muted">
                 <div
                   className="h-full rounded-full transition-all duration-700"
                   style={{

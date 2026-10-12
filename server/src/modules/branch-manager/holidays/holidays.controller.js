@@ -9,6 +9,10 @@ import {
   clearHolidayAttendanceByDates,
   batchUpsertHolidayAttendance,
 } from '../attendance/attendance.model.js'
+import {
+  notifyAdminsOfHoliday,
+  notifyBranchUsersOfHoliday,
+} from '../../notifications/notifications.service.js'
 import { tenantQuery } from '../../../config/db.js'
 import { success, fail, failFromError } from '../../../utils/response.util.js'
 
@@ -111,6 +115,36 @@ export async function addHoliday(req, res) {
       },
       employeeIds,
     )
+
+    // Notify tenant admins + branch staff (non-blocking)
+    try {
+      const branchId = schedule.branchId || req.user?.branchId || null
+      const { rows: ctxRows } = await tenantQuery(
+        req.tenantId,
+        `
+          SELECT
+            u.full_name AS "managerName",
+            b.name AS "branchName"
+          FROM users u
+          LEFT JOIN branches b ON b.id = $2 AND b.tenant_id = u.tenant_id
+          WHERE u.tenant_id = $1 AND u.id = $3
+          LIMIT 1
+        `,
+        [branchId, req.user.id],
+      )
+      const ctx = ctxRows[0] || {}
+      const notifyCtx = {
+        managerName: ctx.managerName || req.user?.name || req.user?.fullName || 'Branch Manager',
+        branchName: ctx.branchName || null,
+      }
+      await notifyAdminsOfHoliday(req.tenantId, schedule, notifyCtx)
+      await notifyBranchUsersOfHoliday(req.tenantId, schedule, {
+        ...notifyCtx,
+        excludeUserId: req.user.id,
+      })
+    } catch (notifyErr) {
+      console.error('[holidays] Failed to notify users:', notifyErr?.message || notifyErr)
+    }
 
     return success(res, schedule, 201)
   } catch (err) {

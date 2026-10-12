@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -43,7 +42,6 @@ const DIALOG_WIDTH =
 export function StockAlertsDialog({
   open,
   onOpenChange,
-  onAddStock,
   onEditThreshold,
   onChanged,
 }) {
@@ -106,8 +104,8 @@ export function StockAlertsDialog({
                   <th className="w-[18%] px-3 py-2.5 font-semibold">Category</th>
                   <th className="w-[12%] px-3 py-2.5 font-semibold">Current stock</th>
                   <th className="w-[10%] px-3 py-2.5 font-semibold">Threshold</th>
-                  <th className="w-[14%] px-3 py-2.5 font-semibold">Status</th>
-                  <th className="w-[16%] px-3 py-2.5 font-semibold">Actions</th>
+                  <th className="w-[16%] px-3 py-2.5 font-semibold">Status</th>
+                  <th className="w-[14%] px-3 py-2.5 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -152,31 +150,18 @@ export function StockAlertsDialog({
                       <StatusBadge status={row.stockStatus} />
                     </td>
                     <td className="px-3 py-3 align-middle">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          title="Add stock"
-                          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg text-white"
-                          style={{ background: BRAND.purple }}
-                          onClick={() => {
-                            onOpenChange?.(false)
-                            onAddStock?.(row)
-                          }}
-                        >
-                          <Plus className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          className="cursor-pointer text-sm font-semibold whitespace-nowrap hover:underline"
-                          style={{ color: BRAND.purple }}
-                          onClick={() => {
-                            onOpenChange?.(false)
-                            onEditThreshold?.(row)
-                          }}
-                        >
-                          Threshold
-                        </button>
-                      </div>
+                      {/* Threshold only — add-stock (+) removed for cleaner actions */}
+                      <button
+                        type="button"
+                        className="cursor-pointer text-sm font-semibold whitespace-nowrap hover:underline"
+                        style={{ color: BRAND.purple }}
+                        onClick={() => {
+                          onOpenChange?.(false)
+                          onEditThreshold?.(row)
+                        }}
+                      >
+                        Threshold
+                      </button>
                     </td>
                   </tr>
                 ))}

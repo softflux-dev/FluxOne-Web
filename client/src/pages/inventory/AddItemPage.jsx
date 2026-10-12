@@ -25,6 +25,7 @@ import {
   assertSellingGtePurchase,
   buildAddItemApiPayload,
   buildCombinations,
+  collectVariantImageUploads,
 } from '@/lib/addItem'
 import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
@@ -354,16 +355,13 @@ export function AddItemPage() {
         form,
         productKind: form.productKind,
         combinations,
-        selectedTypes,
-        selectedValuesByType,
         offers: catalog.offers || [],
       })
       // Attach optional image for create → then image PATCH
       if (form.image) payload.image = form.image
-      // TEMP: inspect custom meta until BM notify (task 4)
-      if (payload._customVariantMeta) {
-        console.info('[AddItem custom variant meta]', payload._customVariantMeta)
-      }
+      // Per-SKU images uploaded after create (client-only)
+      const variantImages = collectVariantImageUploads(combinations)
+      if (variantImages.length) payload._variantImages = variantImages
 
       const result = await createProduct(payload)
       if (!result.success) {

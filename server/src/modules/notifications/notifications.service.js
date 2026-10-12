@@ -2,6 +2,7 @@ import {
   createNotificationsForUsers,
   listTenantAdminUserIds,
   listUserIdsByRole,
+  listBranchUserIds,
   createNotification,
 } from './notifications.model.js'
 import { ROLES } from '../../config/constants.js'
@@ -115,4 +116,123 @@ function formatRange(start, end) {
   const left = a.toLocaleDateString('en-US', opts)
   const right = b.toLocaleDateString('en-US', opts)
   return left === right ? left : `${left} – ${right}`
+}
+
+// BM created a holiday → notify all tenant admins
+export async function notifyAdminsOfHoliday(
+  tenantId,
+  holiday,
+  { managerName, branchName } = {},
+) {
+  const adminIds = await listTenantAdminUserIds(tenantId)
+  if (!adminIds.length) return []
+
+  const name = holiday?.name || 'Holiday'
+  const branch = branchName || 'a branch'
+  const manager = managerName || 'Branch Manager'
+  const dates = formatRange(holiday.startDate, holiday.endDate || holiday.startDate)
+
+  return createNotificationsForUsers(tenantId, adminIds, {
+    type: 'holiday_created',
+    title: 'New Holiday Scheduled',
+    body: `Branch: ${branch}. Holiday: ${name}. Date(s): ${dates}. Created by: ${manager}.`,
+    linkPath: '/admin/notifications',
+    entityType: 'holiday',
+    entityId: holiday.id,
+    meta: {
+      holidayId: holiday.id,
+      holidayName: name,
+      branchName: branch,
+      managerName: manager,
+      startDate: holiday.startDate,
+      endDate: holiday.endDate || holiday.startDate,
+    },
+  })
+}
+
+// BM created a holiday → notify branch staff / cashiers (exclude creator + admins)
+export async function notifyBranchUsersOfHoliday(
+  tenantId,
+  holiday,
+  { managerName, branchName, excludeUserId } = {},
+) {
+  const branchId = holiday?.branchId || null
+  if (!branchId) return []
+
+  const recipientIds = await listBranchUserIds(tenantId, branchId, {
+    excludeUserIds: excludeUserId ? [excludeUserId] : [],
+  })
+  if (!recipientIds.length) return []
+
+  const name = holiday?.name || 'Holiday'
+  const branch = branchName || 'your branch'
+  const manager = managerName || 'Branch Manager'
+  const dates = formatRange(holiday.startDate, holiday.endDate || holiday.startDate)
+
+  return createNotificationsForUsers(tenantId, recipientIds, {
+    type: 'holiday_created',
+    title: 'Holiday Announced',
+    body: `${name} at ${branch} on ${dates}. Created by ${manager}.`,
+    linkPath: '/branch/holidays',
+    entityType: 'holiday',
+    entityId: holiday.id,
+    meta: {
+      holidayId: holiday.id,
+      holidayName: name,
+      branchName: branch,
+      managerName: manager,
+      startDate: holiday.startDate,
+      endDate: holiday.endDate || holiday.startDate,
+    },
+  })
+}
+
+// IM added custom variant type/value → upserted into catalog; notify BMs to review
+export async function notifyBranchManagersOfCustomVariants(
+  tenantId,
+  { productId, productName, creatorName, additions } = {},
+) {
+  const rows = Array.isArray(additions) ? additions : []
+  const actionable = rows.filter(
+    (row) =>
+      row?.typeCreated ||
+      (Array.isArray(row?.values) && row.values.some((v) => v?.created)),
+  )
+  if (!actionable.length) return []
+
+  const bmIds = await listUserIdsByRole(tenantId, ROLES.BRANCH_MANAGER)
+  if (!bmIds.length) return []
+
+  const product = productName || 'a product'
+  const creator = creatorName || 'Inventory Manager'
+  const summary = actionable
+    .map((row) => {
+      const newValues = (row.values || [])
+        .filter((v) => v?.created)
+        .map((v) => v.name)
+      const typeLabel = row.typeCreated ? `${row.typeName} (new type)` : row.typeName
+      if (!newValues.length && row.typeCreated) return typeLabel
+      if (!newValues.length) return null
+      return `${typeLabel}: ${newValues.join(', ')}`
+    })
+    .filter(Boolean)
+    .join('; ')
+
+  const title = 'New Custom Variant Added to Catalog'
+  const body = `${creator} added custom variant data on “${product}”. ${summary}. Review in Resources.`
+
+  return createNotificationsForUsers(tenantId, bmIds, {
+    type: 'custom_variant_catalog',
+    title,
+    body,
+    linkPath: '/branch/resources',
+    entityType: 'product',
+    entityId: productId || null,
+    meta: {
+      productId: productId || null,
+      productName: product,
+      creatorName: creator,
+      additions: actionable,
+    },
+  })
 }

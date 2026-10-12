@@ -17,7 +17,7 @@ function TableHeader({ className, ...props }) {
   return (
     <thead
       className={cn(
-        '[&_tr]:border-b [&_tr]:bg-slate-200/80 [&_tr]:hover:bg-slate-200/80 [&_th]:bg-slate-200/80',
+        '[&_tr]:border-b [&_tr]:bg-slate-200/80 [&_tr]:hover:bg-slate-200/80 [&_th]:bg-slate-200/80 dark:[&_tr]:bg-muted dark:[&_tr]:hover:bg-muted dark:[&_th]:bg-muted',
         className,
       )}
       {...props}
@@ -41,7 +41,7 @@ function TableHead({ className, ...props }) {
   return (
     <th
       className={cn(
-        'h-12 bg-slate-200/80 px-4 text-left align-middle font-semibold text-slate-600',
+        'h-12 bg-slate-200/80 px-4 text-left align-middle font-semibold text-slate-600 dark:bg-muted dark:text-slate-300',
         className,
       )}
       {...props}
@@ -78,7 +78,8 @@ function TableActionsCell({ className, sticky = false, children, ...props }) {
     <TableCell
       className={cn(
         'w-[1%] whitespace-nowrap px-2 py-3 text-left',
-        sticky && 'sticky right-0 z-[1] bg-white group-hover:bg-slate-50/80',
+        sticky &&
+          'sticky right-0 z-[1] bg-white group-hover:bg-slate-50/80 dark:bg-card dark:group-hover:bg-muted/80',
         className,
       )}
       {...props}
@@ -141,10 +142,12 @@ function TablePagination({
         className,
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600 dark:text-slate-400">
         {showPageSize && onPageSizeChange ? (
           <label className="inline-flex items-center gap-2">
-            <span className="whitespace-nowrap text-slate-500">Rows per page:</span>
+            <span className="whitespace-nowrap text-slate-500 dark:text-slate-400">
+              Rows per page:
+            </span>
             <NativeSelect
               aria-label="Rows per page"
               className="h-8 w-auto min-w-[3.5rem] cursor-pointer py-1 pl-2 pr-7 text-xs"
@@ -160,7 +163,7 @@ function TablePagination({
             </NativeSelect>
           </label>
         ) : null}
-        <span className="tabular-nums text-slate-500" aria-live="polite">
+        <span className="tabular-nums text-slate-500 dark:text-slate-400" aria-live="polite">
           {rangeLabel}
         </span>
       </div>
@@ -170,7 +173,7 @@ function TablePagination({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 cursor-pointer px-2.5 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-8 cursor-pointer px-2.5 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-muted"
           disabled={safePage <= 1 || loading}
           onClick={() => onPageChange?.(safePage - 1)}
           aria-label="Previous page"
@@ -182,7 +185,7 @@ function TablePagination({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 cursor-pointer px-2.5 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-8 cursor-pointer px-2.5 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-muted"
           disabled={safePage >= safeCount || loading}
           onClick={() => onPageChange?.(safePage + 1)}
           aria-label="Next page"

@@ -7,6 +7,13 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const PAGE_SIZE = 8
 
+// Filters / export actions — rectangular with 8px corners
+export const UI_RADIUS = 'rounded-lg'
+
+// Category / subcategory name caps (create + edit)
+export const CATEGORY_NAME_MAX = 50
+export const SUBCATEGORY_NAME_MAX = 60
+
 export const BRAND = {
   name: 'Software Flux Solution',
   product: 'FluxOne Management System',

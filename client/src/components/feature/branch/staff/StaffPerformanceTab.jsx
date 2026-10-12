@@ -30,6 +30,7 @@ import {
   DialogCancelButton,
 } from '@/components/ui/dialog'
 import { apiClient } from '@/api/api'
+import { useAuth } from '@/context/AuthContext'
 import { useClientPagination } from '@/hooks/useClientPagination'
 import {
   activeScales,
@@ -42,12 +43,17 @@ import { BRAND } from '@/lib/constants'
 import { displayStaffRef, matchesDisplayRef } from '@/lib/formatDisplayId'
 import { toastError, toastSuccess } from '@/lib/toast'
 
+function isBranchManagerDesignation(name) {
+  return /branch\s*manager/i.test(String(name || ''))
+}
+
 export function StaffPerformanceTab({
   designations = [],
   createOpen = false,
   onCreateOpenChange,
   onSubTabChange,
 }) {
+  const { user } = useAuth()
   const [activeSubTab, setActiveSubTab] = useState('roster') // 'roster' | 'scales'
 
   // Roster
@@ -55,6 +61,12 @@ export function StaffPerformanceTab({
   const [loadingRoster, setLoadingRoster] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterDesignation, setFilterDesignation] = useState('')
+
+  // BM evaluates managed staff only — hide Branch Manager from filter
+  const rosterDesignations = useMemo(
+    () => designations.filter((d) => !isBranchManagerDesignation(d.name)),
+    [designations],
+  )
 
   // Score employee modal
   const [scoringEmployee, setScoringEmployee] = useState(null)
@@ -94,6 +106,11 @@ export function StaffPerformanceTab({
   }, [])
 
   const filteredRoster = roster.filter((emp) => {
+    // Defense in depth — exclude BM designation / logged-in user
+    if (isBranchManagerDesignation(emp.designation)) return false
+    if (emp.role === 'branch_manager') return false
+    if (user?.id && emp.userId && String(emp.userId) === String(user.id)) return false
+
     if (filterDesignation && emp.designationId !== filterDesignation) return false
     if (searchQuery) {
       const matchesName = String(emp.fullName || '')
@@ -255,7 +272,7 @@ export function StaffPerformanceTab({
                 onChange={(e) => setFilterDesignation(e.target.value)}
               >
                 <option value="">All Designations</option>
-                {designations.map((d) => (
+                {rosterDesignations.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>

@@ -437,7 +437,6 @@ export function InventoryControlPage() {
       <StockAlertsDialog
         open={alertsOpen}
         onOpenChange={setAlertsOpen}
-        onAddStock={(row) => setUpdateStockRow(asProductRow(row))}
         onEditThreshold={(row) => setThresholdTarget(asProductRow(row))}
         onChanged={() => void reloadSummary?.()}
       />

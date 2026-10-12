@@ -18,18 +18,37 @@ export const listCatalogSchema = z.object({
   query: catalogFilters.merge(paginationQuery),
 })
 
+// Category 50 / subcategory 60 — enforced on create and update
+const CATEGORY_NAME_MAX = 50
+const SUBCATEGORY_NAME_MAX = 60
+
 export const createCategorySchema = z.object({
-  body: z.object({
-    name: z.string().min(1),
-    parentId: optionalLooseUuid,
-  }),
+  body: z
+    .object({
+      name: z.string().min(1),
+      parentId: optionalLooseUuid,
+    })
+    .superRefine((body, ctx) => {
+      const max = body.parentId ? SUBCATEGORY_NAME_MAX : CATEGORY_NAME_MAX
+      if (body.name.trim().length > max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.too_big,
+          maximum: max,
+          type: 'string',
+          inclusive: true,
+          path: ['name'],
+          message: `Name must be at most ${max} characters`,
+        })
+      }
+    }),
   query: empty,
   params: empty,
 })
 
 export const updateCategorySchema = z.object({
   body: z.object({
-    name: z.string().min(1).optional(),
+    // Absolute ceiling; write layer applies 50 vs 60 from parent_id
+    name: z.string().min(1).max(SUBCATEGORY_NAME_MAX).optional(),
     isActive: z.coerce.boolean().optional(),
   }),
   query: empty,

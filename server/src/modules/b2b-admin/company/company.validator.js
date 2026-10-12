@@ -29,27 +29,8 @@ const optionalPhone = z.preprocess(
     .optional(),
 )
 
-// Allow a single number or a short comma/slash-separated list from the company form.
-const optionalContactNumbers = z.preprocess(
-  (value) => (value === '' || value === null || value === undefined ? undefined : value),
-  z
-    .string()
-    .trim()
-    .min(1)
-    .max(120)
-    .refine(
-      (raw) => {
-        const parts = String(raw)
-          .split(/[,;/|]+/)
-          .map((p) => p.trim())
-          .filter(Boolean)
-        if (!parts.length) return false
-        return parts.every(isValidPhone)
-      },
-      { message: 'Invalid contact number(s)' },
-    )
-    .optional(),
-)
+// Primary contact — same E.164 rules as WhatsApp (PhoneInput)
+const optionalContactNumbers = optionalPhone
 
 const optionalEmail = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : value),

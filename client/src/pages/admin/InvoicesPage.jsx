@@ -267,13 +267,13 @@ export function InvoicesPage() {
               placeholder="Search by Tracking ID or Source..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-border bg-slate-50/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-slate-900 outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-300"
+              className="w-full rounded-lg border border-border bg-slate-50/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-slate-900 outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-300"
             />
           </div>
 
-          {/* Month / Year — dropdown values only (no duplicate labels) */}
+          {/* Month / Year — 8px radius to match export actions */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="flex items-center rounded-xl border border-border bg-white px-2.5 py-1.5">
+            <div className="flex items-center rounded-lg border border-border bg-white px-2.5 py-1.5">
               <NativeSelect
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -288,7 +288,7 @@ export function InvoicesPage() {
               </NativeSelect>
             </div>
 
-            <div className="flex items-center rounded-xl border border-border bg-white px-2.5 py-1.5">
+            <div className="flex items-center rounded-lg border border-border bg-white px-2.5 py-1.5">
               <NativeSelect
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}

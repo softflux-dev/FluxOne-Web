@@ -29,6 +29,20 @@ export function displayNotification(n = {}) {
     }
   }
 
+  if (type === 'holiday_created') {
+    return {
+      title: n.title || 'Holiday Announced',
+      body: n.body && n.body !== n.title ? n.body : n.body || '',
+    }
+  }
+
+  if (type === 'custom_variant_catalog') {
+    return {
+      title: n.title || 'New Custom Variant Added to Catalog',
+      body: n.body && n.body !== n.title ? n.body : n.body || '',
+    }
+  }
+
   return {
     title: n.title || 'Notification',
     body: n.body && n.body !== n.title ? n.body : n.body || '',

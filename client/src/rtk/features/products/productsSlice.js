@@ -12,6 +12,7 @@ import { productsToCsv } from '@/lib/productCsv'
 import {
   catalogToState,
   getProductCatalog,
+  invalidateProductCatalog,
   patchCatalogCategoryActive,
   peekProductCatalog,
   refreshProductCategories,
@@ -19,6 +20,33 @@ import {
 import { tokenStorage } from '@/api/tokenStorage'
 
 export const PRODUCTS_PAGE_SIZE = 8
+
+// Match pending combination image Files to saved SKU ids (by productId or label)
+async function uploadVariantImages(variantImages = [], savedVariants = []) {
+  if (!Array.isArray(variantImages) || !variantImages.length) return null
+  const byLabel = new Map(
+    (savedVariants || []).map((v) => [String(v.label || v.variantLabel || '').trim(), v]),
+  )
+  let failCount = 0
+  for (const entry of variantImages) {
+    const file = entry?.file
+    if (!(file instanceof File) || file.size <= 0) continue
+    let childId = entry.productId || null
+    if (!childId && entry.label) {
+      childId = byLabel.get(String(entry.label).trim())?.id || null
+    }
+    if (!childId) {
+      failCount += 1
+      continue
+    }
+    const form = new FormData()
+    form.append('image', file)
+    const imageResult = await apiClient.patch(endpoints.products.update(childId), form)
+    if (!imageResult.success) failCount += 1
+  }
+  if (!failCount) return null
+  return 'Product saved but some variant images failed to upload. Edit the product to retry.'
+}
 
 // Optimistic isActive patch on Redux catalog (mirrors patchCatalogCategoryActive)
 function patchStateCatalogActive(state, id, isActive) {
@@ -151,9 +179,10 @@ export const loadBundleOptions = createAsyncThunk('products/loadBundleOptions', 
 export const createProduct = createAsyncThunk(
   'products/create',
   async (fields, { getState, dispatch, rejectWithValue }) => {
+    const variantImages = Array.isArray(fields._variantImages) ? fields._variantImages : []
     const { json, image } = splitProductWrite(fields, { withConfirmed: true })
     // Strip client-only keys if present
-    delete json._customVariantMeta
+    delete json._variantImages
     const path =
       fields.type === 'bundle' ? endpoints.products.bundles : endpoints.products.create
     const result = await apiClient.post(path, json)
@@ -172,9 +201,17 @@ export const createProduct = createAsyncThunk(
       }
     }
 
+    const variantImageWarning = await uploadVariantImages(
+      variantImages,
+      product.variants || result.data?.variants || [],
+    )
+    if (variantImageWarning) imageWarning = imageWarning || variantImageWarning
+
     const filters = { ...getState().products.filters, page: 1 }
     dispatch(setProductFilters(filters))
-    // Refresh in background so Add modal can close immediately after create
+    // Refresh list + catalog so filters pick up newly upserted variant types/values
+    invalidateProductCatalog()
+    void dispatch(loadProductCatalog({ force: true }))
     void dispatch(fetchProducts(filters))
     return { success: true, data: product, imageWarning }
   },
@@ -183,10 +220,11 @@ export const createProduct = createAsyncThunk(
 export const updateProduct = createAsyncThunk(
   'products/update',
   async ({ id, fields }, { getState, dispatch, rejectWithValue }) => {
+    const variantImages = Array.isArray(fields._variantImages) ? fields._variantImages : []
     const { json, image } = splitProductWrite(fields, { withConfirmed: false })
     const patchBody = { ...json }
     delete patchBody.confirmed
-    delete patchBody._customVariantMeta
+    delete patchBody._variantImages
     // Variant parent: don't send dummy purchase/selling (type often omitted on edit)
     if (fields.type === 'variant' || Array.isArray(fields.variants)) {
       delete patchBody.purchasePrice
@@ -205,6 +243,19 @@ export const updateProduct = createAsyncThunk(
         )
       }
     }
+
+    const savedVariants =
+      result.data?.variants ||
+      fields.variants?.map((v) => ({ id: v.id, label: v.label })) ||
+      []
+    const variantImageWarning = await uploadVariantImages(variantImages, savedVariants)
+    if (variantImageWarning) {
+      return rejectWithValue(variantImageWarning)
+    }
+
+    // Refresh list + catalog after custom variant upserts
+    invalidateProductCatalog()
+    void dispatch(loadProductCatalog({ force: true }))
     void dispatch(fetchProducts(getState().products.filters))
     return { success: true, data: mapProduct(result.data || { id, ...fields }) }
   },

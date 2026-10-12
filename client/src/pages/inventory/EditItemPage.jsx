@@ -25,6 +25,7 @@ import {
   assertSellingGtePurchase,
   buildCombinations,
   buildEditItemApiPayload,
+  collectVariantImageUploads,
   combinationMatchKey,
   hydrateVariantSelectionFromRows,
   mergeCombinationMatrix,
@@ -454,6 +455,9 @@ export function EditItemPage() {
         offers: catalog.offers || [],
       })
       if (form.image) payload.image = form.image
+      // Per-SKU images uploaded after save (client-only)
+      const variantImages = collectVariantImageUploads(combinations)
+      if (variantImages.length) payload._variantImages = variantImages
       const result = await updateProduct(id, payload)
       if (!result.success) {
         toastError(result.error || 'Failed to update product')

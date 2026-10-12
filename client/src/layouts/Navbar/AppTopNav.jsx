@@ -49,7 +49,9 @@ function DesktopNavLinks({ items }) {
           className={({ isActive }) =>
             cn(
               'relative flex shrink-0 cursor-pointer items-center px-3 text-sm font-semibold whitespace-nowrap transition-colors duration-200',
-              isActive ? 'text-[#8E238F]' : 'text-slate-800 hover:text-[#8E238F]',
+              isActive
+                ? 'text-[#8E238F] dark:text-[#c084c1]'
+                : 'text-slate-800 hover:text-[#8E238F] dark:text-slate-200 dark:hover:text-[#c084c1]',
             )
           }
         >
@@ -97,7 +99,7 @@ export function AppTopNav({ className }) {
   return (
     <header
       className={cn(
-        'sticky top-0 z-40 flex h-14 items-center border-b border-border bg-white px-3 sm:h-[4.25rem] sm:px-6',
+        'sticky top-0 z-40 flex h-14 items-center border-b border-border bg-white px-3 sm:h-[4.25rem] sm:px-6 dark:bg-card',
         className,
       )}
     >

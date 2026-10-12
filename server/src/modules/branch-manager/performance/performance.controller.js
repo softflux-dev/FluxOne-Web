@@ -1,4 +1,5 @@
 import { tenantQuery } from '../../../config/db.js'
+import { ROLES } from '../../../config/constants.js'
 import { success, fail, failFromError } from '../../../utils/response.util.js'
 
 function slugify(text) {
@@ -169,6 +170,35 @@ export async function scoreStaff(req, res) {
   const numericPoints = points
 
   try {
+    // Block scoring Branch Manager / self — BM evaluates managed staff only
+    const { rows: targetRows } = await tenantQuery(
+      req.tenantId,
+      `
+        SELECT
+          s.user_id AS "userId",
+          r.slug AS role,
+          COALESCE(d.name, s.designation) AS "designation"
+        FROM staff s
+        LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+        LEFT JOIN roles r ON r.id = u.role_id
+        LEFT JOIN designations d ON d.id = s.designation_id
+        WHERE s.tenant_id = $1 AND s.id = $2
+        LIMIT 1
+      `,
+      [staffId],
+    )
+    if (targetRows.length === 0) {
+      return fail(res, 'Staff member not found', 404)
+    }
+    const target = targetRows[0]
+    const isSelf = target.userId && req.user?.id && String(target.userId) === String(req.user.id)
+    const isBranchManager =
+      target.role === ROLES.BRANCH_MANAGER ||
+      /branch\s*manager/i.test(String(target.designation || ''))
+    if (isSelf || isBranchManager) {
+      return fail(res, 'Branch managers cannot be scored in Performance Roster', 403)
+    }
+
     const { rows: scaleRows } = await tenantQuery(
       req.tenantId,
       `
@@ -213,7 +243,7 @@ export async function scoreStaff(req, res) {
   }
 }
 
-// Aggregated scores for all staff — weighted % out of 100 (enabled factors only)
+// Aggregated scores for managed staff only — excludes Branch Manager / self
 export async function getStaffScores(req, res) {
   try {
     const { rows } = await tenantQuery(
@@ -221,17 +251,26 @@ export async function getStaffScores(req, res) {
       `
         SELECT 
           s.id AS "staffId",
+          s.user_id AS "userId",
           u.full_name AS "fullName",
           s.image_url AS "imageUrl",
           s.designation_id AS "designationId",
           d.name AS "designation",
+          r.slug AS role,
           ${WEIGHTED_RATING_SQL} AS "rating"
         FROM staff s
         LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+        LEFT JOIN roles r ON r.id = u.role_id
         LEFT JOIN designations d ON d.id = s.designation_id
-        WHERE s.tenant_id = $1 AND s.status = 'active'
+        WHERE s.tenant_id = $1
+          AND s.status = 'active'
+          AND (r.slug IS NULL OR r.slug <> $2)
+          AND ($3::uuid IS NULL OR s.user_id IS DISTINCT FROM $3::uuid)
+          AND (d.name IS NULL OR d.name !~* 'branch\\s*manager')
+          AND (s.designation IS NULL OR s.designation !~* 'branch\\s*manager')
         ORDER BY u.full_name ASC
       `,
+      [ROLES.BRANCH_MANAGER, req.user?.id || null],
     )
     return success(res, rows)
   } catch (err) {

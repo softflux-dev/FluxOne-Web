@@ -55,9 +55,9 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg md:max-w-xl">
-        <div className="flex items-start gap-3 border-b border-slate-100 pb-3 pr-8 sm:items-center sm:gap-3.5 sm:pb-4">
+        <div className="flex items-start gap-3 border-b border-slate-100 pb-3 pr-8 sm:items-center sm:gap-3.5 sm:pb-4 dark:border-border">
           {renderIcon()}
-          <DialogTitle className="min-w-0 flex-1 break-words text-base font-bold leading-snug text-slate-900 sm:text-lg md:text-xl">
+          <DialogTitle className="min-w-0 flex-1 break-words text-base font-bold leading-snug text-slate-900 sm:text-lg md:text-xl dark:text-slate-100">
             {title}
           </DialogTitle>
         </div>
@@ -65,18 +65,20 @@ export function ConfirmDialog({
         <div className="space-y-2.5 py-3 sm:space-y-2.5 sm:py-4">
           {description ? (
             typeof description === 'string' ? (
-              <p className="text-sm leading-relaxed text-slate-800 sm:text-base font-normal">
+              <p className="text-sm leading-relaxed text-slate-800 sm:text-base font-normal dark:text-slate-200">
                 {description}
               </p>
             ) : (
-              <div className="text-sm leading-relaxed text-slate-800 sm:text-base font-normal">
+              <div className="text-sm leading-relaxed text-slate-800 sm:text-base font-normal dark:text-slate-200">
                 {description}
               </div>
             )
           ) : null}
 
           {warning ? (
-            <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">{warning}</p>
+            <p className="text-xs leading-relaxed text-slate-500 sm:text-sm dark:text-slate-400">
+              {warning}
+            </p>
           ) : null}
         </div>
 

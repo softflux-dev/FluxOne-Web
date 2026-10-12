@@ -144,6 +144,7 @@ export function VariantSkusDialog({
               <Table className="min-w-[900px] text-sm">
                 <TableHeader>
                   <TableRow className="text-xs">
+                    <TableHead className="px-3 py-3">Image</TableHead>
                     <TableHead className="px-3 py-3">Variant</TableHead>
                     <TableHead className="px-3 py-3">SKU</TableHead>
                     <TableHead className="px-3 py-3">Barcode</TableHead>
@@ -174,11 +175,18 @@ export function VariantSkusDialog({
                     const hasPromo =
                       disc > 0 || sku.offerName || Number(sku.offerPercent) > 0
 
+                    const skuLabel = variantCapsuleLabel(sku)
                     return (
                       <TableRow key={sku.id} className={inactive ? 'opacity-60' : ''}>
                         <TableCell className="px-3 py-3">
+                          <ProductImageCell
+                            src={sku.imageUrl || parentImage}
+                            name={skuLabel}
+                          />
+                        </TableCell>
+                        <TableCell className="px-3 py-3">
                           <span className="inline-block whitespace-nowrap rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-900">
-                            {variantCapsuleLabel(sku)}
+                            {skuLabel}
                           </span>
                           {inactive ? (
                             <p className="mt-1 text-[11px] font-medium text-slate-400">

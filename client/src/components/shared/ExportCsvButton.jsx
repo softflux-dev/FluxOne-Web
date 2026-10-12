@@ -28,10 +28,10 @@ export function ExportCsvButton({
       disabled={disabled}
       title={resolvedTitle}
       className={cn(
-        // Consistent larger control — matches primary header actions
-        'h-10 cursor-pointer gap-2 rounded-xl px-4 text-sm font-semibold',
-        'border-slate-200 text-slate-700 shadow-2xs',
-        'hover:bg-slate-50 hover:text-slate-900',
+        // Consistent larger control — 8px radius matches filter fields
+        'h-10 cursor-pointer gap-2 rounded-lg px-4 text-sm font-semibold',
+        'border-slate-200 text-slate-700 shadow-2xs dark:border-border dark:text-slate-200',
+        'hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-muted dark:hover:text-slate-100',
         'disabled:opacity-50',
         className,
       )}

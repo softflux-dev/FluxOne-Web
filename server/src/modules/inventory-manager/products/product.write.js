@@ -8,6 +8,7 @@ import {
   assertPriceChangeAllowed,
   insertLedgerEventInTx,
 } from '../control/control.model.js'
+import { notifyBranchManagersOfCustomVariants } from '../../notifications/notifications.service.js'
 import {
   assertSellingGtePurchase,
   branchClause,
@@ -19,8 +20,20 @@ import {
 } from './product.shared.js'
 import { getProductDeleteEligibility } from './product.read.js'
 
+const CATEGORY_NAME_MAX = 50
+const SUBCATEGORY_NAME_MAX = 60
+
+function assertCategoryNameLength(name, isSubcategory) {
+  const max = isSubcategory ? SUBCATEGORY_NAME_MAX : CATEGORY_NAME_MAX
+  const trimmed = String(name || '').trim()
+  if (trimmed.length > max) {
+    throw httpError(400, `Name must be at most ${max} characters`)
+  }
+}
+
 export async function createCategory(tenantId, { name, parentId, imageUrl, branchId }) {
   if (!branchId) throw httpError(422, 'branchId is required to create a category')
+  assertCategoryNameLength(name, Boolean(parentId))
 
   if (parentId) {
     const { rows: parents } = await tenantQuery(
@@ -98,6 +111,23 @@ export async function createCategory(tenantId, { name, parentId, imageUrl, branc
 export async function updateCategory(tenantId, id, { name, imageUrl, isActive, branchId = null }) {
   if (isActive !== undefined) {
     return setCategoryActive(tenantId, id, isActive, { branchId })
+  }
+
+  // Apply 50 / 60 cap from existing parent_id
+  if (name !== undefined) {
+    const { rows: existingRows } = await tenantQuery(
+      tenantId,
+      `
+        SELECT parent_id AS "parentId"
+        FROM categories
+        WHERE tenant_id = $1 AND id = $2
+          ${branchClause('', 3)}
+        LIMIT 1
+      `,
+      [id, branchId],
+    )
+    if (!existingRows[0]) return null
+    assertCategoryNameLength(name, Boolean(existingRows[0].parentId))
   }
 
   const setClauses = []
@@ -771,7 +801,166 @@ async function insertProductRow(client, tenantId, row) {
   return rows[0]
 }
 
-async function attachVariantOptions(client, tenantId, productId, parts = []) {
+// Upsert BM Resources variant_types by case-insensitive name (no duplicates)
+async function upsertVariantType(client, tenantId, name) {
+  const typeName = String(name || '').trim()
+  if (!typeName) throw httpError(422, 'Variant type name is required')
+
+  const { rows: existing } = await tenantClientQuery(
+    client,
+    tenantId,
+    `
+      SELECT id, name
+      FROM variant_types
+      WHERE tenant_id = $1 AND lower(trim(name)) = lower($2)
+      LIMIT 1
+    `,
+    [typeName],
+  )
+  if (existing[0]) {
+    return { id: existing[0].id, name: existing[0].name, created: false }
+  }
+
+  try {
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        INSERT INTO variant_types (tenant_id, name, is_active)
+        VALUES ($1, $2, true)
+        RETURNING id, name
+      `,
+      [typeName],
+    )
+    return { id: rows[0].id, name: rows[0].name, created: true }
+  } catch (err) {
+    if (err?.code !== '23505') throw err
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT id, name
+        FROM variant_types
+        WHERE tenant_id = $1 AND lower(trim(name)) = lower($2)
+        LIMIT 1
+      `,
+      [typeName],
+    )
+    if (!rows[0]) throw err
+    return { id: rows[0].id, name: rows[0].name, created: false }
+  }
+}
+
+// Upsert BM Resources variant_values under a type (no duplicates)
+async function upsertVariantValue(client, tenantId, variantTypeId, name) {
+  const valueName = String(name || '').trim()
+  if (!valueName) throw httpError(422, 'Variant value name is required')
+  if (!variantTypeId) throw httpError(422, 'Variant type is required for value upsert')
+
+  const { rows: existing } = await tenantClientQuery(
+    client,
+    tenantId,
+    `
+      SELECT id, name
+      FROM variant_values
+      WHERE tenant_id = $1
+        AND variant_type_id = $2
+        AND lower(trim(name)) = lower($3)
+      LIMIT 1
+    `,
+    [variantTypeId, valueName],
+  )
+  if (existing[0]) {
+    return { id: existing[0].id, name: existing[0].name, created: false }
+  }
+
+  try {
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        INSERT INTO variant_values (tenant_id, variant_type_id, name, is_active)
+        VALUES ($1, $2, $3, true)
+        RETURNING id, name
+      `,
+      [variantTypeId, valueName],
+    )
+    return { id: rows[0].id, name: rows[0].name, created: true }
+  } catch (err) {
+    if (err?.code !== '23505') throw err
+    const { rows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT id, name
+        FROM variant_values
+        WHERE tenant_id = $1
+          AND variant_type_id = $2
+          AND lower(trim(name)) = lower($3)
+        LIMIT 1
+      `,
+      [variantTypeId, valueName],
+    )
+    if (!rows[0]) throw err
+    return { id: rows[0].id, name: rows[0].name, created: false }
+  }
+}
+
+// Merge catalog upserts across SKUs for a single BM notify payload
+function recordCatalogAddition(map, { typeId, typeName, typeCreated, valueId, valueName, valueCreated }) {
+  if (!typeId || !typeName) return
+  let entry = map.get(typeId)
+  if (!entry) {
+    entry = { typeId, typeName, typeCreated: false, values: new Map() }
+    map.set(typeId, entry)
+  }
+  if (typeCreated) entry.typeCreated = true
+  if (valueId && valueName && valueCreated && !entry.values.has(valueId)) {
+    entry.values.set(valueId, { id: valueId, name: valueName, created: true })
+  }
+}
+
+function catalogAdditionsFromMap(map) {
+  const out = []
+  for (const entry of map.values()) {
+    const values = [...entry.values.values()]
+    if (!entry.typeCreated && !values.length) continue
+    out.push({
+      typeId: entry.typeId,
+      typeName: entry.typeName,
+      typeCreated: entry.typeCreated,
+      values,
+    })
+  }
+  return out
+}
+
+async function resolveCreatorName(tenantId, userId) {
+  if (!userId) return 'Inventory Manager'
+  const { rows } = await tenantQuery(
+    tenantId,
+    `SELECT full_name AS name FROM users WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
+    [userId],
+  )
+  return rows[0]?.name || 'Inventory Manager'
+}
+
+async function notifyCustomVariantCatalog(tenantId, { productId, productName, createdBy, catalogAdditions }) {
+  if (!catalogAdditions?.length) return
+  try {
+    const creatorName = await resolveCreatorName(tenantId, createdBy)
+    await notifyBranchManagersOfCustomVariants(tenantId, {
+      productId,
+      productName,
+      creatorName,
+      additions: catalogAdditions,
+    })
+  } catch (err) {
+    console.error('[products] Failed to notify BMs of custom variants:', err?.message || err)
+  }
+}
+
+async function attachVariantOptions(client, tenantId, productId, parts = [], catalogMap = null) {
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i]
     const typeName = String(part.typeName || '').trim()
@@ -782,34 +971,74 @@ async function attachVariantOptions(client, tenantId, productId, parts = []) {
 
     const typeId = isLooseUuid(part.typeId) ? part.typeId : null
     const valueId = isLooseUuid(part.valueId) ? part.valueId : null
-    const isCustomType = Boolean(part.isCustomType) || !typeId
-    const isCustomValue = Boolean(part.isCustomValue) || !valueId
+    const wantsCustomType = Boolean(part.isCustomType) || !typeId
+    const wantsCustomValue = Boolean(part.isCustomValue) || !valueId
 
-    // Catalog FKs only when UUID-shaped (custom temp ids stay denormalized)
     let resolvedTypeId = null
+    let resolvedTypeName = typeName
+    let typeCreated = false
     let resolvedValueId = null
-    if (typeId && !isCustomType) {
+    let resolvedValueName = valueName
+    let valueCreated = false
+
+    // Prefer catalog UUID when client selected an existing type
+    if (typeId && !wantsCustomType) {
       const { rows } = await tenantClientQuery(
         client,
         tenantId,
-        `SELECT id FROM variant_types WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
+        `SELECT id, name FROM variant_types WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
         [typeId],
       )
-      resolvedTypeId = rows[0]?.id || null
+      if (rows[0]) {
+        resolvedTypeId = rows[0].id
+        resolvedTypeName = rows[0].name
+      }
     }
-    if (valueId && !isCustomValue) {
+
+    // Custom / missing type → upsert into BM Resources catalog
+    if (!resolvedTypeId) {
+      const upserted = await upsertVariantType(client, tenantId, typeName)
+      resolvedTypeId = upserted.id
+      resolvedTypeName = upserted.name
+      typeCreated = upserted.created
+    }
+
+    if (valueId && !wantsCustomValue) {
       const { rows } = await tenantClientQuery(
         client,
         tenantId,
         `
-          SELECT id FROM variant_values
+          SELECT id, name
+          FROM variant_values
           WHERE tenant_id = $1 AND id = $2
             AND ($3::uuid IS NULL OR variant_type_id = $3)
           LIMIT 1
         `,
         [valueId, resolvedTypeId],
       )
-      resolvedValueId = rows[0]?.id || null
+      if (rows[0]) {
+        resolvedValueId = rows[0].id
+        resolvedValueName = rows[0].name
+      }
+    }
+
+    // Custom / missing value → upsert under resolved type
+    if (!resolvedValueId) {
+      const upserted = await upsertVariantValue(client, tenantId, resolvedTypeId, valueName)
+      resolvedValueId = upserted.id
+      resolvedValueName = upserted.name
+      valueCreated = upserted.created
+    }
+
+    if (catalogMap) {
+      recordCatalogAddition(catalogMap, {
+        typeId: resolvedTypeId,
+        typeName: resolvedTypeName,
+        typeCreated,
+        valueId: resolvedValueId,
+        valueName: resolvedValueName,
+        valueCreated,
+      })
     }
 
     await tenantClientQuery(
@@ -827,10 +1056,11 @@ async function attachVariantOptions(client, tenantId, productId, parts = []) {
         i,
         resolvedTypeId,
         resolvedValueId,
-        typeName,
-        valueName,
-        isCustomType || !resolvedTypeId,
-        isCustomValue || !resolvedValueId,
+        resolvedTypeName,
+        resolvedValueName,
+        // Origin flags — FKs always point at catalog after upsert
+        wantsCustomType,
+        wantsCustomValue,
       ],
     )
   }
@@ -842,7 +1072,8 @@ export async function createVariantProduct(tenantId, payload) {
   if (!variants.length) throw httpError(422, 'Variant products require at least one combination')
 
   try {
-    return await withTransaction(async (client) => {
+    const catalogMap = new Map()
+    const created = await withTransaction(async (client) => {
       if (payload.categoryId || payload.subcategoryId) {
         await validateProductCategories(client, tenantId, {
           categoryId: payload.categoryId,
@@ -922,7 +1153,8 @@ export async function createVariantProduct(tenantId, payload) {
           type: PRODUCT_TYPES.SINGLE,
           itemCode,
           name: payload.name,
-          imageUrl: payload.imageUrl,
+          // Per-SKU image when provided; otherwise inherit parent
+          imageUrl: variant.imageUrl || payload.imageUrl || null,
           scale,
           barcode,
           description: payload.description,
@@ -945,7 +1177,7 @@ export async function createVariantProduct(tenantId, payload) {
         })
 
         await attachTaxes(client, tenantId, child.id, resolvedTaxIds)
-        await attachVariantOptions(client, tenantId, child.id, variant.parts || [])
+        await attachVariantOptions(client, tenantId, child.id, variant.parts || [], catalogMap)
         await applyOpeningStockInTx(client, tenantId, {
           productId: child.id,
           quantity: openingQty,
@@ -968,6 +1200,15 @@ export async function createVariantProduct(tenantId, payload) {
         variants: children,
       }
     })
+
+    await notifyCustomVariantCatalog(tenantId, {
+      productId: created.id,
+      productName: created.name,
+      createdBy: payload.createdBy,
+      catalogAdditions: catalogAdditionsFromMap(catalogMap),
+    })
+
+    return created
   } catch (err) {
     mapUniqueViolation(err, 'A variant SKU or barcode already exists in this branch')
   }
@@ -1115,14 +1356,20 @@ const UPDATABLE_COLUMNS = {
   dailyPriceChange: 'daily_price_change',
 }
 
-async function syncVariantChildrenInTx(client, tenantId, parent, payload, { branchId, createdBy }) {
+async function syncVariantChildrenInTx(
+  client,
+  tenantId,
+  parent,
+  payload,
+  { branchId, createdBy, catalogMap = null } = {},
+) {
   const variants = Array.isArray(payload.variants) ? payload.variants : []
   if (!variants.length) throw httpError(422, 'Variant products require at least one combination')
 
   const effectiveBranchId = parent.branchId || branchId
   const parentName = payload.name || parent.name
   const parentScale = payload.scale || parent.scale || 'unit'
-  // Variants share one product image (no per-SKU upload) — prefer patch, else parent
+  // Fallback when a SKU has no image of its own
   const parentImageUrl =
     payload.imageUrl !== undefined ? payload.imageUrl || null : parent.imageUrl || null
   const creationBatchId = parent.creationBatchId || crypto.randomUUID()
@@ -1172,6 +1419,7 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
             id,
             item_code AS "itemCode",
             barcode,
+            image_url AS "imageUrl",
             daily_price_change AS "dailyPriceChange",
             purchase_price AS "purchasePrice",
             selling_price AS "sellingPrice"
@@ -1186,6 +1434,11 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
       }
       itemCode = itemCode || owned[0].itemCode
       barcode = barcode || owned[0].barcode
+      // Keep existing SKU image unless this variant payload sets imageUrl
+      const childImageUrl =
+        variant.imageUrl !== undefined
+          ? variant.imageUrl || null
+          : owned[0].imageUrl || parentImageUrl
 
       const nextDaily = Boolean(variant.dailyPriceChange)
       const wasDaily = Boolean(owned[0].dailyPriceChange)
@@ -1241,7 +1494,7 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
           label,
           categoryId,
           subcategoryId,
-          parentImageUrl,
+          childImageUrl,
           promo.offerId,
           promo.discountPercent,
           childProfitPercent,
@@ -1255,7 +1508,7 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
         `DELETE FROM product_variant_options WHERE tenant_id = $1 AND product_id = $2`,
         [variant.id],
       )
-      await attachVariantOptions(client, tenantId, variant.id, variant.parts || [])
+      await attachVariantOptions(client, tenantId, variant.id, variant.parts || [], catalogMap)
       if (payload.taxIds !== undefined) {
         await attachTaxes(client, tenantId, variant.id, resolvedTaxIds)
       }
@@ -1275,7 +1528,7 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
         type: PRODUCT_TYPES.SINGLE,
         itemCode,
         name: parentName,
-        imageUrl: parentImageUrl,
+        imageUrl: variant.imageUrl || parentImageUrl,
         scale: parentScale,
         barcode,
         description: payload.description !== undefined ? payload.description : parent.description,
@@ -1294,7 +1547,7 @@ async function syncVariantChildrenInTx(client, tenantId, parent, payload, { bran
         createdAt,
       })
       await attachTaxes(client, tenantId, child.id, resolvedTaxIds)
-      await attachVariantOptions(client, tenantId, child.id, variant.parts || [])
+      await attachVariantOptions(client, tenantId, child.id, variant.parts || [], catalogMap)
 
       const openingQty =
         childStatus === 'inactive' ? 0 : Math.max(0, Number(variant.quantity) || 0)
@@ -1319,7 +1572,8 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
   if (payload.sku && !payload.itemCode) payload.itemCode = payload.sku
 
   try {
-    return await withTransaction(async (client) => {
+    const catalogMap = new Map()
+    const updated = await withTransaction(async (client) => {
       const { rows: existingRows } = await tenantClientQuery(
         client,
         tenantId,
@@ -1352,8 +1606,36 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
       const existing = existingRows[0]
       if (!existing) return null
 
+      // Child SKUs: allow image-only PATCH; all other edits go through the parent
       if (existing.parentId) {
-        throw httpError(400, 'Edit the parent variant product to update this SKU')
+        const writeKeys = Object.keys(payload).filter(
+          (key) =>
+            payload[key] !== undefined &&
+            key !== 'createdBy' &&
+            key !== 'branchId' &&
+            key !== 'confirmed',
+        )
+        const imageOnly =
+          writeKeys.length > 0 && writeKeys.every((key) => key === 'imageUrl')
+        if (!imageOnly) {
+          throw httpError(400, 'Edit the parent variant product to update this SKU')
+        }
+        await tenantClientQuery(
+          client,
+          tenantId,
+          `
+            UPDATE products
+            SET image_url = $3, updated_at = now()
+            WHERE tenant_id = $1 AND id = $2
+          `,
+          [id, payload.imageUrl || null],
+        )
+        return {
+          id: existing.id,
+          name: existing.name,
+          imageUrl: payload.imageUrl || null,
+          parentId: existing.parentId,
+        }
       }
 
       // TL: recipe locked after create — top-up stock only via quantity
@@ -1585,6 +1867,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         })
       }
 
+      let syncedVariants = null
       if (hasVariantSync) {
         const parentForSync = {
           ...existing,
@@ -1593,9 +1876,10 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
               ? Number(payload.profitPercent)
               : existing.profitPercent,
         }
-        await syncVariantChildrenInTx(client, tenantId, parentForSync, payload, {
+        syncedVariants = await syncVariantChildrenInTx(client, tenantId, parentForSync, payload, {
           branchId: effectiveBranchId,
           createdBy: payload.createdBy || null,
+          catalogMap,
         })
 
         // Keep child display names in sync when parent name changes
@@ -1641,8 +1925,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         }
       }
 
-      // Keep child images in sync when parent image is updated
-      // (variants have no per-SKU image field — children inherit parent image)
+      // Parent image fills empty SKU images only — never overwrite per-SKU uploads
       if (
         existing.type === PRODUCT_TYPES.VARIANT &&
         payload.imageUrl !== undefined
@@ -1653,14 +1936,31 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
           `
             UPDATE products
             SET image_url = $3, updated_at = now()
-            WHERE tenant_id = $1 AND parent_id = $2
+            WHERE tenant_id = $1
+              AND parent_id = $2
+              AND (image_url IS NULL OR image_url = '')
           `,
           [id, payload.imageUrl || null],
         )
       }
 
+      // Include synced SKU ids so the client can upload per-variant images
+      if (syncedVariants) {
+        return { ...product, variants: syncedVariants }
+      }
       return product
     })
+
+    if (updated) {
+      await notifyCustomVariantCatalog(tenantId, {
+        productId: updated.id,
+        productName: updated.name,
+        createdBy: payload.createdBy,
+        catalogAdditions: catalogAdditionsFromMap(catalogMap),
+      })
+    }
+
+    return updated
   } catch (err) {
     mapUniqueViolation(err, 'Item code or barcode already exists in this branch')
   }

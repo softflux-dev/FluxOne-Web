@@ -10,7 +10,10 @@ const STAFF_CSV_HEADERS = [
   'Email / Login ID',
   'Joining Date/Time',
   'Designation',
-  'Scheduling',
+  'Shift Start Time',
+  'Shift End Time',
+  'Break Start Time',
+  'Break End Time',
   'Working Days',
   'Assigned Hardware',
   'Status',
@@ -26,17 +29,9 @@ function designationLabel(row = {}) {
   return ''
 }
 
-function scheduleLabel(row = {}) {
-  const start = formatClockTime(row.scheduleStart)
-  const end = formatClockTime(row.scheduleEnd)
-  if (!start && !end) return ''
-  let text = `${start || '—'} – ${end || '—'}`
-  const breakStart = formatClockTime(row.scheduleBreakStart)
-  const breakEnd = formatClockTime(row.scheduleBreakEnd)
-  if (breakStart || breakEnd) {
-    text += ` | Break ${breakStart || '—'}${breakEnd ? ` – ${breakEnd}` : ''}`
-  }
-  return text
+// 12-hour AM/PM for Excel; empty times show as em dash
+function clockOrDash(value) {
+  return formatClockTime(value) || '—'
 }
 
 function hardwareLabel(row = {}) {
@@ -62,7 +57,10 @@ function mapStaffExportRow(row = {}) {
     row.email || '',
     formatDateTimeInline(row.joiningDate || row.createdAt),
     designationLabel(row),
-    scheduleLabel(row),
+    clockOrDash(row.scheduleStart),
+    clockOrDash(row.scheduleEnd),
+    clockOrDash(row.scheduleBreakStart),
+    clockOrDash(row.scheduleBreakEnd),
     formatWorkingDaysShort(row.workingDays) || '',
     hardwareLabel(row),
     statusLabel(row.status),

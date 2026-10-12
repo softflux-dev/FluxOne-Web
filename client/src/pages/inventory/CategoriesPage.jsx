@@ -19,6 +19,7 @@ import {
   filterParentChildRows,
   flattenParentChildRows,
 } from '@/lib/filterParentChildRows'
+import { CATEGORY_NAME_MAX, SUBCATEGORY_NAME_MAX } from '@/lib/constants'
 import { TABLE_PAGE_SIZE } from '@/lib/tablePagination'
 import { toastError, toastSuccess } from '@/lib/toast'
 
@@ -410,6 +411,9 @@ export function CategoriesPage() {
         mode={dialogMode}
         initial={editing}
         title={dialogKind === 'subcategory' ? 'Sub category' : 'Category'}
+        maxNameLength={
+          dialogKind === 'subcategory' ? SUBCATEGORY_NAME_MAX : CATEGORY_NAME_MAX
+        }
         loading={mutating}
         parents={
           pickParent

@@ -81,6 +81,39 @@ export async function listTenantAdminUserIds(tenantId) {
   return listUserIdsByRole(tenantId, ROLES.B2B_ADMIN)
 }
 
+// Active users linked to a branch (users.branch_id or staff row); optional excludes
+export async function listBranchUserIds(tenantId, branchId, { excludeUserIds = [] } = {}) {
+  if (!branchId) return []
+  const exclude = (Array.isArray(excludeUserIds) ? excludeUserIds : []).filter(Boolean)
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT DISTINCT u.id
+      FROM users u
+      WHERE u.tenant_id = $1
+        AND u.is_active = true
+        AND u.role_id <> $2
+        AND (
+          u.branch_id = $3
+          OR EXISTS (
+            SELECT 1
+            FROM staff s
+            WHERE s.tenant_id = u.tenant_id
+              AND s.user_id = u.id
+              AND s.branch_id = $3
+              AND s.status = 'active'
+          )
+        )
+        AND (
+          cardinality($4::uuid[]) = 0
+          OR NOT (u.id = ANY ($4::uuid[]))
+        )
+    `,
+    [ROLE_IDS[ROLES.B2B_ADMIN], branchId, exclude],
+  )
+  return rows.map((r) => r.id)
+}
+
 export async function listNotifications(
   tenantId,
   { recipientUserId, unreadOnly = false, limit = 50, offset = 0 } = {},

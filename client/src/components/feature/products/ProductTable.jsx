@@ -6,6 +6,7 @@ import { ProductImageCell, ProductStatusToggle } from '@/components/feature/prod
 import { PromotionColumns } from '@/components/feature/products/PromotionColumns'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { TruncatedText } from '@/components/shared/TruncatedText'
 import { isEntityActive } from '@/components/shared/EntityStatusToggle'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { Button } from '@/components/ui/button'
@@ -247,7 +248,11 @@ export function ProductTable({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">{row.name}</p>
+                        <TruncatedText
+                          text={row.name}
+                          lines={2}
+                          className="text-sm font-semibold text-slate-900"
+                        />
                         <p className="font-mono text-[11px] text-slate-400">{displayItemCode(row)}</p>
                       </div>
                       <ProductStatusToggle
@@ -352,12 +357,11 @@ export function ProductTable({
                           <ProductImageCell src={row.imageUrl} name={row.name} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p
-                            className="truncate font-medium text-slate-900"
-                            title={row.name}
-                          >
-                            {row.name}
-                          </p>
+                          <TruncatedText
+                            text={row.name}
+                            lines={2}
+                            className="font-medium text-slate-900"
+                          />
                           <p className="text-[11px] capitalize text-slate-400">{row.type}</p>
                         </div>
                       </div>

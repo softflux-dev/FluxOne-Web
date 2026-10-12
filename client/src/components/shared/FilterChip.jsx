@@ -11,7 +11,7 @@ export function FilterChip({ active, onClick, children, className }) {
         'inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 active:scale-[0.97]',
         active
           ? 'border-transparent text-white shadow-sm'
-          : 'border-border bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+          : 'border-border bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:bg-card dark:text-slate-200 dark:hover:bg-muted',
         className,
       )}
       style={active ? { background: BRAND.purple } : undefined}

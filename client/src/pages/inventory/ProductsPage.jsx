@@ -276,6 +276,7 @@ export function ProductsPage() {
               <Button
                 type="button"
                 variant="brand"
+                className="h-10 rounded-lg"
                 onClick={() => navigate(PATHS.inventory.productsNew)}
               >
                 <Plus className="size-4" />
@@ -284,6 +285,7 @@ export function ProductsPage() {
               <Button
                 type="button"
                 variant="brand"
+                className="h-10 rounded-lg"
                 onClick={() => navigate(PATHS.inventory.bundles)}
               >
                 <Plus className="size-4" />
@@ -292,7 +294,7 @@ export function ProductsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="cursor-pointer"
+                className="h-10 cursor-pointer rounded-lg"
                 style={{ color: BRAND.deep }}
                 onClick={() => setImportOpen(true)}
               >
@@ -308,7 +310,7 @@ export function ProductsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="cursor-pointer"
+                className="h-10 cursor-pointer rounded-lg"
                 style={{ color: BRAND.deep }}
                 onClick={() => setScanOpen(true)}
               >

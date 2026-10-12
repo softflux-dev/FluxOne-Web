@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
 import { FieldError } from '@/components/shared/FieldError'
-import { BRAND } from '@/lib/constants'
+import { BRAND, CATEGORY_NAME_MAX, SUBCATEGORY_NAME_MAX } from '@/lib/constants'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
 import { useFormBaseline } from '@/hooks/useFormBaseline'
@@ -29,9 +29,18 @@ export function CategoryDialog({
   onSubmit,
   // Parent list — shown when adding a sub category from the toolbar.
   parents = null,
+  // Override when title alone is ambiguous (e.g. edit subcategory)
+  maxNameLength = null,
 }) {
   const isEdit = mode === 'edit'
   const showParentSelect = !isEdit && Array.isArray(parents)
+  const isSubcategory =
+    showParentSelect ||
+    Boolean(initial?.parentId) ||
+    /sub\s*categor/i.test(String(title || ''))
+  const nameMax =
+    maxNameLength ?? (isSubcategory ? SUBCATEGORY_NAME_MAX : CATEGORY_NAME_MAX)
+
   const [name, setName] = useState('')
   const [image, setImage] = useState(null)
   const [parentId, setParentId] = useState('')
@@ -63,6 +72,9 @@ export function CategoryDialog({
     }
     if (!name.trim()) {
       errors.name = 'Name is required'
+      anchors.name = 'category-name'
+    } else if (name.trim().length > nameMax) {
+      errors.name = `Name must be at most ${nameMax} characters`
       anchors.name = 'category-name'
     }
     if (Object.keys(errors).length) {
@@ -122,10 +134,16 @@ export function CategoryDialog({
             </div>
           ) : null}
           <div className="space-y-1.5">
-            <Label htmlFor="category-name">Name</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="category-name">Name</Label>
+              <span className="text-[11px] tabular-nums text-slate-400">
+                {name.length}/{nameMax}
+              </span>
+            </div>
             <Input
               id="category-name"
               value={name}
+              maxLength={nameMax}
               onChange={(event) => {
                 setName(event.target.value)
                 clearField('name')
@@ -162,5 +180,11 @@ export function CategoryDialog({
 }
 
 export function SubCategoryDialog(props) {
-  return <CategoryDialog {...props} title="Sub category" />
+  return (
+    <CategoryDialog
+      {...props}
+      title="Sub category"
+      maxNameLength={SUBCATEGORY_NAME_MAX}
+    />
+  )
 }

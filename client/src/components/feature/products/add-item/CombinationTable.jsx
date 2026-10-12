@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
+import { CombinationImageCell } from '@/components/feature/products/add-item/CombinationImageCell'
 import { formatOfferOptionLabel, promoFromOfferId } from '@/lib/addItem'
 import { BRAND } from '@/lib/constants'
 import { cn } from '@/lib/utils'
@@ -207,6 +208,7 @@ export function CombinationTable({
                   aria-label="Select all combinations"
                 />
               </th>
+              <th className="px-3 py-2.5 font-semibold">Image</th>
               <th className="px-3 py-2.5 font-semibold">Combination</th>
               <th className="px-3 py-2.5 font-semibold">SKU</th>
               <th className="px-3 py-2.5 font-semibold">Barcode</th>
@@ -240,6 +242,17 @@ export function CombinationTable({
                       checked={checked}
                       onChange={() => toggleOne(row.key)}
                       aria-label={`Select ${row.label}`}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <CombinationImageCell
+                      file={row.imageFile || null}
+                      existingUrl={row.imageUrl || null}
+                      name={row.label}
+                      disabled={inactive}
+                      onChange={(nextFile) =>
+                        onChangeRow?.(row.key, { imageFile: nextFile })
+                      }
                     />
                   </td>
                   <td className="px-3 py-2 font-medium text-slate-900 whitespace-nowrap">

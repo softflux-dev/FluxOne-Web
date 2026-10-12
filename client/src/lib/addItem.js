@@ -69,6 +69,8 @@ export function buildCombinations(selectedTypes) {
       offerId: '',
       discountPercent: '',
       status: 'active',
+      imageUrl: null,
+      imageFile: null,
     }
   })
 }
@@ -124,8 +126,6 @@ export function buildAddItemApiPayload({
   form,
   productKind,
   combinations = [],
-  selectedTypes = [],
-  selectedValuesByType = {},
   offers = [],
 }) {
   const name = String(form.name || '').trim()
@@ -193,16 +193,7 @@ export function buildAddItemApiPayload({
     }
   })
 
-  // TEMP: custom type/value metadata kept for BM notify (task 4)
-  const customMeta = selectedTypes.map((t) => ({
-    id: t.id,
-    name: t.name,
-    isCustom: Boolean(t.isCustom),
-    values: (t.values || [])
-      .filter((v) => (selectedValuesByType[t.id] || []).includes(v.id))
-      .map((v) => ({ id: v.id, name: v.name, isCustom: Boolean(v.isCustom) })),
-  }))
-
+  // Custom type/value flags travel on each variant.parts — server upserts catalog + notifies BM
   return {
     name,
     description,
@@ -213,9 +204,19 @@ export function buildAddItemApiPayload({
     confirmed: true,
     variants,
     ...taxProfit,
-    // Not sent to API — stripped in thunk; useful for console / future notify
-    _customVariantMeta: customMeta,
   }
+}
+
+// Client-only — pending SKU image Files for post-save PATCH uploads
+export function collectVariantImageUploads(combinations = []) {
+  return (combinations || [])
+    .filter((row) => row?.imageFile instanceof File && row.imageFile.size > 0)
+    .map((row) => ({
+      productId: row.productId || null,
+      label: String(row.label || '').trim(),
+      key: row.key,
+      file: row.imageFile,
+    }))
 }
 
 // Order-independent identity for a combination (Flavour×Size === Size×Flavour)
@@ -325,6 +326,8 @@ export function variantsToCombinationRows(variants = []) {
             ? String(Math.round(Number(v.offerPercent)))
             : '',
       status: v.status === 'inactive' ? 'inactive' : 'active',
+      imageUrl: v.imageUrl || null,
+      imageFile: null,
     }
   })
 }

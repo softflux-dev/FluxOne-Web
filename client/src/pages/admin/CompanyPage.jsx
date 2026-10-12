@@ -60,8 +60,6 @@ const POLICY_FIELD_ORDER = ['name', 'detail']
 import {
   Building2,
   Phone,
-  Globe,
-  Share2,
   MessageCircle,
   FileCheck,
   ShieldAlert,
@@ -74,6 +72,7 @@ import {
   Mail,
   Loader2,
 } from 'lucide-react'
+import { FacebookIcon, InstagramIcon } from '@/components/shared/BrandIcons'
 
 // Default policy types for Policies & Governance (TC-002F)
 const POLICY_TYPES = ['Return', 'Refund', 'Exchange', 'Wholesale']
@@ -202,9 +201,16 @@ export function CompanyPage() {
 
   useEffect(() => {
     if (companyLoading || formHydrated) return
+    // Legacy comma-lists → first number only (PhoneInput is single-value)
+    const rawContact = company.contactNumbers || ''
+    const primaryContact =
+      rawContact
+        .split(/[,;/|]+/)
+        .map((p) => p.trim())
+        .filter(Boolean)[0] || ''
     setForm({
       name: company.name || '',
-      contactNumbers: company.contactNumbers || '',
+      contactNumbers: primaryContact,
       whatsappNumber: company.whatsappNumber || '',
       facebookUrl: company.facebookUrl || '',
       instagramUrl: company.instagramUrl || '',
@@ -222,24 +228,12 @@ export function CompanyPage() {
     if (!form.name.trim()) {
       errors.name = 'Please enter the registered company name'
     }
-    if (!form.contactNumbers.trim()) {
-      errors.contactNumbers = 'Please provide company contact numbers'
-    } else {
-      const parts = form.contactNumbers
-        .split(/[,;/|]+/)
-        .map((p) => p.trim())
-        .filter(Boolean)
-      for (const part of parts) {
-        const phoneErr = validatePhone(part, {
-          required: true,
-          fieldName: 'Contact number',
-        })
-        if (phoneErr) {
-          errors.contactNumbers = phoneErr
-          break
-        }
-      }
-    }
+    // Single E.164 value from PhoneInput (same rules as WhatsApp)
+    const contactErr = validatePhone(form.contactNumbers, {
+      required: true,
+      fieldName: 'Contact number',
+    })
+    if (contactErr) errors.contactNumbers = contactErr
 
     if (form.whatsappNumber?.trim()) {
       const waErr = validatePhone(form.whatsappNumber, {
@@ -528,14 +522,13 @@ export function CompanyPage() {
                       <Phone className="size-3.5 text-purple-600" />
                       Official Contact Numbers *
                     </Label>
-                    <Input
+                    <PhoneInput
                       id="contacts"
                       value={form.contactNumbers}
-                      onChange={(e) => {
-                        setForm({ ...form, contactNumbers: e.target.value })
+                      onChange={(val) => {
+                        setForm({ ...form, contactNumbers: val })
                         clearCompanyField('contactNumbers')
                       }}
-                      placeholder="+92 51 2223344, +92 300 1234567"
                       aria-invalid={Boolean(companyFieldErrors.contactNumbers)}
                       className={fieldErrorClass(companyFieldErrors.contactNumbers)}
                     />
@@ -562,7 +555,7 @@ export function CompanyPage() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="facebook" className="text-xs font-semibold flex items-center gap-1.5">
-                      <Globe className="size-3.5 text-blue-600" />
+                      <FacebookIcon className="text-[#1877F2]" />
                       Facebook Page Link (Optional URL)
                     </Label>
                     <Input
@@ -582,7 +575,7 @@ export function CompanyPage() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="instagram" className="text-xs font-semibold flex items-center gap-1.5">
-                      <Share2 className="size-3.5 text-pink-600" />
+                      <InstagramIcon className="text-[#E4405F]" />
                       Instagram Page Link (Optional URL)
                     </Label>
                     <Input

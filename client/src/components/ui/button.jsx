@@ -23,7 +23,7 @@ const buttonVariants = cva(
         // Primary purple CTAs (Add Staff, Add Holidays, Save, etc.)
         brand: cn('text-white', ctaMotionClass),
         outline: cn(
-          'border border-input bg-background hover:border-slate-300 hover:bg-accent hover:text-accent-foreground',
+          'border border-input bg-background hover:border-slate-300 hover:bg-accent hover:text-accent-foreground dark:hover:border-border',
           'hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-[0.98]',
         ),
         secondary: cn(

@@ -314,6 +314,7 @@ export async function getProductDetail(tenantId, id, { branchId = null } = {}) {
           c.offer_id AS "offerId",
           o.name AS "offerName",
           o.percent AS "offerPercent",
+          c.image_url AS "imageUrl",
           c.creation_batch_id AS "creationBatchId",
           c.parent_id AS "parentId",
           c.created_at AS "createdAt"
@@ -356,6 +357,7 @@ export async function getProductDetail(tenantId, id, { branchId = null } = {}) {
 
     variants = childRows.map((child) => ({
       ...child,
+      imageUrl: normalizeImageUrl(child.imageUrl),
       parts: optionsByProduct.get(child.id) || [],
     }))
   }

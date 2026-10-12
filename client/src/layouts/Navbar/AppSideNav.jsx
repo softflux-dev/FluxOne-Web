@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, Menu, ScrollText, UserRound, X } from 'lucide-react'
+import { LogOut, Menu, Moon, ScrollText, Sun, UserRound, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { UserAvatar } from '@/components/shared/UserAvatar'
 import { useAuthSession } from '@/hooks/useAuthSession'
+import { useTheme } from '@/context/ThemeContext'
 import { BRAND, ROLES } from '@/lib/constants'
 import { roleDisplayName } from '@/lib/nav'
 import { cn } from '@/lib/utils'
@@ -28,8 +29,8 @@ function SideNavLinks({ items, onNavigate }) {
             cn(
               'relative shrink-0 cursor-pointer rounded-xl px-3 py-3 text-sm font-semibold transition-colors duration-200 active:scale-[0.99]',
               isActive
-                ? 'bg-[#f3e8f5]/60 text-[#8E238F]'
-                : 'text-slate-700 hover:bg-slate-50 hover:text-[#8E238F]',
+                ? 'bg-[#f3e8f5]/60 text-[#8E238F] dark:bg-accent dark:text-[#c084c1]'
+                : 'text-slate-700 hover:bg-slate-50 hover:text-[#8E238F] dark:text-slate-300 dark:hover:bg-muted dark:hover:text-[#c084c1]',
             )
           }
         >
@@ -66,9 +67,9 @@ function AccountHeader() {
         fallbackClassName="text-sm"
       />
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-800">{name}</p>
-        <p className="truncate text-xs text-slate-500">{roleLabel}</p>
-        <p className="mt-0.5 truncate text-xs font-medium" style={{ color: BRAND.deep }}>
+        <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{name}</p>
+        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{roleLabel}</p>
+        <p className="mt-0.5 truncate text-xs font-medium text-[#412283] dark:text-[#c084c1]">
           {userId}
         </p>
       </div>
@@ -79,14 +80,18 @@ function AccountHeader() {
 function AccountActions({ onClose }) {
   const navigate = useNavigate()
   const { role, logout } = useAuthSession()
+  const { theme, toggleTheme } = useTheme()
   const profilePath = profilePathForRole(role)
+  const isDark = theme === 'dark'
+  const itemClass =
+    'flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.99] dark:text-slate-300 dark:hover:bg-muted'
 
   return (
     <div className="mt-auto space-y-1 border-t border-border p-3">
       {role === ROLES.B2B_ADMIN ? null : (
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.99]"
+          className={itemClass}
           onClick={() => {
             onClose()
             navigate(profilePath)
@@ -96,10 +101,14 @@ function AccountActions({ onClose }) {
           Profile
         </button>
       )}
+      <button type="button" className={itemClass} onClick={toggleTheme}>
+        {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        {isDark ? 'Light mode' : 'Dark mode'}
+      </button>
       {role === ROLES.BRANCH_MANAGER ? (
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.99]"
+          className={itemClass}
           onClick={() => {
             onClose()
             navigate(PATHS.branch.logs)
@@ -111,7 +120,7 @@ function AccountActions({ onClose }) {
       ) : null}
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 active:scale-[0.99]"
+        className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 active:scale-[0.99] dark:text-red-400 dark:hover:bg-red-950/40"
         onClick={() => {
           onClose()
           logout()
@@ -157,7 +166,7 @@ function SideDrawer({ open, onClose, items, showAccount }) {
           />
           <motion.aside
             key="nav-drawer"
-            className="fixed top-0 left-0 z-50 flex h-dvh w-[min(20rem,88vw)] flex-col bg-white shadow-2xl"
+            className="fixed top-0 left-0 z-50 flex h-dvh w-[min(20rem,88vw)] flex-col bg-white shadow-2xl dark:bg-card"
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
@@ -170,13 +179,15 @@ function SideDrawer({ open, onClose, items, showAccount }) {
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <BrandLogo size="sm" asLink={false} />
-                <p className="text-sm font-semibold text-slate-800">{BRAND.product.split(' ')[0]}</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {BRAND.product.split(' ')[0]}
+                </p>
               </div>
               <button
                 type="button"
                 aria-label="Close side navigation"
                 onClick={onClose}
-                className="flex size-10 cursor-pointer items-center justify-center rounded-xl border border-border text-slate-600 transition-colors hover:bg-slate-50 active:scale-95"
+                className="flex size-10 cursor-pointer items-center justify-center rounded-xl border border-border text-slate-600 transition-colors hover:bg-slate-50 active:scale-95 dark:text-slate-300 dark:hover:bg-muted"
               >
                 <X className="size-5" />
               </button>
@@ -200,7 +211,7 @@ export function AppSideNav({ items, open, onOpenChange, showAccount = false }) {
         type="button"
         aria-label="Open side menu"
         aria-expanded={open}
-        className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-border text-slate-700 transition-colors hover:bg-slate-50 active:scale-95"
+        className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-border text-slate-700 transition-colors hover:bg-slate-50 active:scale-95 dark:text-slate-300 dark:hover:bg-muted"
         onClick={() => onOpenChange(true)}
       >
         <Menu className="size-5" />

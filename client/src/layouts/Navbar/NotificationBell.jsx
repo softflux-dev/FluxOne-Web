@@ -100,7 +100,7 @@ export function NotificationBell({ className }) {
         type="button"
         variant="ghost"
         size="icon"
-        className="relative size-9 rounded-full text-slate-700 hover:bg-slate-100"
+        className="relative size-9 rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-muted"
         aria-label="Notifications"
         aria-expanded={open}
         onClick={openDropdown}
@@ -124,7 +124,7 @@ export function NotificationBell({ className }) {
           />
           <div
             className={cn(
-              'z-50 overflow-hidden rounded-xl border border-border bg-white shadow-lg',
+              'z-50 overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-card',
               // Mobile: fixed sheet under header (avoids viewport overflow)
               'fixed top-14 right-3 left-3 max-h-[min(28rem,calc(100dvh-4.5rem))]',
               // Desktop: anchored to bell
@@ -132,12 +132,14 @@ export function NotificationBell({ className }) {
             )}
           >
             <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-              <p className="text-sm font-semibold text-slate-900">Notifications</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Notifications
+              </p>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 ? (
                   <button
                     type="button"
-                    className="cursor-pointer text-xs font-medium text-[#8E238F] hover:underline"
+                    className="cursor-pointer text-xs font-medium text-[#8E238F] hover:underline dark:text-[#c084c1]"
                     onClick={async () => {
                       await apiClient.patch(endpoints.notifications.readAll)
                       void refresh()
@@ -149,7 +151,7 @@ export function NotificationBell({ className }) {
                 <button
                   type="button"
                   aria-label="Close notifications"
-                  className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 sm:hidden"
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 sm:hidden dark:hover:bg-muted"
                   onClick={() => setOpen(false)}
                 >
                   <X className="size-4" />
@@ -171,12 +173,12 @@ export function NotificationBell({ className }) {
                       type="button"
                       onClick={() => handleClickItem(n)}
                       className={cn(
-                        'flex w-full cursor-pointer flex-col gap-1 border-b border-slate-100 px-3 py-2.5 text-left transition-colors hover:bg-slate-50',
-                        !n.isRead && 'bg-purple-50/40',
+                        'flex w-full cursor-pointer flex-col gap-1 border-b border-slate-100 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:border-border dark:hover:bg-muted',
+                        !n.isRead && 'bg-purple-50/40 dark:bg-accent/50',
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="min-w-0 flex-1 text-sm font-semibold leading-snug break-words text-slate-900">
+                        <p className="min-w-0 flex-1 text-sm font-semibold leading-snug break-words text-slate-900 dark:text-slate-100">
                           {title}
                         </p>
                         {!n.isRead ? (
@@ -184,7 +186,7 @@ export function NotificationBell({ className }) {
                         ) : null}
                       </div>
                       {body ? (
-                        <p className="whitespace-normal break-words text-xs leading-relaxed text-slate-600">
+                        <p className="whitespace-normal break-words text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                           {body}
                         </p>
                       ) : null}
@@ -197,7 +199,7 @@ export function NotificationBell({ className }) {
 
             <button
               type="button"
-              className="w-full cursor-pointer border-t border-border px-3 py-2.5 text-center text-xs font-semibold text-[#8E238F] hover:bg-slate-50"
+              className="w-full cursor-pointer border-t border-border px-3 py-2.5 text-center text-xs font-semibold text-[#8E238F] hover:bg-slate-50 dark:text-[#c084c1] dark:hover:bg-muted"
               onClick={() => {
                 setOpen(false)
                 navigate(notificationsPath)

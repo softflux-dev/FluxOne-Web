@@ -13,7 +13,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-slate-50/80 text-center',
+        'flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-slate-50/80 text-center dark:bg-muted/40',
         compact ? 'px-4 py-10' : 'px-4 py-14',
         className,
       )}
@@ -24,9 +24,9 @@ export function EmptyState({
       >
         <Icon className="size-6" strokeWidth={1.75} />
       </div>
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</p>
       {description ? (
-        <p className="max-w-sm text-xs text-slate-500">{description}</p>
+        <p className="max-w-sm text-xs text-slate-500 dark:text-slate-400">{description}</p>
       ) : null}
     </div>
   )
