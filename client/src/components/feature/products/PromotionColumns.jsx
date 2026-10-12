@@ -1,33 +1,35 @@
 import { EMPTY_DASH } from '@/lib/mapProduct'
 
-export function PromotionColumns({ row }) {
+//
+// Discount & Offers = one promo (offer name wins; else discount %).
+// Never render Discount % and Offer as two separate columns.
+//
+export function resolvePromoLabel(row = {}) {
   const discount = Number(row.discountPercent || 0)
   const offer = Number(row.offerPercent || 0)
-  const hasAny = discount > 0 || offer > 0 || row.offerName
+  const name = String(row.offerName || '').trim()
 
-  if (!hasAny) {
+  if (name) {
+    if (offer > 0 && !name.includes('%')) return `${name} · ${offer}%`
+    return name
+  }
+  if (offer > 0) return `${offer}% Offer`
+  if (discount > 0) return `${discount}%`
+  return null
+}
+
+export function PromotionColumns({ row }) {
+  const label = resolvePromoLabel(row)
+  if (!label) {
     return <span className="text-xs text-slate-400">{EMPTY_DASH}</span>
   }
 
-  const offerLabel = row.offerName || (offer > 0 ? `${offer}% Offer` : 'Offer')
-  const showPercentSuffix = offer > 0 && !offerLabel.includes('%')
-
   return (
-    <div className="space-y-0.5 text-xs leading-snug">
-      {row.offerName || offer > 0 ? (
-        <p>
-          <span className="text-slate-400">Offer</span>{' '}
-          <span className="font-semibold text-slate-800">
-            {offerLabel}
-            {showPercentSuffix ? ` · ${offer}%` : ''}
-          </span>
-        </p>
-      ) : discount > 0 ? (
-        <p>
-          <span className="text-slate-400">Discount</span>{' '}
-          <span className="font-semibold text-slate-800">{discount}%</span>
-        </p>
-      ) : null}
-    </div>
+    <span
+      className="inline-flex max-w-[140px] truncate rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
+      title={label}
+    >
+      {label}
+    </span>
   )
 }

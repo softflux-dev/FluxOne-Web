@@ -1,6 +1,16 @@
 import { EMPTY_DASH, money, PRODUCT_TYPES } from '@/lib/mapProduct'
 
-// Variant parents have no own price — children do. Missing values use `--`.
+//
+// Shared price display helpers for catalog rows.
+// Variant parents have no own price — child SKUs hold the data.
+//
+
+export function priceOrDash(row, value) {
+  if (row?.type === PRODUCT_TYPES.VARIANT) return EMPTY_DASH
+  return money(value)
+}
+
+// Compact stacked block (mobile cards)
 export function PricingColumns({ row }) {
   const isVariantParent = row.type === PRODUCT_TYPES.VARIANT
 

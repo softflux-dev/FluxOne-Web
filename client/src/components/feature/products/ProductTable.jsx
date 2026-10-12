@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Package, Printer, PackagePlus, Trash2 } from 'lucide-react'
 import { BarcodeCell } from '@/components/feature/products/BarcodeCell'
-import { PricingColumns } from '@/components/feature/products/PricingColumns'
+import { priceOrDash, PricingColumns } from '@/components/feature/products/PricingColumns'
 import { ProductImageCell, ProductStatusToggle } from '@/components/feature/products/ProductStatusToggle'
 import { PromotionColumns } from '@/components/feature/products/PromotionColumns'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
@@ -13,17 +13,27 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
+  TableScroll,
   TableHeader,
   TableBody,
   TableHead,
   TableRow,
   TableCell,
+  TableGroupHead,
+  TableSubHead,
+  TableSelectHead,
+  TableSelectCell,
+  TableIdentityHead,
+  TableIdentityCell,
+  TableStatusHead,
+  TableStatusCell,
   TableActionsHead,
   TableActionsCell,
   TablePagination,
+  TABLE_PIN,
 } from '@/components/ui/table'
 import { TableRowsSkeleton } from '@/components/ui/skeleton'
-import { EMPTY_DASH, formatInventoryStock, money, PRODUCT_TYPES } from '@/lib/mapProduct'
+import { EMPTY_DASH, formatInventoryStock, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { BRAND } from '@/lib/constants'
 
@@ -84,14 +94,11 @@ function ProductRowActions({
   )
 }
 
-function parentPriceDash(row, value) {
-  // Variant parent: no own price — child SKUs hold the data.
-  if (row.type === PRODUCT_TYPES.VARIANT) return EMPTY_DASH
-  return money(value)
-}
-
+//
+// Single / Bundle → qty + status label; Variant parent → View (SKU modal).
+// Scale is not its own column — only used as the unit label inside stock text.
+//
 function InventoryStockCell({ row, onViewVariants, className = '' }) {
-  // Variant parent qty is always 0 — open SKU breakdown modal instead
   if (row.type === PRODUCT_TYPES.VARIANT) {
     return (
       <Button
@@ -114,6 +121,15 @@ function InventoryStockCell({ row, onViewVariants, className = '' }) {
       title={stock.display}
     >
       {stock.display}
+    </span>
+  )
+}
+
+function VendorCell({ name }) {
+  const label = name || EMPTY_DASH
+  return (
+    <span className="block max-w-[120px] truncate text-xs text-slate-600" title={name || undefined}>
+      {label}
     </span>
   )
 }
@@ -172,6 +188,17 @@ export function ProductTable({
     onSelectedIdsChange([...merged])
   }
 
+  const selectAllCheckbox = (
+    <Checkbox
+      checked={allPageSelected}
+      ref={(el) => {
+        if (el) el.indeterminate = somePageSelected
+      }}
+      onChange={toggleAllPage}
+      aria-label="Select all products on this page"
+    />
+  )
+
   const catalogActions =
     selectionCount > 0 ? (
       <div className="flex flex-wrap items-center gap-2">
@@ -219,17 +246,10 @@ export function ProductTable({
         />
       ) : (
         <>
-          {/* Mobile cards */}
+          {/* Mobile cards — Scale is not shown as its own field */}
           <div className="space-y-3 md:hidden">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2">
-              <Checkbox
-                checked={allPageSelected}
-                ref={(el) => {
-                  if (el) el.indeterminate = somePageSelected
-                }}
-                onChange={toggleAllPage}
-                aria-label="Select all products on this page"
-              />
+              {selectAllCheckbox}
               <span className="text-xs text-slate-500">Select all on page</span>
             </div>
             {list.map((row) => (
@@ -254,38 +274,39 @@ export function ProductTable({
                           className="text-sm font-semibold text-slate-900"
                         />
                         <p className="font-mono text-[11px] text-slate-400">{displayItemCode(row)}</p>
+                        <p className="text-[11px] capitalize text-slate-400">{row.type}</p>
                       </div>
                       <ProductStatusToggle
                         status={row.status}
                         loading={statusUpdatingId === row.id}
                       />
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {row.scale} · {row.type}
-                    </p>
                     <div className="mt-2">
                       <PricingColumns row={row} />
+                    </div>
+                    <div className="mt-2">
+                      <PromotionColumns row={row} />
                     </div>
                     <div className="mt-2 space-y-1 text-xs leading-snug text-slate-600">
                       <p>
                         <span className="text-slate-400">Last purchase</span>{' '}
-                        {parentPriceDash(row, row.lastPurchasePrice)}
+                        {priceOrDash(row, row.lastPurchasePrice)}
                         {row.lastPurchaseVendorName ? ` · ${row.lastPurchaseVendorName}` : ''}
                       </p>
                       <p>
                         <span className="text-slate-400">Current purchase</span>{' '}
-                        {parentPriceDash(row, row.purchasePrice)}
+                        {priceOrDash(row, row.purchasePrice)}
                         {row.currentPurchaseVendorName
                           ? ` · ${row.currentPurchaseVendorName}`
                           : ''}
                       </p>
                       <p>
                         <span className="text-slate-400">Last selling</span>{' '}
-                        {parentPriceDash(row, row.lastSellingPrice)}
+                        {priceOrDash(row, row.lastSellingPrice)}
                       </p>
                       <p>
                         <span className="text-slate-400">Current selling</span>{' '}
-                        {parentPriceDash(row, row.sellingPrice)}
+                        {priceOrDash(row, row.sellingPrice)}
                       </p>
                       <p className="flex flex-wrap items-center gap-1.5">
                         <span className="text-slate-400">Inventory stock</span>{' '}
@@ -309,136 +330,206 @@ export function ProductTable({
               </article>
             ))}
           </div>
-          <div className="hidden overflow-x-auto md:block">
-            <Table className="min-w-[1280px] text-left text-sm">
-              <TableHeader>
-                <TableRow className="text-[11px] tracking-wide text-slate-500 uppercase">
-                  <TableHead className="w-10 px-2 py-3">
-                    <Checkbox
-                      checked={allPageSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = somePageSelected
-                      }}
-                      onChange={toggleAllPage}
-                      aria-label="Select all products on this page"
-                    />
-                  </TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Name</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Item code</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Barcode</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Prices</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Discount & offers</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">
-                    Last / Current purchase
-                  </TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">
-                    Last / Current selling
-                  </TableHead>
-                  <TableHead className="px-2 py-3 font-semibold whitespace-nowrap">
-                    Inventory Stock
-                  </TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Status</TableHead>
-                  <TableActionsHead className="px-2 py-3 font-semibold">Action</TableActionsHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-slate-50/80">
-                    <TableCell className="px-2 py-3">
-                      <Checkbox
-                        checked={selectedSet.has(row.id)}
-                        onChange={() => toggleOne(row.id)}
-                        aria-label={`Select ${row.name || 'product'}`}
-                      />
-                    </TableCell>
-                    <TableCell className="px-2 py-3">
-                      <div className="flex w-[220px] items-center gap-2">
-                        <div className="shrink-0">
-                          <ProductImageCell src={row.imageUrl} name={row.name} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <TruncatedText
-                            text={row.name}
-                            lines={2}
-                            className="font-medium text-slate-900"
-                          />
-                          <p className="text-[11px] capitalize text-slate-400">{row.type}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-2 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
-                      {displayItemCode(row)}
-                    </TableCell>
-                    <TableCell className="max-w-[140px] px-2 py-3 whitespace-nowrap">
-                      <BarcodeCell value={row.barcode} />
-                    </TableCell>
-                    <TableCell className="px-2 py-3">
-                      <PricingColumns row={row} />
-                    </TableCell>
-                    <TableCell className="px-2 py-3">
-                      <PromotionColumns row={row} />
-                    </TableCell>
-                    <TableCell className="px-2 py-3 text-xs leading-snug">
-                      <p>
-                        <span className="text-slate-400">Last</span>{' '}
-                        <span className="font-medium">{parentPriceDash(row, row.lastPurchasePrice)}</span>
-                      </p>
-                      <p
-                        className="truncate text-slate-600"
-                        title={row.lastPurchaseVendorName || undefined}
-                      >
-                        {row.lastPurchaseVendorName || EMPTY_DASH}
-                      </p>
-                      <p className="mt-1.5">
-                        <span className="text-slate-400">Current</span>{' '}
-                        <span className="font-medium">{parentPriceDash(row, row.purchasePrice)}</span>
-                      </p>
-                      <p
-                        className="truncate text-slate-600"
-                        title={row.currentPurchaseVendorName || undefined}
-                      >
-                        {row.currentPurchaseVendorName || EMPTY_DASH}
-                      </p>
-                    </TableCell>
-                    <TableCell className="px-2 py-3 text-xs leading-snug text-slate-600">
-                      <p>
-                        <span className="text-slate-400">Last</span>{' '}
-                        <span className="font-medium text-slate-800">
-                          {parentPriceDash(row, row.lastSellingPrice)}
-                        </span>
-                      </p>
-                      <p className="mt-1">
-                        <span className="text-slate-400">Current</span>{' '}
-                        <span className="font-medium text-slate-800">
-                          {parentPriceDash(row, row.sellingPrice)}
-                        </span>
-                      </p>
-                    </TableCell>
-                    <TableCell className="px-2 py-3">
-                      <InventoryStockCell row={row} onViewVariants={onViewVariants} />
-                    </TableCell>
-                    <TableCell className="px-2 py-3">
-                      <ProductStatusToggle
-                        status={row.status}
-                        loading={statusUpdatingId === row.id}
-                      />
-                    </TableCell>
-                    <TableActionsCell>
-                      <ProductRowActions
-                        row={row}
-                        onPrintBarcode={onPrintBarcode}
-                        onAddStock={onAddStock}
-                        onEdit={onEdit}
-                        onBlock={onBlock}
-                        onUnblock={onUnblock}
-                        onDelete={onDelete}
-                        statusLoading={statusUpdatingId === row.id}
-                      />
-                    </TableActionsCell>
+
+          {/*
+            Desktop pins: Select + Image (left), Actions (right).
+            Select / Image / Item code / Barcode / Actions share one vertical line (rowSpan 2).
+            Prices + purchase groups keep their 2-tier header (unchanged pattern).
+          */}
+          <div className="hidden md:block">
+            <TableScroll className="rounded-lg">
+              <Table
+                scroll={false}
+                className="min-w-[1980px] table-fixed border-separate border-spacing-0 text-left text-sm"
+              >
+                <colgroup>
+                  {/* Left pins */}
+                  <col style={{ width: TABLE_PIN.select }} />
+                  <col style={{ width: TABLE_PIN.identity }} />
+                  {/* Scrollable middle — widths sized so long labels do not collide */}
+                  <col style={{ width: 108 }} />
+                  <col style={{ width: 120 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 148 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 108 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 108 }} />
+                  <col style={{ width: 118 }} />
+                  <col style={{ width: 128 }} />
+                  <col style={{ width: 128 }} />
+                  <col style={{ width: TABLE_PIN.status }} />
+                  {/* Right pin */}
+                  <col style={{ width: TABLE_PIN.actions }} />
+                </colgroup>
+
+                <TableHeader>
+                  {/*
+                    Row 1 — single-line pins + groups.
+                    rowSpan={2} on Select/Image/Item code/Barcode/Actions = one shared baseline.
+                  */}
+                  <TableRow className="text-[11px] tracking-wide text-slate-500 uppercase">
+                    <TableSelectHead sticky rowSpan={2} className="align-middle">
+                      {selectAllCheckbox}
+                    </TableSelectHead>
+                    <TableIdentityHead sticky rowSpan={2} className="align-middle">
+                      Image
+                    </TableIdentityHead>
+                    <TableHead rowSpan={2} className="px-2 py-2 align-middle font-semibold whitespace-nowrap">
+                      Item code
+                    </TableHead>
+                    <TableHead rowSpan={2} className="px-2 py-2 align-middle font-semibold whitespace-nowrap">
+                      Barcode
+                    </TableHead>
+                    <TableGroupHead colSpan={4}>Prices (Rs)</TableGroupHead>
+                    <TableHead
+                      rowSpan={2}
+                      className="px-2 py-2 align-middle font-semibold leading-tight whitespace-normal"
+                    >
+                      Discount & Offers
+                    </TableHead>
+                    <TableGroupHead colSpan={2}>Last purchase</TableGroupHead>
+                    <TableGroupHead colSpan={2}>Current purchase</TableGroupHead>
+                    <TableHead
+                      rowSpan={2}
+                      className="px-2 py-2 align-middle font-semibold leading-tight whitespace-normal"
+                    >
+                      Last selling
+                    </TableHead>
+                    <TableHead
+                      rowSpan={2}
+                      className="px-2 py-2 align-middle font-semibold leading-tight whitespace-normal"
+                    >
+                      Current selling
+                    </TableHead>
+                    <TableHead
+                      rowSpan={2}
+                      className="px-2 py-2 align-middle font-semibold leading-tight whitespace-normal"
+                    >
+                      Inventory stock
+                    </TableHead>
+                    <TableStatusHead rowSpan={2} className="align-middle" />
+                    <TableActionsHead sticky rowSpan={2} className="align-middle">
+                      Action
+                    </TableActionsHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+
+                  {/* Row 2 — only subheads under Prices / Last purchase / Current purchase */}
+                  <TableRow className="text-[10px] tracking-wide text-slate-500 uppercase">
+                    <TableSubHead>Purchase</TableSubHead>
+                    <TableSubHead>Selling</TableSubHead>
+                    <TableSubHead>Tax %</TableSubHead>
+                    <TableSubHead>Final Price</TableSubHead>
+                    <TableSubHead>Price</TableSubHead>
+                    <TableSubHead>Vendor</TableSubHead>
+                    <TableSubHead>Price</TableSubHead>
+                    <TableSubHead>Vendor</TableSubHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {list.map((row) => (
+                    <TableRow key={row.id} className="hover:bg-slate-50">
+                      {/* Left sticky */}
+                      <TableSelectCell sticky>
+                        <Checkbox
+                          checked={selectedSet.has(row.id)}
+                          onChange={() => toggleOne(row.id)}
+                          aria-label={`Select ${row.name || 'product'}`}
+                        />
+                      </TableSelectCell>
+                      <TableIdentityCell sticky>
+                        <div
+                          className="flex items-center gap-2 overflow-hidden"
+                          style={{ width: TABLE_PIN.identity - 16 }}
+                        >
+                          <div className="shrink-0">
+                            <ProductImageCell src={row.imageUrl} name={row.name} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <TruncatedText
+                              text={row.name}
+                              lines={2}
+                              className="font-medium text-slate-900"
+                            />
+                            <p className="text-[11px] capitalize text-slate-400">{row.type}</p>
+                          </div>
+                        </div>
+                      </TableIdentityCell>
+
+                      {/* Scrollable center (includes Status) */}
+                      <TableCell className="px-2 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
+                        {displayItemCode(row)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3 whitespace-nowrap">
+                        <BarcodeCell value={row.barcode} />
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs tabular-nums text-slate-800 whitespace-nowrap">
+                        {priceOrDash(row, row.purchasePrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs tabular-nums text-slate-800 whitespace-nowrap">
+                        {priceOrDash(row, row.sellingPrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3 whitespace-nowrap">
+                        <span className="inline-flex rounded-md bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-800">
+                          {Number(row.taxPercent || 0)}%
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs font-bold tabular-nums text-slate-900 whitespace-nowrap">
+                        {priceOrDash(row, row.finalPrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3">
+                        <PromotionColumns row={row} />
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs tabular-nums font-medium text-slate-800 whitespace-nowrap">
+                        {priceOrDash(row, row.lastPurchasePrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3">
+                        <VendorCell name={row.lastPurchaseVendorName} />
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs tabular-nums font-medium text-slate-800 whitespace-nowrap">
+                        {priceOrDash(row, row.purchasePrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3">
+                        <VendorCell name={row.currentPurchaseVendorName} />
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs tabular-nums font-medium text-slate-800 whitespace-nowrap">
+                        {priceOrDash(row, row.lastSellingPrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3 text-xs tabular-nums font-medium text-slate-800 whitespace-nowrap">
+                        {priceOrDash(row, row.sellingPrice)}
+                      </TableCell>
+                      <TableCell className="px-2 py-3">
+                        <InventoryStockCell row={row} onViewVariants={onViewVariants} />
+                      </TableCell>
+                      <TableStatusCell>
+                        <ProductStatusToggle
+                          status={row.status}
+                          loading={statusUpdatingId === row.id}
+                        />
+                      </TableStatusCell>
+
+                      {/* Right sticky — Actions only */}
+                      <TableActionsCell sticky>
+                        <ProductRowActions
+                          row={row}
+                          onPrintBarcode={onPrintBarcode}
+                          onAddStock={onAddStock}
+                          onEdit={onEdit}
+                          onBlock={onBlock}
+                          onUnblock={onUnblock}
+                          onDelete={onDelete}
+                          statusLoading={statusUpdatingId === row.id}
+                        />
+                      </TableActionsCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableScroll>
           </div>
 
           <TablePagination

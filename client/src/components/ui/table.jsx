@@ -4,12 +4,45 @@ import { NativeSelect } from '@/components/ui/select'
 import { TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS } from '@/lib/tablePagination'
 import { cn } from '@/lib/utils'
 
-function Table({ className, ...props }) {
+//
+// Sticky pin widths (px) — left pins stack from left; right pins stack from right.
+// Tune here once; every table using TableSticky* / convenience wrappers stays aligned.
+//
+export const TABLE_PIN = {
+  select: 44,
+  identity: 240,
+  status: 112,
+  // Fits print + add-stock + edit + block + delete icon cluster
+  actions: 200,
+}
+
+// Opaque + !important so thead [&_th]:bg-slate-200/80 cannot make pins translucent
+const STICKY_HEAD_BG = '!bg-slate-200 dark:!bg-muted'
+const STICKY_CELL_BG =
+  '!bg-white group-hover:!bg-slate-50 dark:!bg-card dark:group-hover:!bg-muted'
+
+//
+// Single horizontal scroll host — use this (not nested overflow) so sticky pins work.
+// Pair with <Table scroll={false}>.
+//
+function TableScroll({ className, children, ...props }) {
   return (
-    <div className="relative w-full overflow-auto">
-      <table className={cn('w-full caption-bottom text-sm', className)} {...props} />
+    <div className={cn('relative w-full overflow-x-auto', className)} {...props}>
+      {children}
     </div>
   )
+}
+
+//
+// scroll=true (default): wraps <table> in overflow-auto (legacy pages).
+// scroll=false: bare <table> — parent should be TableScroll for sticky columns.
+//
+function Table({ className, scroll = true, ...props }) {
+  const table = (
+    <table className={cn('w-full caption-bottom text-sm', className)} {...props} />
+  )
+  if (!scroll) return table
+  return <div className="relative w-full overflow-auto">{table}</div>
 }
 
 // Contrasting header band (TC-table header row colour-22a) — applies system-wide
@@ -34,7 +67,12 @@ function TableFooter({ className, ...props }) {
 }
 
 function TableRow({ className, ...props }) {
-  return <tr className={cn('border-b transition-colors hover:bg-muted/50', className)} {...props} />
+  return (
+    <tr
+      className={cn('group border-b transition-colors hover:bg-muted/50', className)}
+      {...props}
+    />
+  )
 }
 
 function TableHead({ className, ...props }) {
@@ -57,13 +95,67 @@ function TableCaption({ className, ...props }) {
   return <caption className={cn('mt-4 text-sm text-muted-foreground', className)} {...props} />
 }
 
-// Actions column — shrink-to-fit + text-left (header & body align with other columns)
-function TableActionsHead({ className, sticky = false, children = 'Actions', ...props }) {
+//
+// Generic sticky th/td — edge + offset (px from that edge). Reuse across all wide tables.
+// Example left stack: select offset=0, identity offset=TABLE_PIN.select
+// Example right stack: actions offset=0, status offset=TABLE_PIN.actions
+//
+function TableStickyHead({
+  edge = 'left',
+  offset = 0,
+  zIndex = 3,
+  className,
+  style,
+  ...props
+}) {
+  const pin = edge === 'right' ? { right: offset } : { left: offset }
+  // Edge shadow separates pinned cols from scrolling middle
+  const edgeShadow =
+    edge === 'right'
+      ? 'shadow-[-4px_0_8px_-4px_rgba(15,23,42,0.12)]'
+      : offset > 0
+        ? 'shadow-[4px_0_8px_-4px_rgba(15,23,42,0.12)]'
+        : ''
   return (
     <TableHead
+      className={cn('sticky whitespace-nowrap', STICKY_HEAD_BG, edgeShadow, className)}
+      style={{ ...pin, zIndex, ...style }}
+      {...props}
+    />
+  )
+}
+
+function TableStickyCell({
+  edge = 'left',
+  offset = 0,
+  zIndex = 2,
+  className,
+  style,
+  ...props
+}) {
+  const pin = edge === 'right' ? { right: offset } : { left: offset }
+  const edgeShadow =
+    edge === 'right'
+      ? 'shadow-[-4px_0_8px_-4px_rgba(15,23,42,0.12)]'
+      : offset > 0
+        ? 'shadow-[4px_0_8px_-4px_rgba(15,23,42,0.12)]'
+        : ''
+  return (
+    <TableCell
+      className={cn('sticky', STICKY_CELL_BG, edgeShadow, className)}
+      style={{ ...pin, zIndex, ...style }}
+      {...props}
+    />
+  )
+}
+
+// Group label spanning sub-columns (Prices, Last purchase, …)
+function TableGroupHead({ colSpan = 1, className, children, ...props }) {
+  return (
+    <TableHead
+      colSpan={colSpan}
       className={cn(
-        'w-[1%] whitespace-nowrap px-2 py-3 text-left',
-        sticky && 'sticky right-0 z-[1]',
+        'h-9 px-2 py-2 text-center text-[11px] font-semibold tracking-wide whitespace-nowrap uppercase',
         className,
       )}
       {...props}
@@ -73,19 +165,194 @@ function TableActionsHead({ className, sticky = false, children = 'Actions', ...
   )
 }
 
-function TableActionsCell({ className, sticky = false, children, ...props }) {
+// Second-row sub-header under a TableGroupHead
+function TableSubHead({ className, children, ...props }) {
   return (
-    <TableCell
+    <TableHead
       className={cn(
-        'w-[1%] whitespace-nowrap px-2 py-3 text-left',
-        sticky &&
-          'sticky right-0 z-[1] bg-white group-hover:bg-slate-50/80 dark:bg-card dark:group-hover:bg-muted/80',
+        'h-9 px-2 py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase text-slate-500',
         className,
       )}
       {...props}
     >
+      {children}
+    </TableHead>
+  )
+}
+
+// Left pin: checkbox column
+function TableSelectHead({
+  sticky = false,
+  width = TABLE_PIN.select,
+  className,
+  children,
+  ...props
+}) {
+  const Comp = sticky ? TableStickyHead : TableHead
+  const stickyProps = sticky ? { edge: 'left', offset: 0, zIndex: 4 } : {}
+  return (
+    <Comp
+      className={cn('w-10 px-2 py-3', className)}
+      style={sticky ? { width, minWidth: width, maxWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+function TableSelectCell({
+  sticky = false,
+  width = TABLE_PIN.select,
+  className,
+  children,
+  ...props
+}) {
+  const Comp = sticky ? TableStickyCell : TableCell
+  const stickyProps = sticky ? { edge: 'left', offset: 0, zIndex: 3 } : {}
+  return (
+    <Comp
+      className={cn('px-2 py-3', className)}
+      style={sticky ? { width, minWidth: width, maxWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+// Left pin: image + name (sits after select)
+function TableIdentityHead({
+  sticky = false,
+  offset = TABLE_PIN.select,
+  width = TABLE_PIN.identity,
+  className,
+  children = 'Name',
+  ...props
+}) {
+  const Comp = sticky ? TableStickyHead : TableHead
+  const stickyProps = sticky ? { edge: 'left', offset, zIndex: 4 } : {}
+  return (
+    <Comp
+      className={cn('px-2 py-3 font-semibold', className)}
+      style={sticky ? { width, minWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+function TableIdentityCell({
+  sticky = false,
+  offset = TABLE_PIN.select,
+  width = TABLE_PIN.identity,
+  className,
+  children,
+  ...props
+}) {
+  const Comp = sticky ? TableStickyCell : TableCell
+  const stickyProps = sticky ? { edge: 'left', offset, zIndex: 3 } : {}
+  return (
+    <Comp
+      className={cn('px-2 py-3', className)}
+      style={sticky ? { width, minWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+// Right pin: status (sits left of actions — offset = actions width)
+function TableStatusHead({
+  sticky = false,
+  offset = TABLE_PIN.actions,
+  width = TABLE_PIN.status,
+  className,
+  children = 'Status',
+  ...props
+}) {
+  const Comp = sticky ? TableStickyHead : TableHead
+  const stickyProps = sticky ? { edge: 'right', offset, zIndex: 4 } : {}
+  return (
+    <Comp
+      className={cn('px-2 py-3 font-semibold whitespace-nowrap', className)}
+      style={sticky ? { width, minWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+function TableStatusCell({
+  sticky = false,
+  offset = TABLE_PIN.actions,
+  width = TABLE_PIN.status,
+  className,
+  children,
+  ...props
+}) {
+  const Comp = sticky ? TableStickyCell : TableCell
+  const stickyProps = sticky ? { edge: 'right', offset, zIndex: 3 } : {}
+  return (
+    <Comp
+      className={cn('px-2 py-3', className)}
+      style={sticky ? { width, minWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+// Right pin: actions (flush to right edge)
+function TableActionsHead({
+  className,
+  sticky = false,
+  width = TABLE_PIN.actions,
+  children = 'Actions',
+  ...props
+}) {
+  const Comp = sticky ? TableStickyHead : TableHead
+  const stickyProps = sticky ? { edge: 'right', offset: 0, zIndex: 4 } : {}
+  return (
+    <Comp
+      className={cn('w-[1%] whitespace-nowrap px-2 py-3 text-left font-semibold', className)}
+      style={sticky ? { width, minWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
+      {children}
+    </Comp>
+  )
+}
+
+function TableActionsCell({
+  className,
+  sticky = false,
+  width = TABLE_PIN.actions,
+  children,
+  ...props
+}) {
+  const Comp = sticky ? TableStickyCell : TableCell
+  const stickyProps = sticky ? { edge: 'right', offset: 0, zIndex: 3 } : {}
+  return (
+    <Comp
+      className={cn('w-[1%] whitespace-nowrap px-2 py-3 text-left', className)}
+      style={sticky ? { width, minWidth: width } : undefined}
+      {...stickyProps}
+      {...props}
+    >
       <div className="inline-flex items-center justify-start gap-2.5">{children}</div>
-    </TableCell>
+    </Comp>
   )
 }
 
@@ -200,6 +467,7 @@ function TablePagination({
 
 export {
   Table,
+  TableScroll,
   TableHeader,
   TableBody,
   TableFooter,
@@ -207,6 +475,16 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  TableStickyHead,
+  TableStickyCell,
+  TableGroupHead,
+  TableSubHead,
+  TableSelectHead,
+  TableSelectCell,
+  TableIdentityHead,
+  TableIdentityCell,
+  TableStatusHead,
+  TableStatusCell,
   TableActionsHead,
   TableActionsCell,
   TablePagination,

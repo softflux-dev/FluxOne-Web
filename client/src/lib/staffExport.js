@@ -1,10 +1,10 @@
-// Staff roster CSV — maps export API rows → CSV via shared csvExport helpers
-import { exportRowsToCsv } from '@/lib/csvExport'
+// Staff roster export — split schedule + hardware columns; FluxOne-styled Excel
+import { exportRowsToStyledExcel } from '@/lib/csvExport'
 import { displayStaffRef } from '@/lib/formatDisplayId'
 import { formatClockTime, formatDateTimeInline } from '@/lib/formatDateTime'
 import { formatWorkingDaysShort } from '@/lib/validation/branchForms'
 
-const STAFF_CSV_HEADERS = [
+const STAFF_EXPORT_HEADERS = [
   'Staff ID',
   'Name',
   'Email / Login ID',
@@ -15,7 +15,10 @@ const STAFF_CSV_HEADERS = [
   'Break Start Time',
   'Break End Time',
   'Working Days',
-  'Assigned Hardware',
+  'Hardware',
+  'Hardware Type',
+  'Allocated Time',
+  'Allocated Days',
   'Status',
 ]
 
@@ -29,19 +32,39 @@ function designationLabel(row = {}) {
   return ''
 }
 
-// 12-hour AM/PM for Excel; empty times show as em dash
+// 12-hour AM/PM; empty → em dash
 function clockOrDash(value) {
   return formatClockTime(value) || '—'
 }
 
-function hardwareLabel(row = {}) {
-  if (!row.hardwareName && !row.hardwareCode && !row.hardwareDeviceId) {
-    return 'Not Assigned'
-  }
-  const parts = [row.hardwareName, row.hardwareCode, row.hardwareType].filter(Boolean)
-  let text = parts.join(' · ')
-  if (row.hardwareAllocatedSlot) text += ` | Allocated: ${row.hardwareAllocatedSlot}`
-  return text
+function hasHardware(row = {}) {
+  return Boolean(row.hardwareName || row.hardwareCode || row.hardwareDeviceId)
+}
+
+// "Test-PC3 - HW-010"
+function hardwareNameLabel(row = {}) {
+  if (!hasHardware(row)) return 'Not Assigned'
+  const parts = [row.hardwareName, row.hardwareCode].filter(Boolean)
+  return parts.join(' - ') || '—'
+}
+
+function hardwareTypeLabel(row = {}) {
+  if (!hasHardware(row)) return '—'
+  return row.hardwareType || '—'
+}
+
+// Prefer allocation window; else staff shift
+function allocatedTimeLabel(row = {}) {
+  if (!hasHardware(row)) return '—'
+  const start = formatClockTime(row.hardwareAllocationStart || row.scheduleStart)
+  const end = formatClockTime(row.hardwareAllocationEnd || row.scheduleEnd)
+  if (!start && !end) return '—'
+  return `${start || '—'} – ${end || '—'}`
+}
+
+function allocatedDaysLabel(row = {}) {
+  if (!hasHardware(row)) return '—'
+  return formatWorkingDaysShort(row.workingDays) || '—'
 }
 
 function statusLabel(status) {
@@ -62,20 +85,23 @@ function mapStaffExportRow(row = {}) {
     clockOrDash(row.scheduleBreakStart),
     clockOrDash(row.scheduleBreakEnd),
     formatWorkingDaysShort(row.workingDays) || '',
-    hardwareLabel(row),
+    hardwareNameLabel(row),
+    hardwareTypeLabel(row),
+    allocatedTimeLabel(row),
+    allocatedDaysLabel(row),
     statusLabel(row.status),
   ]
 }
 
-// use reusable csvExport helpers
 export function exportStaffRosterCsv(rows = []) {
   if (!rows.length) {
     throw new Error('No staff to export')
   }
   const stamp = new Date().toISOString().slice(0, 10)
-  exportRowsToCsv({
-    filename: `fluxone-staff-roster-${stamp}.csv`,
-    headers: STAFF_CSV_HEADERS,
+  exportRowsToStyledExcel({
+    filename: `fluxone-staff-roster-${stamp}.xls`,
+    sheetName: 'Staff Roster',
+    headers: STAFF_EXPORT_HEADERS,
     rows: rows.map(mapStaffExportRow),
   })
   return { exported: rows.length }

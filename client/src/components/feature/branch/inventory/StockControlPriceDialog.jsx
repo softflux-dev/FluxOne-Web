@@ -133,7 +133,7 @@ export function StockControlPriceDialog({ open, onOpenChange }) {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-stretch">
+          {/* <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-stretch">
             <RuleCard
               tone="amber"
               active={!updateAllStock}
@@ -146,7 +146,7 @@ export function StockControlPriceDialog({ open, onOpenChange }) {
               title="ON — Update All Stock"
               body="The new price applies immediately to both existing and newly added stock."
             />
-          </div>
+          </div> */}
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-xs font-semibold text-slate-800">Example</p>
