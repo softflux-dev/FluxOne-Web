@@ -1,10 +1,9 @@
 import { ROLES } from '../../config/constants.js'
 import { isTenantWideAdmin } from '../../utils/branchScope.util.js'
+import { SYNC_ERROR_CODES, syncHttpError } from './sync.errors.js'
 
-function httpError(status, message) {
-  const error = new Error(message)
-  error.status = status
-  return error
+function httpError(status, message, code) {
+  return syncHttpError(status, message, { code })
 }
 
 // Cashier, BM, IM, branch_admin — never read/write another branch via sync.
@@ -20,10 +19,10 @@ function assertBranchLockedSyncAccess(req, branchId) {
 
   const tokenBranchId = req.user?.branchId || null
   if (!tokenBranchId) {
-    throw httpError(403, 'This account is not assigned to a branch')
+    throw httpError(403, 'This account is not assigned to a branch', SYNC_ERROR_CODES.BRANCH_ACCESS_DENIED)
   }
   if (tokenBranchId !== branchId) {
-    throw httpError(403, 'Branch access denied')
+    throw httpError(403, 'Branch access denied', SYNC_ERROR_CODES.BRANCH_ACCESS_DENIED)
   }
 }
 
@@ -31,7 +30,7 @@ function assertBranchLockedSyncAccess(req, branchId) {
 export function resolveSyncPullBranchId(req, queryBranchId) {
   const branchId = queryBranchId || req.user?.branchId || null
   if (!branchId) {
-    throw httpError(422, 'branchId is required')
+    throw httpError(422, 'branchId is required', SYNC_ERROR_CODES.BRANCH_REQUIRED)
   }
 
   assertBranchLockedSyncAccess(req, branchId)
@@ -42,7 +41,7 @@ export function resolveSyncPullBranchId(req, queryBranchId) {
 export function resolveSyncPushBranchId(req, bodyBranchId) {
   const branchId = bodyBranchId || req.user?.branchId || null
   if (!branchId) {
-    throw httpError(422, 'branchId is required')
+    throw httpError(422, 'branchId is required', SYNC_ERROR_CODES.BRANCH_REQUIRED)
   }
 
   assertBranchLockedSyncAccess(req, branchId)
@@ -57,10 +56,10 @@ export function resolveSyncEventsBranchFilter(req, queryBranchId) {
 
   const tokenBranchId = req.user?.branchId || null
   if (!tokenBranchId) {
-    throw httpError(403, 'This account is not assigned to a branch')
+    throw httpError(403, 'This account is not assigned to a branch', SYNC_ERROR_CODES.BRANCH_ACCESS_DENIED)
   }
   if (queryBranchId && queryBranchId !== tokenBranchId) {
-    throw httpError(403, 'Branch access denied')
+    throw httpError(403, 'Branch access denied', SYNC_ERROR_CODES.BRANCH_ACCESS_DENIED)
   }
   return tokenBranchId
 }

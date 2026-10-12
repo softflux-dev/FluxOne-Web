@@ -9,30 +9,38 @@ import {
   validateSalePayload,
   zodErrorDetails,
 } from './sync.validator.js'
+import {
+  SYNC_ERROR_CODES,
+  buildPushEventContext,
+  syncHttpError,
+} from './sync.errors.js'
 import { logActivity } from '../../utils/activityLog.util.js'
 import { normalizeImageUrl } from '../../utils/uploadUrl.util.js'
 
-function httpError(status, message, details) {
-  const error = new Error(message)
-  error.status = status
-  if (details !== undefined) error.details = details
-  return error
-}
-
 function throwSaleValidationError(label, syncEvent, parsed) {
   const details = zodErrorDetails(parsed.error)
+  const fieldPaths = (details.issues || []).map((i) => i.path).filter(Boolean)
+  const code =
+    syncEvent.eventType === 'refund'
+      ? SYNC_ERROR_CODES.REFUND_VALIDATION_FAILED
+      : syncEvent.eventType === 'cashier_log'
+        ? SYNC_ERROR_CODES.CASHIER_LOG_VALIDATION_FAILED
+        : SYNC_ERROR_CODES.SALE_VALIDATION_FAILED
+
   console.error(`[sync] ${label} validation failed`, {
     clientEventId: syncEvent.clientEventId,
     eventType: syncEvent.eventType,
     syncEventId: syncEvent.id || null,
-    payload: syncEvent.payload,
+    code,
+    fieldPaths,
+    context: buildPushEventContext(syncEvent.eventType, syncEvent.payload),
     ...details,
   })
-  throw httpError(422, `${label}: ${formatZodIssues(parsed.error)}`, {
-    clientEventId: syncEvent.clientEventId,
-    eventType: syncEvent.eventType,
-    payload: syncEvent.payload,
-    ...details,
+
+  throw syncHttpError(422, `${label}: ${formatZodIssues(parsed.error)}`, {
+    code,
+    details,
+    fieldPaths,
   })
 }
 
@@ -350,18 +358,43 @@ async function applyLedgerLines(client, tenantId, syncEvent, payload, movementTy
   const ledgerLines = []
 
   for (const line of payload.lines) {
-    ledgerLines.push(
-      await insertLedgerEventInTx(client, tenantId, {
-        productId: line.productId,
-        movementType,
-        quantity: line.quantity,
-        scale: line.scale || 'unit',
-        reason,
-        posEventId: syncEvent.id,
-        branchId,
-        createdBy: userId,
-      }),
-    )
+    try {
+      ledgerLines.push(
+        await insertLedgerEventInTx(client, tenantId, {
+          productId: line.productId,
+          movementType,
+          quantity: line.quantity,
+          scale: line.scale || 'unit',
+          reason,
+          posEventId: syncEvent.id,
+          branchId,
+          createdBy: userId,
+        }),
+      )
+    } catch (err) {
+      const code = String(err?.message || '').includes('branch stock')
+        ? SYNC_ERROR_CODES.INSUFFICIENT_BRANCH_STOCK
+        : String(err?.message || '').includes('Insufficient stock')
+          ? SYNC_ERROR_CODES.INSUFFICIENT_STOCK
+          : String(err?.message || '').includes('inactive')
+            ? SYNC_ERROR_CODES.PRODUCT_INACTIVE
+            : String(err?.message || '').includes('Product not found')
+              ? SYNC_ERROR_CODES.PRODUCT_NOT_FOUND
+              : null
+      if (code) {
+        throw syncHttpError(err.status || 422, err.message, {
+          code,
+          fieldPaths: ['lines.productId'],
+          details: {
+            productId: line.productId,
+            quantity: line.quantity,
+            movementType,
+            saleNumber: payload.saleNumber || null,
+          },
+        })
+      }
+      throw err
+    }
   }
 
   return ledgerLines
@@ -395,7 +428,9 @@ export async function ingestSaleEvent(client, tenantId, syncEvent, userId) {
 
   const branchId = syncEvent.branchId
   if (!branchId) {
-    throw httpError(422, 'Sale events require branchId on the sync token')
+    throw syncHttpError(422, 'Sale events require branchId on the sync token', {
+      code: SYNC_ERROR_CODES.BRANCH_REQUIRED,
+    })
   }
 
   const payload = parsed.data
@@ -411,6 +446,9 @@ export async function ingestSaleEvent(client, tenantId, syncEvent, userId) {
       skipped: true,
       saleId: existing.id,
       reason: 'sale_number_exists',
+      code: 'sale_number_exists',
+      retryable: false,
+      hint: 'This saleNumber already exists on cloud. Treat as synced; do not re-push as a new sale.',
     }
   }
 
@@ -480,12 +518,17 @@ export async function ingestRefundEvent(client, tenantId, syncEvent, userId) {
 
   const branchId = syncEvent.branchId
   if (!branchId) {
-    throw httpError(422, 'Refund events require branchId on the sync token')
+    throw syncHttpError(422, 'Refund events require branchId on the sync token', {
+      code: SYNC_ERROR_CODES.BRANCH_REQUIRED,
+    })
   }
 
   const payload = parsed.data
   if (!payload.saleNumber) {
-    throw httpError(422, 'Refund events require invoiceId / saleNumber')
+    throw syncHttpError(422, 'Refund events require invoiceId / saleNumber', {
+      code: SYNC_ERROR_CODES.REFUND_MISSING_INVOICE,
+      fieldPaths: ['saleNumber'],
+    })
   }
 
   const counterId = await upsertPosCounter(client, tenantId, branchId, payload.counterCode)
@@ -607,17 +650,30 @@ export async function ingestRefundEvent(client, tenantId, syncEvent, userId) {
 export async function ingestProductPriceUpdate(client, tenantId, syncEvent) {
   const parsed = validateProductPricePayload(syncEvent.payload)
   if (!parsed.success) {
-    throw httpError(422, 'product_price_update requires productId and sellingPrice')
+    const details = zodErrorDetails(parsed.error)
+    throw syncHttpError(
+      422,
+      `product_price_update validation failed: ${formatZodIssues(parsed.error)}`,
+      {
+        code: SYNC_ERROR_CODES.PRICE_VALIDATION_FAILED,
+        details,
+        fieldPaths: (details.issues || []).map((i) => i.path).filter(Boolean),
+      },
+    )
   }
 
   const branchId = syncEvent.branchId
   if (!branchId) {
-    throw httpError(422, 'product_price_update requires branchId on the sync token')
+    throw syncHttpError(422, 'product_price_update requires branchId on the sync token', {
+      code: SYNC_ERROR_CODES.BRANCH_REQUIRED,
+    })
   }
 
   const payload = parsed.data
   if (payload.branchId && payload.branchId !== branchId) {
-    throw httpError(403, 'Branch access denied for product price update')
+    throw syncHttpError(403, 'Branch access denied for product price update', {
+      code: SYNC_ERROR_CODES.BRANCH_ACCESS_DENIED,
+    })
   }
 
   // Idempotent replay of the same clientEventId
@@ -629,6 +685,9 @@ export async function ingestProductPriceUpdate(client, tenantId, syncEvent) {
       productId: payload.productId,
       sellingPrice: payload.sellingPrice,
       reason: 'duplicate_client_event_id',
+      code: 'duplicate_client_event_id',
+      retryable: false,
+      hint: 'Same clientEventId already processed. Mark as synced locally.',
     }
   }
 
@@ -653,7 +712,11 @@ export async function ingestProductPriceUpdate(client, tenantId, syncEvent) {
 
   const product = existingRows[0]
   if (!product) {
-    throw httpError(404, 'Product not found for this branch')
+    throw syncHttpError(404, 'Product not found for this branch', {
+      code: SYNC_ERROR_CODES.PRODUCT_NOT_FOUND,
+      fieldPaths: ['productId'],
+      details: { productId: payload.productId, branchId },
+    })
   }
 
   // Optional stale guard: cloud newer than POS timestamp → skip overwrite
@@ -668,6 +731,9 @@ export async function ingestProductPriceUpdate(client, tenantId, syncEvent) {
         productId: product.id,
         sellingPrice: Number(product.sellingPrice),
         reason: 'stale_pos_updated_at',
+        code: 'stale_pos_updated_at',
+        retryable: false,
+        hint: 'Cloud product is newer. Pull delta/bootstrap price; do not overwrite.',
       }
     }
   }
@@ -702,7 +768,11 @@ export async function ingestProductPriceUpdate(client, tenantId, syncEvent) {
 
   const updated = updatedRows[0]
   if (!updated) {
-    throw httpError(404, 'Product not found for this branch')
+    throw syncHttpError(404, 'Product not found for this branch', {
+      code: SYNC_ERROR_CODES.PRODUCT_NOT_FOUND,
+      fieldPaths: ['productId'],
+      details: { productId: payload.productId, branchId },
+    })
   }
 
   return {
@@ -733,11 +803,15 @@ export async function ingestCashierLogEvent(client, tenantId, syncEvent, event =
   const payload = parsed.data
   const branchId = payload.branchId || syncEvent.branchId
   if (!branchId) {
-    throw httpError(422, 'cashier_log requires branchId on the payload or sync token')
+    throw syncHttpError(422, 'cashier_log requires branchId on the payload or sync token', {
+      code: SYNC_ERROR_CODES.BRANCH_REQUIRED,
+    })
   }
 
   if (payload.branchId && syncEvent.branchId && payload.branchId !== syncEvent.branchId) {
-    throw httpError(403, 'Branch access denied for cashier_log')
+    throw syncHttpError(403, 'Branch access denied for cashier_log', {
+      code: SYNC_ERROR_CODES.BRANCH_ACCESS_DENIED,
+    })
   }
 
   // Idempotent replay of the same clientEventId (matches product_price_update style)
@@ -748,6 +822,9 @@ export async function ingestCashierLogEvent(client, tenantId, syncEvent, event =
       saleId: null,
       activityLogId: null,
       reason: 'duplicate_client_event_id',
+      code: 'duplicate_client_event_id',
+      retryable: false,
+      hint: 'Same clientEventId already processed. Mark as synced locally.',
     }
   }
 
@@ -797,7 +874,9 @@ export async function ingestSyncEvent(tenantId, event, userId) {
   return withTransaction(async (client) => {
     const syncEvent = await insertSyncEventInTx(client, tenantId, event)
     if (!syncEvent) {
-      throw httpError(500, 'Failed to store sync event')
+      throw syncHttpError(500, 'Failed to store sync event', {
+        code: SYNC_ERROR_CODES.SYNC_STORE_FAILED,
+      })
     }
 
     if (event.eventType === 'sale') {
@@ -819,6 +898,13 @@ export async function ingestSyncEvent(tenantId, event, userId) {
       skipped: !syncEvent.inserted,
       saleId: null,
       reason: syncEvent.inserted ? undefined : 'duplicate_client_event_id',
+      ...(syncEvent.inserted
+        ? {}
+        : {
+            code: 'duplicate_client_event_id',
+            retryable: false,
+            hint: 'Same clientEventId already processed. Mark as synced locally.',
+          }),
     }
   })
 }
@@ -865,7 +951,9 @@ function mapPosPaymentStatus(type) {
 // Does NOT adjust stock — POS applies invoices only; stock from branch_inventory / push.
 // Legacy: when duplicate sale_numbers exist, prefer completed/partial over orphan refund rows.
 export async function listSalesForPosPull(tenantId, { branchId, page = 1, limit = 100 } = {}) {
-  if (!branchId) throw httpError(422, 'branchId is required')
+  if (!branchId) {
+    throw syncHttpError(422, 'branchId is required', { code: SYNC_ERROR_CODES.BRANCH_REQUIRED })
+  }
 
   const safePage = Math.max(1, Number(page) || 1)
   const safeLimit = Math.min(200, Math.max(1, Number(limit) || 100))
@@ -1393,7 +1481,7 @@ async function buildSnapshotSections(tenantId, branchId, since = null) {
 export async function buildBootstrapSnapshot(tenantId, branchId) {
   const meta = await fetchTenantBranchMeta(tenantId, branchId)
   if (!meta) {
-    throw httpError(404, 'Branch not found')
+    throw syncHttpError(404, 'Branch not found', { code: SYNC_ERROR_CODES.BRANCH_NOT_FOUND })
   }
 
   const sections = await buildSnapshotSections(tenantId, branchId, null)
@@ -1414,7 +1502,7 @@ export async function buildBootstrapSnapshot(tenantId, branchId) {
 export async function buildDeltaSnapshot(tenantId, branchId, since) {
   const meta = await fetchTenantBranchMeta(tenantId, branchId)
   if (!meta) {
-    throw httpError(404, 'Branch not found')
+    throw syncHttpError(404, 'Branch not found', { code: SYNC_ERROR_CODES.BRANCH_NOT_FOUND })
   }
 
   const sections = await buildSnapshotSections(tenantId, branchId, since)

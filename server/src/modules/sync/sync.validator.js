@@ -377,9 +377,16 @@ export function validateCashierLogPayload(payload) {
 export function parseSchemaOrThrow(schema, data, label = 'Request') {
   const result = schema.safeParse(data)
   if (!result.success) {
-    const message = result.error.issues.map((i) => i.message).join('; ') || `${label} validation failed`
+    const details = zodErrorDetails(result.error)
+    const message =
+      `${label}: ${formatZodIssues(result.error)}` || `${label} validation failed`
     const err = new Error(message)
     err.status = 422
+    err.code = 'VALIDATION_FAILED'
+    err.retryable = false
+    err.hint = 'Fix request body/query fields to match the sync contract, then retry.'
+    err.fieldPaths = (details.issues || []).map((i) => i.path).filter(Boolean)
+    err.details = details
     throw err
   }
   return result.data

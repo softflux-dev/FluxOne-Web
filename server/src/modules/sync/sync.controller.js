@@ -18,32 +18,29 @@ import {
   resolveSyncPullBranchId,
   resolveSyncPushBranchId,
 } from './sync.access.js'
+import {
+  buildPushEventContext,
+  buildRejectedPushEvent,
+} from './sync.errors.js'
 import { mapSnapshotForPos } from './sync.mapper.js'
 import { success } from '../../utils/response.util.js'
 import { paginatedResult } from '../../utils/pagination.util.js'
 
-// Avoid logging full sale/refund payloads (PII + line items).
-function summarizeRejectedPushPayload(eventType, payload) {
-  if (!payload || typeof payload !== 'object') return null
-
-  if (eventType === 'sale' || eventType === 'refund') {
-    const lines = payload.lines || payload.items
-    return {
-      saleNumber: payload.saleNumber ?? payload.invoiceId ?? null,
-      lineCount: Array.isArray(lines) ? lines.length : 0,
-    }
-  }
-
-  const keys = Object.keys(payload)
-  return { keyCount: keys.length, keys: keys.slice(0, 12) }
-}
-
+/**
+ * POST /api/sync/push
+ *
+ * Always HTTP 202 when the outer body is valid. POS must inspect:
+ *   data.hasFailures, data.rejected[], data.accepted[]
+ *
+ * Each rejected item includes: code, reason, retryable, hint, fieldPaths?, details?, context?
+ */
 export async function push(req, res) {
   const parsed = parseSchemaOrThrow(pushBodySchema, req.body, 'Push body')
   const branchId = resolveSyncPushBranchId(req, parsed.branchId)
 
   const accepted = []
   const rejected = []
+  const skipped = []
   const events = []
 
   for (const event of parsed.events) {
@@ -52,6 +49,7 @@ export async function push(req, res) {
       deviceId: event.deviceId || parsed.deviceId || null,
       payload: normalizeSyncEventPayload(event.eventType, event.payload),
     }
+    const context = buildPushEventContext(event.eventType, normalized.payload)
 
     try {
       const row = await ingestSyncEvent(
@@ -65,29 +63,53 @@ export async function push(req, res) {
       )
       events.push(row)
       accepted.push(row.clientEventId)
+      if (row.skipped) {
+        skipped.push({
+          clientEventId: row.clientEventId,
+          eventType: event.eventType,
+          reason: row.reason || 'skipped',
+          code: row.code || row.reason || 'skipped',
+          retryable: row.retryable ?? false,
+          hint:
+            row.hint ||
+            'Event was idempotently skipped. Mark as synced locally; do not treat as a hard failure.',
+          context,
+        })
+      }
     } catch (err) {
+      const rejectedItem = buildRejectedPushEvent(event, err, context)
       console.error('[sync/push] event rejected', {
-        clientEventId: event.clientEventId,
-        eventType: event.eventType,
-        reason: err.message || 'Event rejected',
-        details: err.details || null,
-        payloadSummary: summarizeRejectedPushPayload(event.eventType, normalized.payload),
+        clientEventId: rejectedItem.clientEventId,
+        eventType: rejectedItem.eventType,
+        code: rejectedItem.code,
+        reason: rejectedItem.reason,
+        retryable: rejectedItem.retryable,
+        fieldPaths: rejectedItem.fieldPaths || null,
+        context,
       })
-      rejected.push({
-        clientEventId: event.clientEventId,
-        reason: err.message || 'Event rejected',
-        ...(err.details ? { details: err.details } : {}),
-      })
+      rejected.push(rejectedItem)
     }
   }
+
+  const acceptedCount = accepted.length
+  const rejectedCount = rejected.length
+  const hasFailures = rejectedCount > 0
 
   return success(
     res,
     {
       accepted,
       rejected,
+      skipped,
       events,
-      acceptedCount: accepted.length,
+      acceptedCount,
+      rejectedCount,
+      skippedCount: skipped.length,
+      hasFailures,
+      // POS guidance: 202 alone is not success for every event
+      message: hasFailures
+        ? `${rejectedCount} of ${parsed.events.length} event(s) rejected — see rejected[].code / hint`
+        : `All ${acceptedCount} event(s) accepted`,
     },
     202,
   )

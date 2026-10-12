@@ -57,7 +57,27 @@ export function errorMiddleware(err, _req, res, _next) {
     console.error(err)
   }
 
-  return error(res, message, status)
+  // Pass through structured sync/validation metadata on 4xx so POS can fix easily
+  const extras =
+    status < 500 && (err.code || err.hint || err.details || err.fieldPaths || err.retryable != null)
+      ? {
+          ...(err.code != null ? { code: err.code } : {}),
+          ...(err.retryable != null ? { retryable: err.retryable } : {}),
+          ...(err.hint != null ? { hint: err.hint } : {}),
+          ...(err.fieldPaths != null ? { fieldPaths: err.fieldPaths } : {}),
+          ...(err.details != null
+            ? {
+                details: {
+                  formErrors: err.details.formErrors,
+                  fieldErrors: err.details.fieldErrors,
+                  issues: err.details.issues,
+                },
+              }
+            : {}),
+        }
+      : null
+
+  return error(res, message, status, extras)
 }
 
 export function notFoundMiddleware(req, res) {
