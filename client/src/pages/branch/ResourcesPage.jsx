@@ -248,10 +248,10 @@ export function ResourcesPage() {
     void loadHardware(filterHardware, debouncedHwSearch)
   }
 
-  // Device condition label — legacy "Used" shows as "Old" (QA TC-hardware-07a).
+  // Device condition label '-' legacy "Used" shows as "Old" (QA TC-hardware-07a).
   function conditionLabel(status) {
     if (status === 'Used') return 'Old'
-    return status || '—'
+    return status || '-'
   }
 
   const getConditionBadgeClass = (status) => {
@@ -420,7 +420,7 @@ export function ResourcesPage() {
                               </div>
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
-                              {hw.companyName} · {hw.type}
+                              {hw.companyName} - {hw.type}
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               <div className="flex gap-3">
@@ -677,7 +677,7 @@ export function ResourcesPage() {
                     <option value="blocked">Blocked</option>
                   </NativeSelect>
                   <p className="text-[11px] text-slate-400">
-                    System authorization — independent of device condition.
+                    System authorization - independent of device condition.
                   </p>
                 </div>
               ) : null}
