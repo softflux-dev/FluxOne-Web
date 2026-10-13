@@ -12,14 +12,16 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { BRAND } from '@/lib/constants'
-import {
-  downloadTextFile,
-  parseProductsCsv,
-  productCsvTemplate,
-} from '@/lib/productCsv'
+import { downloadTextFile, productCsvTemplate } from '@/lib/productCsv'
+import { parseProductsImport } from '@/lib/productImport'
 import { useFormBaseline } from '@/hooks/useFormBaseline'
 
-// Import products from CSV file or pasted text (same columns as Export).
+function isExcelFile(file) {
+  const name = String(file?.name || '').toLowerCase()
+  return name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.html')
+}
+
+// Import products from Excel export (.xls), CSV, or pasted text.
 export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmit }) {
   const [text, setText] = useState('')
   const [error, setError] = useState(null)
@@ -45,7 +47,7 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
     reader.onload = () => {
       setText(String(reader.result || ''))
     }
-    reader.onerror = () => setError('Could not read CSV file')
+    reader.onerror = () => setError('Could not read import file')
     reader.readAsText(file)
   }
 
@@ -55,10 +57,10 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
 
   async function handleSubmit(event) {
     event.preventDefault()
-    const rows = parseProductsCsv(text)
+    const rows = parseProductsImport(text)
     if (!rows.length) {
       setError(
-        'No valid rows. Download the template — use rowKind product / variant / bundle_item with category & subcategory names.',
+        'No valid rows. Need Product Name (and Parent/Component Ref for variants & bundles). Download the template or use Export.',
       )
       return
     }
@@ -78,14 +80,21 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
     }
   }
 
+  const previewHint = fileName
+    ? isExcelFile({ name: fileName })
+      ? 'Excel export loaded — ready to import'
+      : 'CSV loaded — ready to import'
+    : null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} dirty={isDirty({ text, fileName })}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Import products (CSV)</DialogTitle>
+          <DialogTitle>Import products</DialogTitle>
           <DialogDescription>
-            Upload a CSV or paste rows. Same format as Export (singles, variants, bundles). Category /
-            subcategory are resolved by name — existing names are reused, missing ones are created.
+            Upload the Excel export (.xls) or CSV. Every row creates a new product (new ID + item
+            code). Item codes are not read from the file. Use Import Ref / Parent Ref / Component Ref
+            to link variants and bundles. Categories are matched by name.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,19 +110,19 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
               className="cursor-pointer"
               onClick={handleDownloadTemplate}
             >
-              Download template
+              Download CSV template
             </Button>
             <Label
               htmlFor="import-csv-file"
               className="inline-flex cursor-pointer items-center rounded-md border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
             >
-              Choose CSV file
+              Choose Excel / CSV
             </Label>
             <input
               ref={fileRef}
               id="import-csv-file"
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel"
               className="sr-only"
               onChange={handleFileChange}
             />
@@ -122,13 +131,17 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
             ) : null}
           </div>
 
+          {previewHint ? (
+            <p className="text-xs text-slate-500">{previewHint}</p>
+          ) : null}
+
           <div className="space-y-1.5">
-            <Label htmlFor="import-rows">CSV content</Label>
+            <Label htmlFor="import-rows">File content (optional paste)</Label>
             <Textarea
               id="import-rows"
               className="min-h-40 font-mono text-xs"
               placeholder={
-                'rowKind,itemCode,name,...,category,subcategory,...\nproduct,BEV-001,Cola,...,Beverages,Soft Drinks,...'
+                'Paste CSV rows, or choose the .xls file from Export.\nProduct Name, SKU / Item Code, …'
               }
               value={text}
               onChange={(event) => {
@@ -145,7 +158,7 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
               style={{ background: BRAND.purple }}
               disabled={loading}
             >
-              {loading ? 'Importing…' : 'Import CSV'}
+              {loading ? 'Importing…' : 'Import'}
             </Button>
           </DialogFooter>
         </form>

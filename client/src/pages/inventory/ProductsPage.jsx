@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpFromLine, Ban as BanIcon, Camera, Plus } from 'lucide-react'
+import { ArrowUpFromLine, Ban as BanIcon, Camera, Plus, Download } from 'lucide-react'
 import { ImportItemsDialog } from '@/components/feature/products/ImportItemsDialog'
 import { PrintBarcodeDialog } from '@/components/feature/products/PrintBarcodeDialog'
 import { ProductFilters } from '@/components/feature/products/ProductFilters'
@@ -236,7 +236,7 @@ export function ProductsPage() {
 
   async function handleExport() {
     const result = await exportCsv()
-    if (result.success) toastSuccess(`Exported ${result.data.exported} products (CSV)`)
+    if (result.success) toastSuccess(`Exported ${result.data.exported} products (Excel)`)
     else toastError(result.error || 'Export failed')
   }
 
@@ -301,12 +301,23 @@ export function ProductsPage() {
                 <ArrowUpFromLine className="size-4" />
                 Import
               </Button>
-              <ExportCsvButton
+              {/* <ExportCsvButton
                 onClick={handleExport}
                 disabled={mutating}
                 label="Export"
-                title="Export products to CSV"
-              />
+                title="Export products to Excel"
+              /> */}
+              <Button
+                type="button"
+                variant="outline"
+                className="cursor-pointer"
+                style={{ color: BRAND.deep }}
+                disabled={mutating}
+                onClick={handleExport}
+              >
+                <Download className="size-4" />
+                {mutating ? 'Exporting…' : 'Export'}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -460,12 +471,11 @@ export function ProductsPage() {
         description={
           deleteTarget
             ? deleteIsActive
-              ? `${deleteTarget.name || 'This product'} can be deactivated (keeps history) or permanently removed when eligible.`
-              : `${deleteTarget.name || 'This product'} is inactive. ${
-                  canPermanentDelete
-                    ? 'You can permanently remove it from the catalog.'
-                    : 'It cannot be permanently deleted because it has linked records or stock.'
-                }`
+              ? `${deleteTarget.name || 'This product'} can be deactivated (keeps history) or permanently removed when unused (no POS sales, not in a bundle, no stock).`
+              : `${deleteTarget.name || 'This product'} is inactive. ${canPermanentDelete
+                ? 'You can permanently remove it from the catalog.'
+                : 'Permanent delete is blocked (bundle, POS invoice/return, or stock). Deactivate instead.'
+              }`
             : null
         }
         softLabel="Deactivate"
@@ -475,7 +485,7 @@ export function ProductsPage() {
         canHardDelete={canPermanentDelete}
         hardDisabledReason={
           deleteInfo?.reason ||
-          'Linked stock or purchase history blocks permanent delete. Deactivate instead.'
+          'Permanent delete blocked (bundle, POS sales, or stock). Deactivate instead.'
         }
         loading={deleteLoading || mutating}
         onSoftDelete={handleDeactivateFromDelete}

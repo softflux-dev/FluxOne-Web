@@ -393,7 +393,7 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
   const { rows: products } = await tenantQuery(
     tenantId,
     `
-      SELECT id, quantity, status
+      SELECT id, quantity, status, type
       FROM products
       WHERE tenant_id = $1 AND id = $2
         ${branchClause('', 3)}
@@ -404,11 +404,20 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
   const product = products[0]
   if (!product) return { found: false, canPermanentDelete: false }
 
+  // Bundles: soft-deactivate only (preserve recipe / dissolve path)
+  if (product.type === PRODUCT_TYPES.BUNDLE) {
+    return {
+      found: true,
+      canPermanentDelete: false,
+      reason: 'Bundles can only be deactivated, not permanently deleted',
+    }
+  }
+
   if (Number(product.quantity) > 0) {
     return {
       found: true,
       canPermanentDelete: false,
-      reason: 'Product has stock on hand',
+      reason: 'Product has stock on hand — clear stock or deactivate instead',
     }
   }
 
@@ -425,33 +434,53 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
     return {
       found: true,
       canPermanentDelete: false,
-      reason: 'Product has branch inventory stock',
+      reason: 'Product has branch inventory stock — clear stock or deactivate instead',
     }
   }
 
-  const checks = [
-    {
-      sql: `SELECT 1 FROM sale_items WHERE tenant_id = $1 AND product_id = $2 LIMIT 1`,
-      reason: 'Product has sales history',
-    },
-    {
-      sql: `SELECT 1 FROM inventory_ledger WHERE tenant_id = $1 AND product_id = $2 LIMIT 1`,
-      reason: 'Product has inventory ledger history',
-    },
-    {
-      sql: `SELECT 1 FROM bundle_items WHERE tenant_id = $1 AND item_id = $2 LIMIT 1`,
-      reason: 'Product is used in a bundle',
-    },
-    {
-      sql: `SELECT 1 FROM purchase_order_items WHERE tenant_id = $1 AND product_id = $2 LIMIT 1`,
-      reason: 'Product has purchase order history',
-    },
-  ]
+  // Include variant children — permanent delete cascades to SKUs
+  const productScope = `(product_id = $2 OR product_id IN (
+    SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
+  ))`
+  const itemScope = `(item_id = $2 OR item_id IN (
+    SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
+  ))`
 
-  for (const check of checks) {
-    const { rows } = await tenantQuery(tenantId, check.sql, [id])
-    if (rows[0]) {
-      return { found: true, canPermanentDelete: false, reason: check.reason }
+  // POS invoice / sale / return / refund lines
+  const { rows: saleRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT 1
+      FROM sale_items
+      WHERE tenant_id = $1 AND ${productScope}
+      LIMIT 1
+    `,
+    [id],
+  )
+  if (saleRows[0]) {
+    return {
+      found: true,
+      canPermanentDelete: false,
+      reason: 'Product was used in POS sales (invoice / return / refund) — deactivate instead',
+    }
+  }
+
+  // Component of any bundle
+  const { rows: bundleRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT 1
+      FROM bundle_items
+      WHERE tenant_id = $1 AND ${itemScope}
+      LIMIT 1
+    `,
+    [id],
+  )
+  if (bundleRows[0]) {
+    return {
+      found: true,
+      canPermanentDelete: false,
+      reason: 'Product is used in a bundle — deactivate instead',
     }
   }
 

@@ -42,12 +42,15 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
 }
 
-// FluxOne branded Excel-compatible HTML (.xls) — purple header + zebra rows
+// FluxOne branded Excel-compatible HTML (.xls) — purple header + optional row colors
 export function exportRowsToStyledExcel({
   filename,
   headers = [],
   rows = [],
   sheetName = 'Export',
+  rowStyles = null, // optional [{ background }] per data row
+  freezeHeader = false,
+  enableFilter = false,
 }) {
   if (!rows?.length) {
     throw new Error('No rows to export')
@@ -55,6 +58,8 @@ export function exportRowsToStyledExcel({
 
   const headerBg = BRAND.deep || '#412283'
   const zebraBg = BRAND.soft || '#f3e8f5'
+  const colCount = headers.length
+  const lastColLetter = excelColLetter(Math.max(colCount, 1))
 
   const headCells = headers
     .map(
@@ -65,7 +70,9 @@ export function exportRowsToStyledExcel({
 
   const bodyRows = rows
     .map((row, index) => {
-      const bg = index % 2 === 1 ? zebraBg : '#ffffff'
+      // Prefer explicit row style; else zebra striping
+      const styleBg = Array.isArray(rowStyles) ? rowStyles[index]?.background : null
+      const bg = styleBg || (index % 2 === 1 ? zebraBg : '#ffffff')
       const cells = row
         .map(
           (cell) =>
@@ -76,6 +83,14 @@ export function exportRowsToStyledExcel({
     })
     .join('')
 
+  // Excel XML options — freeze top row + autofilter when requested
+  const freezeXml = freezeHeader
+    ? `<x:FreezePanes/><x:FrozenNoSplit/><x:SplitHorizontal>1</x:SplitHorizontal><x:TopRowBottomPane>1</x:TopRowBottomPane><x:ActivePane>2</x:ActivePane>`
+    : ''
+  const filterAttr = enableFilter
+    ? ` x:autofilterrange="A1:${lastColLetter}${rows.length + 1}"`
+    : ''
+
   const html = `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:x="urn:schemas-microsoft-com:office:excel"
@@ -85,12 +100,12 @@ export function exportRowsToStyledExcel({
 <!--[if gte mso 9]><xml>
  <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
   <x:Name>${escapeHtml(sheetName)}</x:Name>
-  <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+  <x:WorksheetOptions><x:DisplayGridlines/>${freezeXml}</x:WorksheetOptions>
  </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
 </xml><![endif]-->
 </head>
 <body>
-<table>
+<table${filterAttr}>
   <thead><tr>${headCells}</tr></thead>
   <tbody>${bodyRows}</tbody>
 </table>
@@ -107,4 +122,16 @@ export function exportRowsToStyledExcel({
     : `${safeName}.xls`
   anchor.click()
   URL.revokeObjectURL(url)
+}
+
+// 1 → A, 26 → Z, 27 → AA
+function excelColLetter(n) {
+  let num = Math.max(1, Number(n) || 1)
+  let letters = ''
+  while (num > 0) {
+    const rem = (num - 1) % 26
+    letters = String.fromCharCode(65 + rem) + letters
+    num = Math.floor((num - 1) / 26)
+  }
+  return letters
 }

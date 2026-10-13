@@ -750,6 +750,10 @@ async function applyOpeningStockInTx(client, tenantId, {
 }
 
 async function insertProductRow(client, tenantId, row) {
+  // Same as addProduct controller: optional client code, else server generates searchable item_code
+  const itemCode = String(row.itemCode || '').trim() || generateItemCode()
+  const barcode = String(row.barcode || '').trim() || generateBarcodeValue()
+
   const { rows } = await tenantClientQuery(
     client,
     tenantId,
@@ -777,11 +781,11 @@ async function insertProductRow(client, tenantId, row) {
       row.categoryId || null,
       row.subcategoryId || null,
       row.type,
-      row.itemCode,
+      itemCode,
       row.name,
       row.imageUrl || null,
       row.scale || 'unit',
-      row.barcode,
+      barcode,
       row.description || null,
       row.purchasePrice ?? 0,
       row.sellingPrice ?? 0,

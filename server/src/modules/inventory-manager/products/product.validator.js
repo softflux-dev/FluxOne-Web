@@ -229,9 +229,15 @@ export const importItemsSchema = z.object({
       .array(
         z.object({
           rowKind: z.enum(['product', 'variant', 'bundle_item']).optional().default('product'),
-          // sku kept for legacy clients; prefer itemCode
+          // File-local refs for variant/bundle linking (itemCode is never imported — server generates)
+          importRef: z.string().optional(),
+          parentRef: z.string().optional(),
+          componentRef: z.string().optional(),
+          // Legacy aliases still accepted then ignored for identity (mapped to refs server-side)
           sku: z.string().optional(),
           itemCode: z.string().optional(),
+          parentItemCode: z.string().optional(),
+          componentItemCode: z.string().optional(),
           name: z.string().optional(),
           barcode: z.string().optional(),
           type: z
@@ -262,10 +268,8 @@ export const importItemsSchema = z.object({
               }
               return undefined
             }),
-          parentItemCode: z.string().optional(),
           variantLabel: z.string().optional(),
           variantOptions: z.string().optional(),
-          componentItemCode: z.string().optional(),
           componentQty: z.coerce.number().positive().optional(),
         }),
       )

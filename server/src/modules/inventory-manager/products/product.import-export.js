@@ -1,8 +1,9 @@
-// Full-catalog Import / Export — category resolve-or-create, singles / variants / bundles.
+﻿// Full-catalog Import / Export — category resolve-or-create, singles / variants / bundles.
+// Import never uses file itemCodes — server generates UUID + searchable item_code.
 import crypto from 'crypto'
 import { tenantQuery } from '../../../config/db.js'
 import { PRODUCT_TYPES } from '../../../config/constants.js'
-import { generateBarcodeValue } from '../../../utils/barcode.util.js'
+import { generateBarcodeValue, generateItemCode } from '../../../utils/barcode.util.js'
 import { findOrCreateTaxByRate } from '../../../utils/tax.util.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 import { createCategory, createProduct } from './product.model.js'
@@ -26,7 +27,7 @@ function catKey(parentId, name) {
   return `${parentId || 'root'}::${normName(name).toLowerCase()}`
 }
 
-// Parse "Color:Red|Size:M" → parts for createVariantProduct
+// Parse "Color:Red|Size:M" â†’ parts for createVariantProduct
 export function parseVariantOptions(raw) {
   const text = String(raw || '').trim()
   if (!text) return []
@@ -54,10 +55,11 @@ export function parseVariantOptions(raw) {
     .filter((p) => p.valueName)
 }
 
+// Export-friendly: "Color: Red|Size: M" (parser still accepts Color:Red|Size:M)
 export function formatVariantOptions(parts = []) {
   return (parts || [])
-    .map((p) => `${p.typeName || p.type_name || 'Option'}:${p.valueName || p.value_name || ''}`)
-    .filter((s) => !s.endsWith(':'))
+    .map((p) => `${p.typeName || p.type_name || 'Option'}: ${p.valueName || p.value_name || ''}`)
+    .filter((s) => !s.endsWith(':') && !s.endsWith(': '))
     .join('|')
 }
 
@@ -88,7 +90,7 @@ async function resolveOrCreateCategory(tenantId, branchId, name, parentId = null
 
   if (rows[0]) {
     if (!rows[0].isActive) {
-      // Soft-deleted name reuse — reactivate via createCategory path (handles unique)
+      // Soft-deleted name reuse â€” reactivate via createCategory path (handles unique)
       const revived = await createCategory(tenantId, {
         name: trimmed,
         parentId,
@@ -177,7 +179,9 @@ async function loadVariantChildren(tenantId, parentId) {
         c.variant_label AS "variantLabel",
         c.daily_price_change AS "dailyPriceChange"
       FROM products c
-      WHERE c.tenant_id = $1 AND c.parent_id = $2
+      WHERE c.tenant_id = $1
+        AND c.parent_id = $2
+        AND c.status = 'active'
       ORDER BY c.variant_label ASC NULLS LAST, c.created_at ASC
     `,
     [parentId],
@@ -219,11 +223,14 @@ async function loadBundleComponents(tenantId, bundleId) {
     tenantId,
     `
       SELECT
+        cp.id,
         cp.item_code AS "itemCode",
         bi.quantity
       FROM bundle_items bi
       JOIN products cp ON cp.id = bi.item_id AND cp.tenant_id = bi.tenant_id
-      WHERE bi.tenant_id = $1 AND bi.bundle_id = $2
+      WHERE bi.tenant_id = $1
+        AND bi.bundle_id = $2
+        AND cp.status = 'active'
       ORDER BY cp.name
     `,
     [bundleId],
@@ -234,7 +241,7 @@ async function loadBundleComponents(tenantId, bundleId) {
 function emptyExportFields() {
   return {
     rowKind: 'product',
-    itemCode: '',
+    importRef: '',
     name: '',
     barcode: '',
     type: 'single',
@@ -251,22 +258,26 @@ function emptyExportFields() {
     offerName: '',
     taxPercent: '',
     dailyPriceChange: '',
-    parentItemCode: '',
+    parentRef: '',
     variantLabel: '',
     variantOptions: '',
-    componentItemCode: '',
+    componentRef: '',
     componentQty: '',
   }
 }
 
-// Build flat CSV rows for the whole catalog (parents + variant children + bundle lines).
+function nextImportRef(counter) {
+  return `R${counter}`
+}
+
+// Build flat export rows â€” no itemCode (re-import always creates new products).
+// File-local importRef / parentRef / componentRef link variants & bundles.
 export async function buildProductExportRows(tenantId, { branchId = null } = {}) {
   const { rows: parents } = await tenantQuery(
     tenantId,
     `
       SELECT
         p.id,
-        p.item_code AS "itemCode",
         p.name,
         p.barcode,
         p.type,
@@ -295,18 +306,38 @@ export async function buildProductExportRows(tenantId, { branchId = null } = {})
       ) tax ON true
       WHERE p.tenant_id = $1
         AND p.parent_id IS NULL
+        AND p.status = 'active'
         ${branchClause('p', 2)}
       ORDER BY p.created_at DESC
     `,
     [branchId],
   )
 
+  // Pass 1: assign file-local refs for every parent + component product id we may need
+  let refSeq = 0
+  const idToRef = new Map()
+  for (const p of parents) {
+    idToRef.set(p.id, nextImportRef(++refSeq))
+  }
+
+  // Ensure bundle components (active singles) have refs even if not in parent list order
+  for (const p of parents) {
+    if (p.type !== PRODUCT_TYPES.BUNDLE) continue
+    const components = await loadBundleComponents(tenantId, p.id)
+    for (const comp of components) {
+      if (comp.id && !idToRef.has(comp.id)) {
+        idToRef.set(comp.id, nextImportRef(++refSeq))
+      }
+    }
+  }
+
   const collected = []
   for (const p of parents) {
+    const parentRef = idToRef.get(p.id)
     const base = {
       ...emptyExportFields(),
       rowKind: 'product',
-      itemCode: p.itemCode || '',
+      importRef: parentRef,
       name: p.name || '',
       barcode: p.barcode || '',
       type: p.type || PRODUCT_TYPES.SINGLE,
@@ -329,10 +360,11 @@ export async function buildProductExportRows(tenantId, { branchId = null } = {})
     if (p.type === PRODUCT_TYPES.VARIANT) {
       const children = await loadVariantChildren(tenantId, p.id)
       for (const child of children) {
+        const childRef = nextImportRef(++refSeq)
         collected.push({
           ...emptyExportFields(),
           rowKind: 'variant',
-          itemCode: child.itemCode || '',
+          importRef: childRef,
           name: child.name || p.name || '',
           barcode: child.barcode || '',
           type: PRODUCT_TYPES.SINGLE,
@@ -348,7 +380,7 @@ export async function buildProductExportRows(tenantId, { branchId = null } = {})
           discountPercent: child.discountPercent ?? 0,
           taxPercent: base.taxPercent,
           dailyPriceChange: Boolean(child.dailyPriceChange),
-          parentItemCode: p.itemCode || '',
+          parentRef,
           variantLabel: child.variantLabel || '',
           variantOptions: formatVariantOptions(child.parts),
         })
@@ -361,8 +393,9 @@ export async function buildProductExportRows(tenantId, { branchId = null } = {})
         collected.push({
           ...emptyExportFields(),
           rowKind: 'bundle_item',
-          parentItemCode: p.itemCode || '',
-          componentItemCode: comp.itemCode || '',
+          name: p.name || '',
+          parentRef,
+          componentRef: idToRef.get(comp.id) || '',
           componentQty: Number(comp.quantity) || 1,
         })
       }
@@ -372,15 +405,38 @@ export async function buildProductExportRows(tenantId, { branchId = null } = {})
   return collected
 }
 
+function rowImportRef(row) {
+  return normName(row.importRef || row.itemCode || row.sku)
+}
+
+function rowParentRef(row) {
+  return normName(row.parentRef || row.parentItemCode)
+}
+
+function rowComponentRef(row) {
+  return normName(row.componentRef || row.componentItemCode)
+}
+
 function groupRows(rows) {
   const products = []
   const variantsByParent = new Map()
   const bundleItemsByParent = new Map()
 
+  // Auto-assign importRef for product rows missing one (template friendliness)
+  let auto = 0
+  for (const row of rows) {
+    const kind = String(row.rowKind || 'product').toLowerCase()
+    if (kind === 'product' || kind === 'variant' || kind === 'bundle_item' || kind === 'bundleitem') {
+      if (kind === 'product' && !rowImportRef(row)) {
+        row.importRef = nextImportRef(++auto)
+      }
+    }
+  }
+
   for (const row of rows) {
     const kind = String(row.rowKind || 'product').toLowerCase()
     if (kind === 'variant') {
-      const parent = normName(row.parentItemCode)
+      const parent = rowParentRef(row)
       if (!parent) continue
       const bucket = variantsByParent.get(parent) || []
       bucket.push(row)
@@ -388,7 +444,7 @@ function groupRows(rows) {
       continue
     }
     if (kind === 'bundle_item' || kind === 'bundleitem') {
-      const parent = normName(row.parentItemCode)
+      const parent = rowParentRef(row)
       if (!parent) continue
       const bucket = bundleItemsByParent.get(parent) || []
       bucket.push(row)
@@ -406,7 +462,7 @@ async function resolveTaxIdsForRow(tenantId, row) {
     return undefined // tenant default
   }
   const taxId = await findOrCreateTaxByRate(tenantId, row.taxPercent)
-  if (taxId === null) return [] // 0% / invalid → exempt
+  if (taxId === null) return [] // 0% / invalid â†’ exempt
   return [taxId]
 }
 
@@ -416,11 +472,8 @@ function normalizeStatus(status) {
 }
 
 async function importOneSingle(tenantId, branchId, row, categoryCache, createdBy) {
-  const sku = normName(row.itemCode || row.sku)
-  const existing = await findProductIdByItemCode(tenantId, branchId, sku)
-  if (existing) {
-    throw httpError(409, `Item code already exists (${sku})`)
-  }
+  const name = normName(row.name)
+  if (!name) throw httpError(422, 'Product name is required')
 
   const { categoryId, subcategoryId } = await resolveCategoryPair(
     tenantId,
@@ -432,15 +485,16 @@ async function importOneSingle(tenantId, branchId, row, categoryCache, createdBy
   const offerId = await findOfferIdByName(tenantId, row.offerName)
   const taxIds = await resolveTaxIdsForRow(tenantId, row)
 
+  // Always create new — server generates UUID + human-readable itemCode
   return createProduct(tenantId, {
-    name: normName(row.name),
+    name,
     categoryId,
     subcategoryId,
     branchId,
     type: PRODUCT_TYPES.SINGLE,
     scale: row.scale || 'unit',
-    itemCode: sku,
-    barcode: normName(row.barcode) || generateBarcodeValue(),
+    itemCode: generateItemCode(),
+    barcode: generateBarcodeValue(),
     purchasePrice: Number(row.purchasePrice) || 0,
     sellingPrice: Number(row.sellingPrice) || 0,
     quantity: Number(row.quantity) || 0,
@@ -456,13 +510,10 @@ async function importOneSingle(tenantId, branchId, row, categoryCache, createdBy
 }
 
 async function importOneVariant(tenantId, branchId, parentRow, childRows, categoryCache, createdBy) {
-  const parentSku = normName(parentRow.itemCode || parentRow.sku)
-  const existing = await findProductIdByItemCode(tenantId, branchId, parentSku)
-  if (existing) {
-    throw httpError(409, `Item code already exists (${parentSku})`)
-  }
+  const name = normName(parentRow.name)
+  if (!name) throw httpError(422, 'Variant product name is required')
   if (!childRows.length) {
-    throw httpError(422, `Variant “${parentSku}” needs at least one variant row`)
+    throw httpError(422, `Variant “${name}” needs at least one variant row`)
   }
 
   const { categoryId, subcategoryId } = await resolveCategoryPair(
@@ -491,8 +542,6 @@ async function importOneVariant(tenantId, branchId, parentRow, childRows, catego
     }
     return {
       label,
-      itemCode: normName(child.itemCode || child.sku),
-      barcode: normName(child.barcode) || generateBarcodeValue(),
       purchasePrice: Number(child.purchasePrice) || 0,
       sellingPrice: Number(child.sellingPrice) || 0,
       quantity: Number(child.quantity) || 0,
@@ -507,14 +556,14 @@ async function importOneVariant(tenantId, branchId, parentRow, childRows, catego
   })
 
   return createProduct(tenantId, {
-    name: normName(parentRow.name),
+    name,
     categoryId,
     subcategoryId,
     branchId,
     type: PRODUCT_TYPES.VARIANT,
     scale: parentRow.scale || 'unit',
-    itemCode: parentSku,
-    barcode: normName(parentRow.barcode) || generateBarcodeValue(),
+    itemCode: generateItemCode(),
+    barcode: generateBarcodeValue(),
     description: parentRow.description || undefined,
     discountPercent:
       parentRow.discountPercent == null || parentRow.discountPercent === ''
@@ -529,25 +578,30 @@ async function importOneVariant(tenantId, branchId, parentRow, childRows, catego
   })
 }
 
-async function importOneBundle(tenantId, branchId, parentRow, componentRows, categoryCache, createdBy) {
-  const bundleSku = normName(parentRow.itemCode || parentRow.sku)
-  const existing = await findProductIdByItemCode(tenantId, branchId, bundleSku)
-  if (existing) {
-    throw httpError(409, `Item code already exists (${bundleSku})`)
-  }
+async function importOneBundle(
+  tenantId,
+  branchId,
+  parentRow,
+  componentRows,
+  categoryCache,
+  createdBy,
+  createdByRef,
+) {
+  const name = normName(parentRow.name)
+  if (!name) throw httpError(422, 'Bundle name is required')
   if (!componentRows.length) {
-    throw httpError(422, `Bundle “${bundleSku}” needs at least one bundle_item row`)
+    throw httpError(422, `Bundle “${name}” needs at least one bundle_item row`)
   }
 
   const bundleItems = []
   for (const comp of componentRows) {
-    const code = normName(comp.componentItemCode)
-    const found = await findProductIdByItemCode(tenantId, branchId, code)
+    const ref = rowComponentRef(comp)
+    const found = createdByRef.get(ref)
     if (!found) {
-      throw httpError(422, `Bundle component not found: ${code}`)
+      throw httpError(422, `Bundle component not found for ref: ${ref || '(empty)'}`)
     }
     if (found.type === PRODUCT_TYPES.VARIANT || found.parentId) {
-      throw httpError(422, `Bundle component must be a single SKU: ${code}`)
+      throw httpError(422, `Bundle component must be a single product (ref ${ref})`)
     }
     bundleItems.push({
       itemId: found.id,
@@ -566,14 +620,14 @@ async function importOneBundle(tenantId, branchId, parentRow, componentRows, cat
   const taxIds = await resolveTaxIdsForRow(tenantId, parentRow)
 
   return createProduct(tenantId, {
-    name: normName(parentRow.name),
+    name,
     categoryId,
     subcategoryId,
     branchId,
     type: PRODUCT_TYPES.BUNDLE,
     scale: parentRow.scale || 'unit',
-    itemCode: bundleSku,
-    barcode: normName(parentRow.barcode) || generateBarcodeValue(),
+    itemCode: generateItemCode(),
+    barcode: generateBarcodeValue(),
     purchasePrice: Number(parentRow.purchasePrice) || 0,
     sellingPrice: Number(parentRow.sellingPrice) || 0,
     quantity: Number(parentRow.quantity) || 0,
@@ -595,7 +649,7 @@ async function importOneBundle(tenantId, branchId, parentRow, componentRows, cat
   })
 }
 
-// Import full catalog rows (create-only; duplicate itemCode → row error).
+// Import always creates new products (new UUID + generated itemCode). File itemCodes ignored.
 export async function importCatalogRows(tenantId, rows, { branchId, createdBy = null } = {}) {
   if (!branchId) throw httpError(422, 'branchId is required to import products')
   if (!Array.isArray(rows) || !rows.length) {
@@ -618,26 +672,27 @@ export async function importCatalogRows(tenantId, rows, { branchId, createdBy = 
 
   const created = []
   const errors = []
+  const createdByRef = new Map()
 
-  // 1) Singles first — bundles may reference them
   for (const [index, row] of singles.entries()) {
+    const ref = rowImportRef(row)
     try {
       const product = await importOneSingle(tenantId, branchId, row, categoryCache, createdBy)
       created.push(product)
+      if (ref) createdByRef.set(ref, product)
     } catch (err) {
       errors.push(
         err?.code === '23505'
-          ? `Single row ${index + 1}: item code or barcode already exists (${row.itemCode || row.sku})`
+          ? `Single row ${index + 1}: barcode already exists`
           : err?.message || `Single row ${index + 1}: import failed`,
       )
     }
   }
 
-  // 2) Variants (+ child rows keyed by parent itemCode)
   for (const [index, row] of variants.entries()) {
-    const parentSku = normName(row.itemCode || row.sku)
+    const parentRef = rowImportRef(row)
     try {
-      const children = variantsByParent.get(parentSku) || []
+      const children = variantsByParent.get(parentRef) || []
       const product = await importOneVariant(
         tenantId,
         branchId,
@@ -647,20 +702,20 @@ export async function importCatalogRows(tenantId, rows, { branchId, createdBy = 
         createdBy,
       )
       created.push(product)
+      if (parentRef) createdByRef.set(parentRef, product)
     } catch (err) {
       errors.push(
         err?.code === '23505'
-          ? `Variant “${parentSku}”: item code or barcode already exists`
+          ? `Variant “${normName(row.name) || parentRef}”: barcode already exists`
           : err?.message || `Variant row ${index + 1}: import failed`,
       )
     }
   }
 
-  // 3) Bundles (+ component rows)
   for (const [index, row] of bundles.entries()) {
-    const bundleSku = normName(row.itemCode || row.sku)
+    const bundleRef = rowImportRef(row)
     try {
-      const components = bundleItemsByParent.get(bundleSku) || []
+      const components = bundleItemsByParent.get(bundleRef) || []
       const product = await importOneBundle(
         tenantId,
         branchId,
@@ -668,29 +723,30 @@ export async function importCatalogRows(tenantId, rows, { branchId, createdBy = 
         components,
         categoryCache,
         createdBy,
+        createdByRef,
       )
       created.push(product)
+      if (bundleRef) createdByRef.set(bundleRef, product)
     } catch (err) {
       errors.push(
         err?.code === '23505'
-          ? `Bundle “${bundleSku}”: item code or barcode already exists`
+          ? `Bundle “${normName(row.name) || bundleRef}”: barcode already exists`
           : err?.message || `Bundle row ${index + 1}: import failed`,
       )
     }
   }
 
-  // Orphan child rows (parent product row missing)
-  for (const [parentSku, children] of variantsByParent.entries()) {
-    if (variants.some((v) => normName(v.itemCode || v.sku) === parentSku)) continue
+  for (const [parentRef, children] of variantsByParent.entries()) {
+    if (variants.some((v) => rowImportRef(v) === parentRef)) continue
     errors.push(
-      `Variant children for “${parentSku}” skipped — add a product row with type=variant`,
+      `Variant children for “${parentRef}” skipped — add a product row with type=variant and matching Import Ref`,
     )
     void children
   }
-  for (const [parentSku] of bundleItemsByParent.entries()) {
-    if (bundles.some((b) => normName(b.itemCode || b.sku) === parentSku)) continue
+  for (const [parentRef] of bundleItemsByParent.entries()) {
+    if (bundles.some((b) => rowImportRef(b) === parentRef)) continue
     errors.push(
-      `Bundle items for “${parentSku}” skipped — add a product row with type=bundle`,
+      `Bundle items for “${parentRef}” skipped — add a product row with type=bundle and matching Import Ref`,
     )
   }
 

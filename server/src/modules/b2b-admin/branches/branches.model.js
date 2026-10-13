@@ -439,7 +439,7 @@ export async function setBranchStatus(tenantId, id, status) {
         tenantId,
         `
           UPDATE staff
-          SET status = 'blocked'
+          SET status = 'inactive'
           WHERE tenant_id = $1
             AND branch_id = $2
             AND status = 'active'
@@ -469,7 +469,7 @@ export async function setBranchStatus(tenantId, id, status) {
           SET status = 'active'
           WHERE tenant_id = $1
             AND branch_id = $2
-            AND status = 'blocked'
+            AND status = 'inactive'
         `,
         [id],
       )

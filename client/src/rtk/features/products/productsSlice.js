@@ -4,11 +4,10 @@ import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { API_BASE_URL } from '@/lib/constants'
 import {
-  downloadTextFile,
   mapProduct,
   splitProductWrite,
 } from '@/lib/mapProduct'
-import { productsToCsv } from '@/lib/productCsv'
+import { exportProductsToStyledExcel } from '@/lib/productExport'
 import {
   catalogToState,
   getProductCatalog,
@@ -295,17 +294,18 @@ export const deleteProduct = createAsyncThunk(
 export const exportProductsCsv = createAsyncThunk(
   'products/exportCsv',
   async (_, { rejectWithValue }) => {
-    // Server builds the same flat rows Import accepts (1:1)
+    // Server flat rows (parents + variants + bundle items) → styled Excel
     const result = await apiClient.get(endpoints.products.export)
     if (!result.success) return rejectWithValue(result.error || 'Export failed')
     const rows = Array.isArray(result.data?.rows) ? result.data.rows : []
     if (!rows.length) return rejectWithValue('No products to export')
-    downloadTextFile(
-      `fluxone-products-${new Date().toISOString().slice(0, 10)}.csv`,
-      productsToCsv(rows),
-    )
-    const exported = result.data?.exported ?? rows.filter((r) => r.rowKind === 'product').length
-    return { success: true, data: { exported } }
+    const { exported } = exportProductsToStyledExcel(rows)
+    return {
+      success: true,
+      data: {
+        exported: result.data?.exported ?? exported,
+      },
+    }
   },
 )
 
