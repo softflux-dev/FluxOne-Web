@@ -1,9 +1,20 @@
 import { cn } from '@/lib/utils'
 
-// Clamp text to 1 or 2 lines; full string on native hover tooltip
-export function TruncatedText({ text = '', lines = 1, className, as: Comp = 'p', ...props }) {
+// Clamp by lines and/or max character count; full string on native hover tooltip
+export function TruncatedText({
+  text = '',
+  lines = 1,
+  maxChars,
+  className,
+  as: Comp = 'p',
+  ...props
+}) {
   const value = text == null ? '' : String(text)
-  const clampClass = lines >= 2 ? 'line-clamp-2' : 'truncate'
+  const limit = Number(maxChars)
+  const useChars = Number.isFinite(limit) && limit > 0
+  const display =
+    useChars && value.length > limit ? `${value.slice(0, limit).trimEnd()}…` : value
+  const clampClass = useChars ? '' : lines >= 2 ? 'line-clamp-2' : 'truncate'
 
   return (
     <Comp
@@ -11,7 +22,7 @@ export function TruncatedText({ text = '', lines = 1, className, as: Comp = 'p',
       title={value || undefined}
       {...props}
     >
-      {value}
+      {display}
     </Comp>
   )
 }

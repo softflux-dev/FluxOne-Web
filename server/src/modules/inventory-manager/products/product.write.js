@@ -349,8 +349,8 @@ export async function deleteCategory(tenantId, id, { branchId = null } = {}) {
     throw httpError(
       409,
       `Cannot delete this ${label}: ${deps.productCount} product(s) assigned` +
-        (deps.subcategoryCount > 0 ? ` and ${deps.subcategoryCount} subcategor(ies)` : '') +
-        '. Deactivate or reassign products first.',
+      (deps.subcategoryCount > 0 ? ` and ${deps.subcategoryCount} subcategor(ies)` : '') +
+      '. Deactivate or reassign products first.',
     )
   }
 
@@ -1450,41 +1450,41 @@ async function syncVariantChildrenInTx(
         Number(owned[0].purchasePrice) !== Number(purchasePrice) ||
         Number(owned[0].sellingPrice) !== Number(sellingPrice)
       // Enable → pending (NULL). Already-on + price edit → stamped today.
-      let dailyUpdatedOnSql = 'daily_price_updated_on'
+      // Otherwise omit the column so the old stamp is kept.
+      let dailyUpdatedOnSql = ''
       if (nextDaily && !wasDaily) {
-        dailyUpdatedOnSql = 'daily_price_updated_on = NULL'
+        dailyUpdatedOnSql = 'daily_price_updated_on = NULL,'
       } else if (nextDaily && pricesChanged) {
-        dailyUpdatedOnSql = 'daily_price_updated_on = CURRENT_DATE'
+        dailyUpdatedOnSql = 'daily_price_updated_on = CURRENT_DATE,'
       }
-
       await tenantClientQuery(
         client,
         tenantId,
         `
-          UPDATE products SET
-            name = $3,
-            item_code = $4,
-            barcode = $5,
-            purchase_price = $6,
-            last_selling_price = CASE
-              WHEN selling_price IS DISTINCT FROM $7::numeric THEN selling_price
-              ELSE last_selling_price
-            END,
-            selling_price = $7::numeric,
-            reorder_point = $8,
-            daily_price_change = $9::boolean,
-            ${dailyUpdatedOnSql},
-            status = $10,
-            variant_label = $11,
-            category_id = $12,
-            subcategory_id = $13,
-            image_url = $14,
-            offer_id = $15,
-            discount_percent = $16::numeric,
-            profit_percent = $17::numeric,
-            updated_at = now()
-          WHERE tenant_id = $1 AND id = $2
-        `,
+    UPDATE products SET
+      name = $3,
+      item_code = $4,
+      barcode = $5,
+      purchase_price = $6,
+      last_selling_price = CASE
+        WHEN selling_price IS DISTINCT FROM $7::numeric THEN selling_price
+        ELSE last_selling_price
+      END,
+      selling_price = $7::numeric,
+      reorder_point = $8,
+      daily_price_change = $9::boolean,
+      ${dailyUpdatedOnSql}
+      status = $10,
+      variant_label = $11,
+      category_id = $12,
+      subcategory_id = $13,
+      image_url = $14,
+      offer_id = $15,
+      discount_percent = $16::numeric,
+      profit_percent = $17::numeric,
+      updated_at = now()
+    WHERE tenant_id = $1 AND id = $2
+  `,
         [
           variant.id,
           parentName,

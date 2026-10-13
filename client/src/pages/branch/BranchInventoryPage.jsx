@@ -25,6 +25,7 @@ import { BRAND } from '@/lib/constants'
 import { formatMoney } from '@/lib/currency'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { CategoryLines } from '@/components/shared/CategoryLines'
+import { TruncatedText } from '@/components/shared/TruncatedText'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { CATEGORY_ACTIVE_QUERY } from '@/lib/productCatalogCache'
 import { filterActiveCategories } from '@/lib/mapProduct'
@@ -278,7 +279,11 @@ export function BranchInventoryPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-bold text-slate-900">{prod.name}</p>
+                              <TruncatedText
+                                text={prod.name}
+                                maxChars={10}
+                                className="text-sm font-bold text-slate-900"
+                              />
                               <p className="font-mono text-[11px] text-slate-400">
                                 Item code: {displayItemCode(prod)}
                               </p>
@@ -319,19 +324,15 @@ export function BranchInventoryPage() {
               </div>
 
               <div className="hidden overflow-x-auto md:block">
-                <Table className="min-w-[44rem] w-full text-left text-sm">
+                <Table className="w-full min-w-[44rem] table-fixed text-left text-sm">
                   <TableHeader>
                     <TableRow className="text-xs text-slate-500 uppercase">
-                      <TableHead className="px-2 py-3 whitespace-nowrap">Image</TableHead>
-                      <TableHead className="px-2 py-3 whitespace-nowrap min-w-[10rem]">Name</TableHead>
-                      <TableHead className="px-2 py-3 whitespace-nowrap min-w-[8rem]">
-                        Category
-                      </TableHead>
-                      <TableHead className="px-2 py-3 whitespace-nowrap">In Stock</TableHead>
-                      <TableHead className="px-2 py-3 whitespace-nowrap">Status</TableHead>
-                      <TableHead className="sticky right-0 z-[1] bg-slate-200/80 px-2 py-3 whitespace-nowrap">
-                        Actions
-                      </TableHead>
+                      <TableHead className="w-14 px-2 py-3 whitespace-nowrap">Image</TableHead>
+                      <TableHead className="w-[10rem] px-2 py-3 whitespace-nowrap">Name</TableHead>
+                      <TableHead className="px-2 py-3 whitespace-nowrap">Category</TableHead>
+                      <TableHead className="w-[7rem] px-2 py-3 whitespace-nowrap">In Stock</TableHead>
+                      <TableHead className="w-[7rem] px-2 py-3 whitespace-nowrap">Status</TableHead>
+                      <TableHead className="w-[9rem] px-2 py-3 whitespace-nowrap">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -355,20 +356,24 @@ export function BranchInventoryPage() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="px-2 py-3">
-                            <div className="font-bold text-slate-900">{prod.name}</div>
-                            <div className="font-mono text-[10px] text-slate-400">
+                          <TableCell className="max-w-[10rem] overflow-hidden px-2 py-3">
+                            <TruncatedText
+                              text={prod.name}
+                              maxChars={10}
+                              className="font-bold text-slate-900"
+                            />
+                            <div className="truncate font-mono text-[10px] text-slate-400">
                               Item code: {displayItemCode(prod)}
                             </div>
                           </TableCell>
-                          <TableCell className="px-2 py-3 text-slate-600">
+                          <TableCell className="overflow-hidden px-2 py-3 text-slate-600">
                             <CategoryLines
                               category={cat !== '—' ? cat : ''}
                               subcategory={subcat !== '—' ? subcat : ''}
                               emptyLabel="—"
                             />
                           </TableCell>
-                          <TableCell className="px-2 py-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          <TableCell className="px-2 py-3 font-mono font-bold whitespace-nowrap text-slate-900">
                             {parseFloat(prod.quantity || 0).toLocaleString()}{' '}
                             <span className="text-[10px] font-normal text-slate-400">
                               {prod.scale || 'pcs'}
@@ -379,7 +384,7 @@ export function BranchInventoryPage() {
                               {status.label}
                             </Badge>
                           </TableCell>
-                          <TableCell className="sticky right-0 z-[1] bg-white px-2 py-3 group-hover:bg-slate-50/80">
+                          <TableCell className="px-2 py-3">
                             <Button
                               size="sm"
                               variant="outline"

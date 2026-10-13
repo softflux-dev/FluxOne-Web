@@ -459,7 +459,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
         status,
         image: image || undefined,
         sellingPrice: price,
-        purchasePrice: 0,
+        // purchasePrice: 0,
         quantity: nextQty,
         ...taxPayload,
         profitPercent: profitNum,

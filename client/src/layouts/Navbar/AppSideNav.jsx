@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, Menu, Moon, ScrollText, Sun, UserRound, X } from 'lucide-react'
+import { LogOut, Menu, Moon, Sun, UserRound, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { UserAvatar } from '@/components/shared/UserAvatar'
 import { useAuthSession } from '@/hooks/useAuthSession'
 import { useTheme } from '@/context/ThemeContext'
-import { BRAND, ROLES } from '@/lib/constants'
-import { roleDisplayName } from '@/lib/nav'
+import { BRAND } from '@/lib/constants'
+import { getSideNavItemsForRole, roleDisplayName } from '@/lib/nav'
 import { cn } from '@/lib/utils'
 import { PATHS, profilePathForRole } from '@/router/paths'
 
@@ -82,13 +82,15 @@ function AccountActions({ onClose }) {
   const { role, logout } = useAuthSession()
   const { theme, toggleTheme } = useTheme()
   const profilePath = profilePathForRole(role)
+  // Profile / Logs already listed in SIDE_NAV_BY_ROLE — avoid footer duplicates
+  const sideHasProfile = getSideNavItemsForRole(role).some((item) => item.to === profilePath)
   const isDark = theme === 'dark'
   const itemClass =
     'flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.99] dark:text-slate-300 dark:hover:bg-muted'
 
   return (
     <div className="mt-auto space-y-1 border-t border-border p-3">
-      {role === ROLES.B2B_ADMIN ? null : (
+      {sideHasProfile ? null : (
         <button
           type="button"
           className={itemClass}
@@ -105,19 +107,6 @@ function AccountActions({ onClose }) {
         {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
         {isDark ? 'Light mode' : 'Dark mode'}
       </button>
-      {role === ROLES.BRANCH_MANAGER ? (
-        <button
-          type="button"
-          className={itemClass}
-          onClick={() => {
-            onClose()
-            navigate(PATHS.branch.logs)
-          }}
-        >
-          <ScrollText className="size-4" />
-          Logs
-        </button>
-      ) : null}
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 active:scale-[0.99] dark:text-red-400 dark:hover:bg-red-950/40"

@@ -62,6 +62,18 @@ export function displayOrderRef(row = {}) {
   return id ? referenceFromUuid(id, 'PO') : '—'
 }
 
+// Prefer sale_number (e.g. INV-1023) → SAL-INV-1023; fall back to SAL-XXXXXXXX from UUID.
+export function displaySaleRef(row = {}) {
+  const num = row.saleNumber || row.sale_number
+  if (num) {
+    const s = String(num).trim()
+    if (!s) return '—'
+    return /^sal[-_]/i.test(s) ? s.toUpperCase().replace(/^sal[-_]/i, 'SAL-') : `SAL-${s}`
+  }
+  const id = row.id || row.saleId
+  return id ? referenceFromUuid(id, 'SAL') : '—'
+}
+
 /** Prefer real product item_code; fall back to ITM-XXXXXXXX from UUID. */
 export function displayItemCode(row = {}) {
   const code = row.itemCode || row.item_code

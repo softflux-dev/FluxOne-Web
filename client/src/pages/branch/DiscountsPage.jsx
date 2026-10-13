@@ -266,7 +266,7 @@ export function DiscountsPage() {
                       <TableHead className="px-2 py-3">Offer name</TableHead>
                       <TableHead className="px-2 py-3">Category</TableHead>
                       <TableHead className="px-2 py-3">Discount %</TableHead>
-                      <TableActionsHead sticky />
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -289,12 +289,12 @@ export function DiscountsPage() {
                               {parseFloat(disc.percent)}% OFF
                             </Badge>
                           </TableCell>
-                          <TableActionsCell sticky>
+                          <TableCell>
                             <RowActionButtons
                               onEdit={() => handleOpenEdit(disc)}
                               onDelete={() => handleDeleteDiscount(disc.id)}
                             />
-                          </TableActionsCell>
+                          </TableCell>
                         </TableRow>
                       ))}
                   </TableBody>
