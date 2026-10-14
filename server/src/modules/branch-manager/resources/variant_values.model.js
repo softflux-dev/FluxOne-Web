@@ -21,6 +21,7 @@ const valueSelect = `
   vt.name AS "variantTypeName",
   vv.name,
   vv.is_active AS "isActive",
+  vv.branch_id AS "branchId",
   vv.created_at AS "createdAt",
   vv.updated_at AS "updatedAt"
 `
@@ -37,7 +38,7 @@ function normalizeName(name) {
 
 export async function listVariantValues(
   tenantId,
-  { q, variantTypeId, active = 'all' } = {},
+  { q, variantTypeId, active = 'all', branchId = null } = {},
 ) {
   const search = q ? String(q).trim() : null
   const typeId = variantTypeId || null
@@ -53,20 +54,21 @@ export async function listVariantValues(
        AND vt.tenant_id = vv.tenant_id
       WHERE vv.tenant_id = $1
         ${activeClause}
-        AND ($2::uuid IS NULL OR vv.variant_type_id = $2)
+        AND ($2::uuid IS NULL OR vv.branch_id = $2)
+        AND ($3::uuid IS NULL OR vv.variant_type_id = $3)
         AND (
-          $3::text IS NULL
-          OR vv.name ILIKE '%' || $3 || '%'
-          OR vt.name ILIKE '%' || $3 || '%'
+          $4::text IS NULL
+          OR vv.name ILIKE '%' || $4 || '%'
+          OR vt.name ILIKE '%' || $4 || '%'
         )
       ORDER BY vt.name ASC, vv.name ASC
     `,
-    [typeId, search],
+    [branchId, typeId, search],
   )
   return rows
 }
 
-export async function getVariantValueById(tenantId, id) {
+export async function getVariantValueById(tenantId, id, { branchId = null } = {}) {
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -76,15 +78,21 @@ export async function getVariantValueById(tenantId, id) {
         ON vt.id = vv.variant_type_id
        AND vt.tenant_id = vv.tenant_id
       WHERE vv.tenant_id = $1 AND vv.id = $2
+        AND ($3::uuid IS NULL OR vv.branch_id = $3)
       LIMIT 1
     `,
-    [id],
+    [id, branchId],
   )
   return rows[0] || null
 }
 
-async function assertTypeInTenant(tenantId, variantTypeId, { requireActive = false } = {}) {
-  const type = await getVariantTypeById(tenantId, variantTypeId)
+async function assertTypeInBranch(
+  tenantId,
+  variantTypeId,
+  branchId,
+  { requireActive = false } = {},
+) {
+  const type = await getVariantTypeById(tenantId, variantTypeId, { branchId })
   if (!type) {
     throw httpError(404, 'Variant type not found')
   }
@@ -96,25 +104,28 @@ async function assertTypeInTenant(tenantId, variantTypeId, { requireActive = fal
 
 export async function createVariantValue(
   tenantId,
-  { variantTypeId, name, isActive = true },
+  { variantTypeId, name, isActive = true, branchId },
 ) {
   const valueName = normalizeName(name)
   if (!valueName) throw httpError(400, 'Variant value name is required')
   if (!variantTypeId) throw httpError(400, 'Variant type is required')
+  if (!branchId) throw httpError(400, 'branchId is required')
 
-  await assertTypeInTenant(tenantId, variantTypeId, { requireActive: true })
+  const type = await assertTypeInBranch(tenantId, variantTypeId, branchId, {
+    requireActive: true,
+  })
 
   try {
     const { rows } = await tenantQuery(
       tenantId,
       `
-        INSERT INTO variant_values (tenant_id, variant_type_id, name, is_active)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO variant_values (tenant_id, branch_id, variant_type_id, name, is_active)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id
       `,
-      [variantTypeId, valueName, Boolean(isActive)],
+      [branchId, type.id, valueName, Boolean(isActive)],
     )
-    return getVariantValueById(tenantId, rows[0].id)
+    return getVariantValueById(tenantId, rows[0].id, { branchId })
   } catch (err) {
     mapPgUniqueViolation(err, 'Variant value name already exists under this type')
   }
@@ -124,16 +135,22 @@ export async function updateVariantValue(
   tenantId,
   id,
   { variantTypeId, name, isActive },
+  { branchId = null } = {},
 ) {
-  const existing = await getVariantValueById(tenantId, id)
+  const existing = await getVariantValueById(tenantId, id, { branchId })
   if (!existing) return null
 
   const setClauses = ['updated_at = now()']
   const params = [id]
 
   if (variantTypeId !== undefined) {
-    await assertTypeInTenant(tenantId, variantTypeId, { requireActive: true })
-    params.push(variantTypeId)
+    const type = await assertTypeInBranch(
+      tenantId,
+      variantTypeId,
+      branchId || existing.branchId,
+      { requireActive: true },
+    )
+    params.push(type.id)
     setClauses.push(`variant_type_id = $${params.length + 1}`)
   }
 
@@ -149,6 +166,9 @@ export async function updateVariantValue(
     setClauses.push(`is_active = $${params.length + 1}`)
   }
 
+  params.push(branchId)
+  const branchParam = params.length + 1
+
   try {
     const { rows } = await tenantQuery(
       tenantId,
@@ -156,28 +176,30 @@ export async function updateVariantValue(
         UPDATE variant_values
         SET ${setClauses.join(', ')}
         WHERE tenant_id = $1 AND id = $2
+          AND ($${branchParam}::uuid IS NULL OR branch_id = $${branchParam})
         RETURNING id
       `,
       params,
     )
     if (!rows[0]) return null
-    return getVariantValueById(tenantId, id)
+    return getVariantValueById(tenantId, id, { branchId })
   } catch (err) {
     mapPgUniqueViolation(err, 'Variant value name already exists under this type')
   }
 }
 
-export async function deleteVariantValue(tenantId, id) {
-  const existing = await getVariantValueById(tenantId, id)
+export async function deleteVariantValue(tenantId, id, { branchId = null } = {}) {
+  const existing = await getVariantValueById(tenantId, id, { branchId })
   if (!existing) return null
-
-  // Product-variant dependency checks land when Variant Product is built.
-  // Until then, values may be deleted freely (tenant-scoped).
 
   const { rowCount } = await tenantQuery(
     tenantId,
-    `DELETE FROM variant_values WHERE tenant_id = $1 AND id = $2`,
-    [id],
+    `
+      DELETE FROM variant_values
+      WHERE tenant_id = $1 AND id = $2
+        AND ($3::uuid IS NULL OR branch_id = $3)
+    `,
+    [id, branchId],
   )
 
   if (rowCount === 0) return null

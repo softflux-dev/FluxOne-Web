@@ -1,11 +1,13 @@
 import { z } from 'zod'
-import { empty, idParams, optionalUuid } from '../shared.validator.js'
+import { empty, idParams, optionalString, optionalUuid } from '../shared.validator.js'
 
 export const listDiscountsSchema = z.object({
   body: empty,
   params: empty,
   query: z.object({
     categoryId: optionalUuid,
+    // Search by offer name or id fragment (OFF-… / uuid)
+    q: optionalString,
   }),
 })
 

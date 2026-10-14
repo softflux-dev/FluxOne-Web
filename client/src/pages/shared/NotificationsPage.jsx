@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { toastError, toastSuccess } from '@/lib/toast'
@@ -13,14 +11,13 @@ import { displayNotification } from '@/lib/notificationDisplay'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { cn } from '@/lib/utils'
 
-// Full notification inbox for Admin or Branch Manager
+// Full notification inbox — mark as read only (no wipe / delete from inbox)
 export function NotificationsPage() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('all') // all | unread
-  const [deleteTarget, setDeleteTarget] = useState(null)
   const [mutating, setMutating] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -43,30 +40,25 @@ export function NotificationsPage() {
   }, [refresh])
 
   const markRead = async (id) => {
-    await apiClient.patch(endpoints.notifications.read(id))
+    const res = await apiClient.patch(endpoints.notifications.read(id))
+    if (!res.success) {
+      toastError(res.error || 'Failed to mark as read')
+      return
+    }
     void refresh()
   }
 
+  // Production pattern — mark all read, never delete the inbox
   const markAll = async () => {
     setMutating(true)
-    await apiClient.patch(endpoints.notifications.readAll)
+    const res = await apiClient.patch(endpoints.notifications.readAll)
     setMutating(false)
+    if (!res.success) {
+      toastError(res.error || 'Failed to mark all as read')
+      return
+    }
     toastSuccess('All notifications marked as read')
     void refresh()
-  }
-
-  const removeOne = async () => {
-    if (!deleteTarget) return
-    setMutating(true)
-    const res = await apiClient.delete(endpoints.notifications.remove(deleteTarget.id))
-    setMutating(false)
-    if (res.success) {
-      toastSuccess('Notification deleted')
-      setDeleteTarget(null)
-      void refresh()
-    } else {
-      toastError(res.error || 'Failed to delete')
-    }
   }
 
   const openItem = async (n) => {
@@ -80,7 +72,7 @@ export function NotificationsPage() {
         <PageHeader
           eyebrow="Inbox"
           title="Notifications"
-          description="All alerts for your account — mark as read or delete"
+          description="All alerts for your account — mark as read to clear the unread badge"
           actions={
             unreadCount > 0 ? (
               <Button type="button" variant="outline" disabled={mutating} onClick={markAll}>
@@ -119,79 +111,60 @@ export function NotificationsPage() {
               {items.map((n) => {
                 const { title, body } = displayNotification(n)
                 return (
-                <li
-                  key={n.id}
-                  className={cn(
-                    'flex items-start gap-3 py-3',
-                    !n.isRead && 'bg-purple-50/30',
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 cursor-pointer text-left"
-                    onClick={() => openItem(n)}
+                  <li
+                    key={n.id}
+                    className={cn(
+                      'flex items-start gap-3 py-3',
+                      !n.isRead && 'bg-purple-50/30',
+                    )}
                   >
-                    <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 cursor-pointer text-left"
+                      onClick={() => openItem(n)}
+                    >
+                      <div className="flex items-center gap-2">
+                        {!n.isRead ? (
+                          <span className="size-2 shrink-0 rounded-full bg-[#8E238F]" />
+                        ) : (
+                          <span className="size-2 shrink-0" />
+                        )}
+                        <p className="text-sm font-semibold text-slate-900">{title}</p>
+                      </div>
+                      {body ? (
+                        <p className="mt-0.5 pl-4 whitespace-normal break-words text-xs leading-relaxed text-slate-600">
+                          {body}
+                        </p>
+                      ) : null}
+                      <div className="mt-1 pl-4 text-[11px] text-slate-400">
+                        <DateTimeLines
+                          value={n.createdAt}
+                          timeClassName="text-[11px] text-slate-400"
+                        />
+                        {n.linkPath ? (
+                          <span className="mt-0.5 block">Click to open</span>
+                        ) : null}
+                      </div>
+                    </button>
+                    <div className="flex shrink-0 gap-1">
                       {!n.isRead ? (
-                        <span className="size-2 shrink-0 rounded-full bg-[#8E238F]" />
-                      ) : (
-                        <span className="size-2 shrink-0" />
-                      )}
-                      <p className="text-sm font-semibold text-slate-900">{title}</p>
-                    </div>
-                    {body ? (
-                      <p className="mt-0.5 pl-4 whitespace-normal break-words text-xs leading-relaxed text-slate-600">
-                        {body}
-                      </p>
-                    ) : null}
-                    <div className="mt-1 pl-4 text-[11px] text-slate-400">
-                      <DateTimeLines
-                        value={n.createdAt}
-                        timeClassName="text-[11px] text-slate-400"
-                      />
-                      {n.linkPath ? (
-                        <span className="mt-0.5 block">Click to open</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => markRead(n.id)}
+                        >
+                          Mark read
+                        </Button>
                       ) : null}
                     </div>
-                  </button>
-                  <div className="flex shrink-0 gap-1">
-                    {!n.isRead ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 text-xs"
-                        onClick={() => markRead(n.id)}
-                      >
-                        Mark read
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-8 text-slate-400 hover:text-red-600"
-                      onClick={() => setDeleteTarget(n)}
-                      aria-label="Delete notification"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </li>
+                  </li>
                 )
               })}
             </ul>
           )}
         </SurfaceCard>
       </MotionReveal>
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete notification?"
-        description="This removes the notification from your inbox. It cannot be undone."
-        confirmLabel="Delete"
-        loading={mutating}
-        onConfirm={removeOne}
-      />
     </div>
   )
 }

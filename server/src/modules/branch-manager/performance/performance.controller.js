@@ -1,5 +1,6 @@
 import { tenantQuery } from '../../../config/db.js'
 import { ROLES } from '../../../config/constants.js'
+import { resolveListBranchId } from '../staff/staff.access.js'
 import { success, fail, failFromError } from '../../../utils/response.util.js'
 
 function slugify(text) {
@@ -9,6 +10,16 @@ function slugify(text) {
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '_')
     .replace(/^-+|-+$/g, '')
+}
+
+// BM locked to JWT branch for roster / score writes
+function requireBranchId(req) {
+  try {
+    return resolveListBranchId(req, null)
+  } catch (err) {
+    err.status = err.status || 403
+    throw err
+  }
 }
 
 const SCALE_RETURNING = `
@@ -50,6 +61,7 @@ const WEIGHTED_RATING_SQL = `
 `
 
 export async function listScales(req, res) {
+  // Scoring scales stay tenant-level (shared catalog) — not branch-owned
   const { rows } = await tenantQuery(
     req.tenantId,
     `
@@ -170,22 +182,30 @@ export async function scoreStaff(req, res) {
   const numericPoints = points
 
   try {
-    // Block scoring Branch Manager / self — BM evaluates managed staff only
+    const branchId = requireBranchId(req)
+    if (!branchId) {
+      return fail(res, 'Performance scoring requires a branch assignment', 400)
+    }
+
+    // Block scoring Branch Manager / self — and enforce same-branch staff only
     const { rows: targetRows } = await tenantQuery(
       req.tenantId,
       `
         SELECT
           s.user_id AS "userId",
+          s.branch_id AS "branchId",
           r.slug AS role,
           COALESCE(d.name, s.designation) AS "designation"
         FROM staff s
         LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
         LEFT JOIN roles r ON r.id = u.role_id
         LEFT JOIN designations d ON d.id = s.designation_id
-        WHERE s.tenant_id = $1 AND s.id = $2
+        WHERE s.tenant_id = $1
+          AND s.id = $2
+          AND s.branch_id = $3
         LIMIT 1
       `,
-      [staffId],
+      [staffId, branchId],
     )
     if (targetRows.length === 0) {
       return fail(res, 'Staff member not found', 404)
@@ -243,15 +263,21 @@ export async function scoreStaff(req, res) {
   }
 }
 
-// Aggregated scores for managed staff only — excludes Branch Manager / self
+// TC-performance roster-002 — roster is branch-scoped (not tenant-wide)
 export async function getStaffScores(req, res) {
   try {
+    const branchId = requireBranchId(req)
+    if (!branchId) {
+      return fail(res, 'Performance roster requires a branch assignment', 400)
+    }
+
     const { rows } = await tenantQuery(
       req.tenantId,
       `
         SELECT 
           s.id AS "staffId",
           s.user_id AS "userId",
+          s.branch_id AS "branchId",
           u.full_name AS "fullName",
           s.image_url AS "imageUrl",
           s.designation_id AS "designationId",
@@ -263,14 +289,15 @@ export async function getStaffScores(req, res) {
         LEFT JOIN roles r ON r.id = u.role_id
         LEFT JOIN designations d ON d.id = s.designation_id
         WHERE s.tenant_id = $1
+          AND s.branch_id = $2
           AND s.status = 'active'
-          AND (r.slug IS NULL OR r.slug <> $2)
-          AND ($3::uuid IS NULL OR s.user_id IS DISTINCT FROM $3::uuid)
+          AND (r.slug IS NULL OR r.slug <> $3)
+          AND ($4::uuid IS NULL OR s.user_id IS DISTINCT FROM $4::uuid)
           AND (d.name IS NULL OR d.name !~* 'branch\\s*manager')
           AND (s.designation IS NULL OR s.designation !~* 'branch\\s*manager')
         ORDER BY u.full_name ASC
       `,
-      [ROLES.BRANCH_MANAGER, req.user?.id || null],
+      [branchId, ROLES.BRANCH_MANAGER, req.user?.id || null],
     )
     return success(res, rows)
   } catch (err) {

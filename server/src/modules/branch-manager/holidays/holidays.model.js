@@ -22,7 +22,7 @@ function formatDate(val) {
 }
 
 export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
-  // 1. Active staff count (for "All Employees" display)
+  // 1. Active staff count for this branch (All Employees display)
   const { rows: staffCountRows } = await tenantQuery(
     tenantId,
     `
@@ -38,7 +38,7 @@ export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
   )
   const totalActiveStaff = staffCountRows[0]?.totalStaff || 0
 
-  // 2. Schedules + employee id list only (no per-row staff name join — UI resolves names)
+  // 2. Branch-owned schedules only — never leak null/other-branch rows to a BM
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -59,7 +59,10 @@ export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
       LEFT JOIN holiday_schedule_staff hss
         ON hss.holiday_schedule_id = hs.id AND hss.tenant_id = hs.tenant_id
       WHERE hs.tenant_id = $1
-        AND ($2::uuid IS NULL OR hs.branch_id IS NULL OR hs.branch_id = $2)
+        AND (
+          ($2::uuid IS NULL AND hs.branch_id IS NOT NULL)
+          OR hs.branch_id = $2
+        )
       GROUP BY hs.id
       ORDER BY hs.start_date DESC, hs.created_at DESC
     `,
@@ -92,7 +95,7 @@ export async function listHolidaySchedules(tenantId, { branchId = null } = {}) {
   })
 }
 
-export async function getHolidayScheduleById(tenantId, id) {
+export async function getHolidayScheduleById(tenantId, id, { branchId = null } = {}) {
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -128,11 +131,13 @@ export async function getHolidayScheduleById(tenantId, id) {
         ON u.id = s.user_id AND u.tenant_id = s.tenant_id
       LEFT JOIN designations d
         ON d.id = s.designation_id AND d.tenant_id = s.tenant_id
-      WHERE hs.tenant_id = $1 AND hs.id = $2
+      WHERE hs.tenant_id = $1
+        AND hs.id = $2
+        AND ($3::uuid IS NULL OR hs.branch_id = $3)
       GROUP BY hs.id
       LIMIT 1
     `,
-    [id],
+    [id, branchId],
   )
   if (!rows[0]) return null
   const row = rows[0]
@@ -159,6 +164,9 @@ export async function createHolidaySchedule(
   tenantId,
   { name, startDate, endDate, isAllEmployees = true, employeeIds = [], status = 'active', branchId = null },
 ) {
+  // Holidays are branch-owned — never create unscoped (null branch_id) rows
+  if (!branchId) throw httpError(400, 'branchId is required for holiday schedules')
+
   return withTransaction(async (client) => {
     const sDate = formatDate(startDate)
     const eDate = formatDate(endDate || startDate)
@@ -300,18 +308,20 @@ export async function updateHolidaySchedule(
   })
 }
 
-export async function deleteHolidaySchedule(tenantId, id) {
-  const existing = await getHolidayScheduleById(tenantId, id)
+export async function deleteHolidaySchedule(tenantId, id, { branchId = null } = {}) {
+  const existing = await getHolidayScheduleById(tenantId, id, { branchId })
   if (!existing) return null
 
   const { rows } = await tenantQuery(
     tenantId,
     `
       DELETE FROM holiday_schedules
-      WHERE tenant_id = $1 AND id = $2
+      WHERE tenant_id = $1
+        AND id = $2
+        AND ($3::uuid IS NULL OR branch_id = $3)
       RETURNING id, name, start_date AS "startDate", end_date AS "endDate"
     `,
-    [id],
+    [id, branchId],
   )
   return rows[0] || null
 }

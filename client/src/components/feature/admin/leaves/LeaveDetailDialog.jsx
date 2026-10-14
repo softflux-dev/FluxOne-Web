@@ -11,12 +11,14 @@ import { formatDateLine } from '@/lib/formatDateTime'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { cn } from '@/lib/utils'
 
-// Decision options for pending leave — Pending → Approved / Rejected (TC-Leave-03s)
+// TC-BM-leave-002 — Admin decides Pending leave; Pending is system status only (not selectable)
 const DECISION_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
 ]
+
+// Empty = no decision yet (Confirm stays disabled until Approved / Rejected)
+const UNSET_DECISION = ''
 
 function displayLeaveRef(row = {}) {
   return row.id ? referenceFromUuid(row.id, 'LV') : '—'
@@ -60,8 +62,8 @@ function DetailRow({ label, children }) {
   )
 }
 
-// use reusable components if possible — FormDialog (dirty / discard / no outside close)
-// mode="admin" → decide pending leaves · mode="self" → BM read-only details (Image 1 pattern)
+// use reusable FormDialog — dirty / discard / no outside close
+// mode="admin" → decide pending leaves · mode="self" → BM read-only details
 export function LeaveDetailDialog({
   open,
   onOpenChange,
@@ -74,17 +76,21 @@ export function LeaveDetailDialog({
 }) {
   const isSelf = mode === 'self'
   const isPending = !isSelf && row?.status === 'pending'
-  const [decisionStatus, setDecisionStatus] = useState('pending')
+  const [decisionStatus, setDecisionStatus] = useState(UNSET_DECISION)
   const [decisionReason, setDecisionReason] = useState('')
   const { captureBaseline, isDirty } = useFormBaseline(open)
 
   useEffect(() => {
     if (!open || !row) return
-    const nextStatus = isPending && presetDecision ? presetDecision : 'pending'
+    // Only pre-fill when table icon passed Approved / Rejected
+    const nextStatus =
+      isPending && (presetDecision === 'approved' || presetDecision === 'rejected')
+        ? presetDecision
+        : UNSET_DECISION
     setDecisionStatus(nextStatus)
     setDecisionReason('')
-    // Baseline starts as Pending + empty reason so Approved/Rejected presets count as dirty
-    captureBaseline({ status: 'pending', reason: '' })
+    // Baseline = unset decision so choosing Approved/Rejected counts as dirty
+    captureBaseline({ status: UNSET_DECISION, reason: '' })
   }, [open, row, presetDecision, isPending, captureBaseline])
 
   const formSnapshot = useMemo(
@@ -93,16 +99,18 @@ export function LeaveDetailDialog({
   )
   const dirty = isPending ? isDirty(formSnapshot) : false
 
-  const showReasonBox = isPending && decisionStatus !== 'pending'
+  const hasDecision = decisionStatus === 'approved' || decisionStatus === 'rejected'
+  const showReasonBox = isPending && hasDecision
   const reasonRequired = decisionStatus === 'rejected'
 
+  // Confirm disabled until Admin picks Approved or Rejected (+ rejection reason if needed)
   const confirmDisabled =
     submitting ||
-    decisionStatus === 'pending' ||
+    !hasDecision ||
     (decisionStatus === 'rejected' && !decisionReason.trim())
 
   const handleConfirm = () => {
-    if (!isPending || decisionStatus === 'pending') return
+    if (!isPending || !hasDecision) return
     onConfirm?.({
       status: decisionStatus,
       decisionReason: decisionReason.trim(),
@@ -117,20 +125,25 @@ export function LeaveDetailDialog({
       onOpenChange={onOpenChange}
       dirty={dirty}
       title={`Leave Details — ${displayLeaveRef(row || {})}`}
-      // Admin view: no subtitle (redundant with title) — TC-Leave-03s
       description={
         isSelf ? 'Review your leave request and Admin decision comments.' : undefined
       }
       footer={
         isPending ? (
           <>
-            {/* Cancel / X use Dialog discard flow when dirty */}
             <DialogCancelButton>Cancel</DialogCancelButton>
             <Button
               type="button"
               variant="brand"
               disabled={confirmDisabled}
               onClick={handleConfirm}
+              title={
+                !hasDecision
+                  ? 'Select Approved or Rejected before confirming'
+                  : reasonRequired && !decisionReason.trim()
+                    ? 'Enter a rejection reason before confirming'
+                    : undefined
+              }
               className={
                 decisionStatus === 'rejected'
                   ? 'bg-red-600 text-white hover:bg-red-700'
@@ -192,13 +205,16 @@ export function LeaveDetailDialog({
 
                 <DetailRow label="Status">
                   {isPending ? (
-                    // Pending → editable decision dropdown
+                    // Only Approved / Rejected — Pending stays the existing record status
                     <NativeSelect
                       value={decisionStatus}
                       onChange={(e) => setDecisionStatus(e.target.value)}
                       className="max-w-xs"
                       aria-label="Leave decision status"
                     >
+                      <option value={UNSET_DECISION} disabled>
+                        Select decision…
+                      </option>
                       {DECISION_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}

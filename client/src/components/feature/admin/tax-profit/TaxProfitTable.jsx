@@ -12,9 +12,10 @@ import {
   TableCell,
   TablePagination,
 } from '@/components/ui/table'
-import { BRAND } from '@/lib/constants'
+import { BRAND, UI_RADIUS } from '@/lib/constants'
+import { cn } from '@/lib/utils'
 import { finalPriceFromCost } from '@/lib/pricing'
-import { Calculator, Loader2, PackageOpen, Percent } from 'lucide-react'
+import { BadgePercent, Loader2, PackageOpen, Receipt } from 'lucide-react'
 
 export function TaxProfitTable({
   currency,
@@ -55,10 +56,13 @@ export function TaxProfitTable({
             disabled={selectedIds.length === 0 || mutating}
             onClick={onOpenProfitDialog}
             size="sm"
-            className="h-9 px-3.5 text-xs font-bold cursor-pointer text-white disabled:opacity-40 rounded-xl shadow-xs"
+            className={cn(
+              'h-9 px-3.5 text-xs font-bold cursor-pointer text-white disabled:opacity-40 shadow-xs',
+              UI_RADIUS,
+            )}
             style={{ background: BRAND.purple }}
           >
-            <Percent className="mr-1.5 size-3.5" />
+            <BadgePercent className="mr-1.5 size-3.5" />
             Set Profit %
           </Button>
           <Button
@@ -66,10 +70,13 @@ export function TaxProfitTable({
             disabled={selectedIds.length === 0 || mutating}
             onClick={onOpenTaxDialog}
             size="sm"
-            className="h-9 px-3.5 text-xs font-bold cursor-pointer text-white disabled:opacity-40 rounded-xl shadow-xs"
+            className={cn(
+              'h-9 px-3.5 text-xs font-bold cursor-pointer text-white disabled:opacity-40 shadow-xs',
+              UI_RADIUS,
+            )}
             style={{ background: BRAND.deep }}
           >
-            <Calculator className="mr-1.5 size-3.5" />
+            <Receipt className="mr-1.5 size-3.5" />
             Set Tax %
           </Button>
         </div>

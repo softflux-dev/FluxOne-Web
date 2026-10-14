@@ -33,10 +33,11 @@ import {
 import { useAdminCompany } from '@/hooks/useAdminCompany'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useCurrency } from '@/hooks/useCurrency'
-import { BRAND } from '@/lib/constants'
+import { BRAND, UI_RADIUS } from '@/lib/constants'
 import { formatDateLine } from '@/lib/formatDateTime'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { ExportCsvButton } from '@/components/shared/ExportCsvButton'
+import { cn } from '@/lib/utils'
 import { downloadBillingInvoicePdf } from '@/lib/pdfDownload'
 import {
   exportInvoicesToExcel,
@@ -267,13 +268,21 @@ export function InvoicesPage() {
               placeholder="Search by Tracking ID or Source..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-border bg-slate-50/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-slate-900 outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-300"
+              className={cn(
+                'w-full border border-border bg-slate-50/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-slate-900 outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-300',
+                UI_RADIUS,
+              )}
             />
           </div>
 
-          {/* Month / Year — 8px radius to match export actions */}
+          {/* Month / Year — rectangular 8px radius (QA Bug 1) */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="flex items-center rounded-lg border border-border bg-white px-2.5 py-1.5">
+            <div
+              className={cn(
+                'flex items-center border border-border bg-white px-2.5 py-1.5',
+                UI_RADIUS,
+              )}
+            >
               <NativeSelect
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -288,7 +297,12 @@ export function InvoicesPage() {
               </NativeSelect>
             </div>
 
-            <div className="flex items-center rounded-lg border border-border bg-white px-2.5 py-1.5">
+            <div
+              className={cn(
+                'flex items-center border border-border bg-white px-2.5 py-1.5',
+                UI_RADIUS,
+              )}
+            >
               <NativeSelect
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}

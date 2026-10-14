@@ -689,9 +689,12 @@ export function EditItemPage() {
           ) : null}
 
           {tab === 'values' ? (
-            <div className="space-y-6">
+            // Two columns on sm+ so value pickers sit side-by-side and use less vertical space
+            <div className="grid gap-4 sm:grid-cols-2">
               {!selectedTypes.length ? (
-                <p className="text-sm text-slate-500">Select at least one variant type.</p>
+                <p className="text-sm text-slate-500 sm:col-span-2">
+                  Select at least one variant type.
+                </p>
               ) : (
                 selectedTypes.map((t) => (
                   <SearchableMultiSelect

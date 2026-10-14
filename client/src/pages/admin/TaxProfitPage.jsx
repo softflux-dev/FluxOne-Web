@@ -20,7 +20,8 @@ import {
 } from '@/hooks/useAdminTaxProfit'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useCurrency } from '@/hooks/useCurrency'
-import { BRAND } from '@/lib/constants'
+import { BRAND, UI_RADIUS } from '@/lib/constants'
+import { cn } from '@/lib/utils'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { validatePercentage } from '@/lib/validation/formValidators'
 import { exportTaxProfitCsv, exportTaxProfitPdf } from '@/lib/taxProfitExport'
@@ -356,7 +357,10 @@ export function TaxProfitPage() {
               <Button
                 type="button"
                 onClick={handleOpenDefaultTaxProfit}
-                className="h-10 px-3.5 text-xs font-bold cursor-pointer text-white rounded-xl shadow-xs transition-opacity hover:opacity-90 flex items-center gap-1.5"
+                className={cn(
+                  'h-10 px-3.5 text-xs font-bold cursor-pointer text-white shadow-xs transition-opacity hover:opacity-90 flex items-center gap-1.5',
+                  UI_RADIUS,
+                )}
                 style={{ background: BRAND.purple }}
               >
                 <Settings className="size-3.5" />

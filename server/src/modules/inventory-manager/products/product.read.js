@@ -38,10 +38,21 @@ export async function listTaxes(tenantId) {
   return rows
 }
 
-export async function listOffers(tenantId) {
+// Branch-scoped discount picker for IM product forms (TC-discount-002)
+export async function listOffers(tenantId, { branchId = null } = {}) {
   const { rows } = await tenantQuery(
     tenantId,
-    `SELECT id, name, percent FROM offers WHERE tenant_id = $1 ORDER BY name`,
+    `
+      SELECT id, name, percent, branch_id AS "branchId"
+      FROM offers
+      WHERE tenant_id = $1
+        AND (
+          ($2::uuid IS NULL AND branch_id IS NOT NULL)
+          OR branch_id = $2
+        )
+      ORDER BY name
+    `,
+    [branchId],
   )
   return rows
 }
@@ -413,11 +424,32 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
     }
   }
 
-  if (Number(product.quantity) > 0) {
+  // Include variant children — permanent delete cascades to SKUs
+  const productScope = `(product_id = $2 OR product_id IN (
+    SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
+  ))`
+  const itemScope = `(item_id = $2 OR item_id IN (
+    SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
+  ))`
+  const productIdScope = `(id = $2 OR parent_id = $2)`
+
+  // Stock on parent + SKUs — clear via stock-out before hard delete
+  const { rows: stockRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT COALESCE(sum(quantity), 0)::numeric AS total
+      FROM products
+      WHERE tenant_id = $1 AND ${productIdScope}
+    `,
+    [id],
+  )
+  const onHand = Number(stockRows[0]?.total || 0)
+  if (onHand > 0) {
     return {
       found: true,
       canPermanentDelete: false,
-      reason: 'Product has stock on hand — clear stock or deactivate instead',
+      stockOnHand: onHand,
+      reason: `This product has ${onHand} stock available — stock out first, then delete, or deactivate instead`,
     }
   }
 
@@ -426,25 +458,19 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
     `
       SELECT COALESCE(sum(quantity), 0)::numeric AS total
       FROM branch_inventory
-      WHERE tenant_id = $1 AND product_id = $2
+      WHERE tenant_id = $1 AND ${productScope}
     `,
     [id],
   )
-  if (Number(branchStock[0]?.total || 0) > 0) {
+  const branchOnHand = Number(branchStock[0]?.total || 0)
+  if (branchOnHand > 0) {
     return {
       found: true,
       canPermanentDelete: false,
-      reason: 'Product has branch inventory stock — clear stock or deactivate instead',
+      stockOnHand: branchOnHand,
+      reason: `This product has ${branchOnHand} branch stock available — stock out first, then delete, or deactivate instead`,
     }
   }
-
-  // Include variant children — permanent delete cascades to SKUs
-  const productScope = `(product_id = $2 OR product_id IN (
-    SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
-  ))`
-  const itemScope = `(item_id = $2 OR item_id IN (
-    SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
-  ))`
 
   // POS invoice / sale / return / refund lines
   const { rows: saleRows } = await tenantQuery(
@@ -484,5 +510,25 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
     }
   }
 
+  // Purchase order lines (RESTRICT FK)
+  const { rows: poRows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT 1
+      FROM purchase_order_items
+      WHERE tenant_id = $1 AND ${productScope}
+      LIMIT 1
+    `,
+    [id],
+  )
+  if (poRows[0]) {
+    return {
+      found: true,
+      canPermanentDelete: false,
+      reason: 'Product is on a purchase order — deactivate instead',
+    }
+  }
+
+  // Ledger-only history (e.g. opening stock) does not block — cleaned on permanent delete
   return { found: true, canPermanentDelete: true }
 }

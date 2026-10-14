@@ -14,8 +14,6 @@ import { DeleteEntityDialog } from '@/components/shared/DeleteEntityDialog'
 import { ExportCsvButton } from '@/components/shared/ExportCsvButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
-import { apiClient } from '@/api/api'
-import { endpoints } from '@/api/endpoints'
 import { useAppDispatch } from '@/rtk/hooks'
 import { asResult } from '@/rtk/asResult'
 import { createMovement as createMovementThunk } from '@/rtk/features/control/controlSlice'
@@ -65,6 +63,9 @@ export function ProductsPage() {
   const [selectedIds, setSelectedIds] = useState([])
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
+  // Per-id eligibility for bulk permanent delete (same rules as single Remove dialog)
+  const [bulkDeleteInfos, setBulkDeleteInfos] = useState([])
 
   // Add Stock → Stock In dialog, pre-seeded with the catalog row
   const [stockOpen, setStockOpen] = useState(false)
@@ -208,6 +209,29 @@ export function ProductsPage() {
     }
   }
 
+  async function openBulkDelete() {
+    if (!selectedIds.length) return
+    setBulkDeleteOpen(true)
+    setBulkDeleteInfos([])
+    setBulkDeleteLoading(true)
+    try {
+      const results = await Promise.all(
+        selectedIds.map(async (id) => {
+          const result = await fetchProductDeleteInfo(id)
+          return {
+            id,
+            found: Boolean(result.success && result.data?.found !== false),
+            canPermanentDelete: Boolean(result.success && result.data?.canPermanentDelete),
+            reason: result.success ? result.data?.reason : result.error,
+          }
+        }),
+      )
+      setBulkDeleteInfos(results)
+    } finally {
+      setBulkDeleteLoading(false)
+    }
+  }
+
   async function handleBulkDeactivate() {
     if (!selectedIds.length) return
     setBulkDeleting(true)
@@ -215,12 +239,13 @@ export function ProductsPage() {
       let ok = 0
       let failed = 0
       for (const id of selectedIds) {
-        const result = await apiClient.delete(endpoints.products.remove(id))
+        const result = await deleteProduct({ id, permanent: false })
         if (result.success) ok += 1
         else failed += 1
       }
       setSelectedIds([])
       setBulkDeleteOpen(false)
+      setBulkDeleteInfos([])
       void reload()
       if (ok && !failed) toastSuccess(`Deactivated ${ok} product${ok === 1 ? '' : 's'}`)
       else if (ok && failed) toastSuccess(`Deactivated ${ok}; ${failed} failed`)
@@ -230,9 +255,49 @@ export function ProductsPage() {
     }
   }
 
+  async function handleBulkPermanentDelete() {
+    if (!selectedIds.length || !bulkCanPermanentDelete) return
+    setBulkDeleting(true)
+    try {
+      let ok = 0
+      let failed = 0
+      for (const id of selectedIds) {
+        const result = await deleteProduct({ id, permanent: true })
+        if (result.success) ok += 1
+        else failed += 1
+      }
+      setSelectedIds([])
+      setBulkDeleteOpen(false)
+      setBulkDeleteInfos([])
+      void reload()
+      if (ok && !failed) toastSuccess(`Permanently deleted ${ok} product${ok === 1 ? '' : 's'}`)
+      else if (ok && failed) toastSuccess(`Deleted ${ok}; ${failed} failed`)
+      else toastError('Could not permanently delete selected products')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const deleteIsActive =
     deleteTarget?.status !== PRODUCT_STATUS.INACTIVE && deleteTarget?.status !== 'close'
   const canPermanentDelete = Boolean(deleteInfo?.canPermanentDelete)
+
+  const bulkCount = selectedIds.length
+  const bulkInfosReady = bulkDeleteInfos.length === bulkCount && bulkCount > 0
+  const bulkCanPermanentDelete =
+    bulkInfosReady && bulkDeleteInfos.every((row) => row.canPermanentDelete)
+  const bulkBlockedCount = bulkDeleteInfos.filter((row) => !row.canPermanentDelete).length
+  const bulkHardDisabledReason = !bulkInfosReady
+    ? 'Checking whether permanent delete is allowed…'
+    : bulkBlockedCount > 0
+      ? bulkDeleteInfos.find((row) => !row.canPermanentDelete)?.reason ||
+        `${bulkBlockedCount} selected product(s) cannot be permanently deleted (POS sales, bundle, or stock). Deactivate instead.`
+      : 'Linked records block permanent delete.'
+  const bulkDescription = bulkCount
+    ? bulkCanPermanentDelete
+      ? `${bulkCount} selected product${bulkCount === 1 ? '' : 's'} can be deactivated (keeps history) or permanently removed when unused (no POS sales, not in a bundle, no stock).`
+      : `${bulkCount} selected product${bulkCount === 1 ? '' : 's'}: deactivate hides them from active lists and POS sync. Permanent delete is blocked for ${bulkBlockedCount || 'some'} item(s) used in sales, a bundle, or with stock still on hand.`
+    : null
 
   async function handleExport() {
     const result = await exportCsv()
@@ -365,7 +430,7 @@ export function ProductsPage() {
           selectedIds={selectedIds}
           onSelectedIdsChange={setSelectedIds}
           bulkDeleting={bulkDeleting}
-          onBulkDelete={() => setBulkDeleteOpen(true)}
+          onBulkDelete={openBulkDelete}
           onPageChange={setPage}
           onPageSizeChange={(limit) => updateFilters({ limit })}
           onEdit={handleEdit}
@@ -443,20 +508,30 @@ export function ProductsPage() {
         onConfirm={handleConfirmDeactivate}
       />
 
-      <ConfirmDialog
+      {/* Bulk remove — same DeleteEntityDialog as single (deactivate + optional permanent) */}
+      <DeleteEntityDialog
         open={bulkDeleteOpen}
         onOpenChange={(open) => {
-          if (!open && !bulkDeleting) setBulkDeleteOpen(false)
+          if (!open && !bulkDeleting) {
+            setBulkDeleteOpen(false)
+            setBulkDeleteInfos([])
+          }
         }}
-        title="Delete selected products?"
-        description={
-          selectedIds.length
-            ? `${selectedIds.length} selected product${selectedIds.length === 1 ? '' : 's'} will be deactivated (hidden from active lists and POS sync). You can activate them again later. Permanent delete stays per-product.`
-            : undefined
+        title={
+          bulkCount === 1
+            ? 'Remove selected product?'
+            : `Remove ${bulkCount} selected products?`
         }
-        confirmLabel="Deactivate selected"
-        loading={bulkDeleting}
-        onConfirm={handleBulkDeactivate}
+        description={bulkDescription}
+        softLabel="Deactivate selected"
+        softHint="Hides from active lists and POS sync. You can activate them again later."
+        hardLabel="Permanently delete"
+        showSoftAction
+        canHardDelete={bulkCanPermanentDelete}
+        hardDisabledReason={bulkHardDisabledReason}
+        loading={bulkDeleting || bulkDeleteLoading || mutating}
+        onSoftDelete={handleBulkDeactivate}
+        onHardDelete={handleBulkPermanentDelete}
       />
 
       <DeleteEntityDialog

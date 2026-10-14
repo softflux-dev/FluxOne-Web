@@ -43,7 +43,7 @@ const emptyFilters = () => ({
 function lineFromProduct(product) {
   return {
     productId: product.id,
-    productName: product.name,
+    productName: product.productName || product.name || 'Item',
     itemCode: product.itemCode || '',
     scale: product.scale || 'unit',
     quantity: '1',

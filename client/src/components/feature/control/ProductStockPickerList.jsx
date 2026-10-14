@@ -3,11 +3,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { ProductImageCell } from '@/components/feature/products/ProductStatusToggle'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
-import { displayItemCode } from '@/lib/formatDisplayId'
 import { money, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { cn } from '@/lib/utils'
 
-// Scrollable checkbox list — selected rows expose qty + purchase/selling overrides.
+function productLabel(product) {
+  return product.productName || product.name || 'Item'
+}
+
+// One-line row: Select · Image · Name · Purchase · Selling · Qty
 export function ProductStockPickerList({
   products = [],
   selected = {},
@@ -42,59 +45,59 @@ export function ProductStockPickerList({
           if (isParentVariant) return null
           const line = selected[product.id]
           const checked = Boolean(line)
-          const meta = [product.scale, displayItemCode(product)].filter(Boolean).join(' · ')
+          const name = productLabel(product)
 
           return (
             <div
               key={product.id}
               className={cn(
-                'flex flex-col gap-2 border-b border-border px-3 py-2.5 last:border-b-0 sm:flex-row sm:items-center',
+                'flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0',
                 checked ? 'bg-purple-50/40' : 'hover:bg-slate-50/80',
               )}
             >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <Checkbox
-                  checked={checked}
-                  onChange={() => onToggle?.(product)}
-                  aria-label={`Select ${product.productName}`}
-                />
-                <ProductImageCell src={product.imageUrl} name={product.productName} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900">{product.productName}</p>
-                  {/* <p className="truncate text-xs text-slate-500">{meta}</p> */}
-                </div>
-              </div>
+              <Checkbox
+                checked={checked}
+                onChange={() => onToggle?.(product)}
+                aria-label={`Select ${name}`}
+                className="shrink-0"
+              />
+
+              <ProductImageCell src={product.imageUrl} name={name} />
+
+              <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900" title={name}>
+                {name}
+              </p>
 
               {checked ? (
-                <div className="grid w-full min-w-0 max-w-full grid-cols-3 gap-2 sm:max-w-sm">
-                  <div className="min-w-0 space-y-0.5">
+                <div className="flex shrink-0 items-end gap-2">
+                  <div className="w-[4.5rem] space-y-0.5">
                     <Label className="text-[10px] text-slate-400">Purchase</Label>
                     <WholeNumberInput
                       value={line.purchasePrice ?? ''}
                       placeholder={money(product.purchasePrice)}
-                      className="w-24 h-8 max-w-full"
+                      className="h-8 w-full"
                       onChange={(e) =>
                         onLineChange?.(product.id, { purchasePrice: e.target.value })
                       }
                     />
                   </div>
-                  <div className="min-w-0 space-y-0.5">
+                  <div className="w-[4.5rem] space-y-0.5">
                     <Label className="text-[10px] text-slate-400">Selling</Label>
                     <WholeNumberInput
                       value={line.sellingPrice ?? ''}
                       placeholder={money(product.sellingPrice)}
-                      className="w-16 h-8 max-w-full"
+                      className="h-8 w-full"
                       onChange={(e) =>
                         onLineChange?.(product.id, { sellingPrice: e.target.value })
                       }
                     />
                   </div>
-                  <div className="min-w-0 space-y-0.5">
+                  <div className="w-14 space-y-0.5">
                     <Label className="text-[10px] text-slate-400">Qty</Label>
                     <WholeNumberInput
                       min={1}
                       value={line.quantity ?? '1'}
-                      className="w-16 h-8 max-w-full"
+                      className="h-8 w-full"
                       onChange={(e) => onLineChange?.(product.id, { quantity: e.target.value })}
                     />
                   </div>

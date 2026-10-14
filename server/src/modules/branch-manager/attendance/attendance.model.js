@@ -67,24 +67,59 @@ export async function clearHolidayAttendanceByDate(tenantId, { workDate, note })
 }
 
 //
-// Batch clear — one DELETE for all dates in a holiday range (avoids N round-trips).
+// Batch clear — holiday marks for dates (+ optional branch / staff scope).
+// Always pass branchId or staffIds from holiday sync so other branches stay untouched.
 //
-export async function clearHolidayAttendanceByDates(tenantId, { dates, note }) {
+export async function clearHolidayAttendanceByDates(
+  tenantId,
+  { dates, note, branchId = null, staffIds = null },
+) {
   const list = Array.isArray(dates) ? dates.filter(Boolean) : []
   if (!list.length) return { rowCount: 0 }
 
-  const { rowCount } = await tenantQuery(
-    tenantId,
-    `
-      DELETE FROM attendance
-      WHERE tenant_id = $1
-        AND status = 'holiday'
-        AND work_date = ANY($2::date[])
-        AND ($3::text IS NULL OR note = $3)
-    `,
-    [list, note || null],
-  )
-  return { rowCount: rowCount || 0 }
+  const scopedStaff = Array.isArray(staffIds)
+    ? [...new Set(staffIds.filter(Boolean))]
+    : null
+
+  // Prefer explicit staff list (already branch-resolved by holiday sync)
+  if (scopedStaff?.length) {
+    const { rowCount } = await tenantQuery(
+      tenantId,
+      `
+        DELETE FROM attendance
+        WHERE tenant_id = $1
+          AND status = 'holiday'
+          AND work_date = ANY($2::date[])
+          AND ($3::text IS NULL OR note = $3)
+          AND staff_id = ANY($4::uuid[])
+      `,
+      [list, note || null, scopedStaff],
+    )
+    return { rowCount: rowCount || 0 }
+  }
+
+  // Branch-scoped clear — join staff so other branches are never wiped
+  if (branchId) {
+    const { rowCount } = await tenantQuery(
+      tenantId,
+      `
+        DELETE FROM attendance a
+        USING staff s
+        WHERE a.tenant_id = $1
+          AND s.tenant_id = a.tenant_id
+          AND s.id = a.staff_id
+          AND s.branch_id = $4
+          AND a.status = 'holiday'
+          AND a.work_date = ANY($2::date[])
+          AND ($3::text IS NULL OR a.note = $3)
+      `,
+      [list, note || null, branchId],
+    )
+    return { rowCount: rowCount || 0 }
+  }
+
+  // No scope — refuse broad wipe (legacy callers must pass branchId / staffIds)
+  return { rowCount: 0 }
 }
 
 //

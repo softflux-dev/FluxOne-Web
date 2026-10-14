@@ -805,10 +805,11 @@ async function insertProductRow(client, tenantId, row) {
   return rows[0]
 }
 
-// Upsert BM Resources variant_types by case-insensitive name (no duplicates)
-async function upsertVariantType(client, tenantId, name) {
+// Upsert into this branch's Variant Management catalog (IM customs reusable next time)
+async function upsertVariantType(client, tenantId, branchId, name) {
   const typeName = String(name || '').trim()
   if (!typeName) throw httpError(422, 'Variant type name is required')
+  if (!branchId) throw httpError(422, 'branchId is required to save variant types')
 
   const { rows: existing } = await tenantClientQuery(
     client,
@@ -816,10 +817,12 @@ async function upsertVariantType(client, tenantId, name) {
     `
       SELECT id, name
       FROM variant_types
-      WHERE tenant_id = $1 AND lower(trim(name)) = lower($2)
+      WHERE tenant_id = $1
+        AND branch_id = $2
+        AND lower(trim(name)) = lower($3)
       LIMIT 1
     `,
-    [typeName],
+    [branchId, typeName],
   )
   if (existing[0]) {
     return { id: existing[0].id, name: existing[0].name, created: false }
@@ -830,11 +833,11 @@ async function upsertVariantType(client, tenantId, name) {
       client,
       tenantId,
       `
-        INSERT INTO variant_types (tenant_id, name, is_active)
-        VALUES ($1, $2, true)
+        INSERT INTO variant_types (tenant_id, branch_id, name, is_active)
+        VALUES ($1, $2, $3, true)
         RETURNING id, name
       `,
-      [typeName],
+      [branchId, typeName],
     )
     return { id: rows[0].id, name: rows[0].name, created: true }
   } catch (err) {
@@ -845,20 +848,23 @@ async function upsertVariantType(client, tenantId, name) {
       `
         SELECT id, name
         FROM variant_types
-        WHERE tenant_id = $1 AND lower(trim(name)) = lower($2)
+        WHERE tenant_id = $1
+          AND branch_id = $2
+          AND lower(trim(name)) = lower($3)
         LIMIT 1
       `,
-      [typeName],
+      [branchId, typeName],
     )
     if (!rows[0]) throw err
     return { id: rows[0].id, name: rows[0].name, created: false }
   }
 }
 
-// Upsert BM Resources variant_values under a type (no duplicates)
-async function upsertVariantValue(client, tenantId, variantTypeId, name) {
+// Upsert value under a type in the same branch catalog
+async function upsertVariantValue(client, tenantId, branchId, variantTypeId, name) {
   const valueName = String(name || '').trim()
   if (!valueName) throw httpError(422, 'Variant value name is required')
+  if (!branchId) throw httpError(422, 'branchId is required to save variant values')
   if (!variantTypeId) throw httpError(422, 'Variant type is required for value upsert')
 
   const { rows: existing } = await tenantClientQuery(
@@ -868,11 +874,12 @@ async function upsertVariantValue(client, tenantId, variantTypeId, name) {
       SELECT id, name
       FROM variant_values
       WHERE tenant_id = $1
-        AND variant_type_id = $2
-        AND lower(trim(name)) = lower($3)
+        AND branch_id = $2
+        AND variant_type_id = $3
+        AND lower(trim(name)) = lower($4)
       LIMIT 1
     `,
-    [variantTypeId, valueName],
+    [branchId, variantTypeId, valueName],
   )
   if (existing[0]) {
     return { id: existing[0].id, name: existing[0].name, created: false }
@@ -883,11 +890,11 @@ async function upsertVariantValue(client, tenantId, variantTypeId, name) {
       client,
       tenantId,
       `
-        INSERT INTO variant_values (tenant_id, variant_type_id, name, is_active)
-        VALUES ($1, $2, $3, true)
+        INSERT INTO variant_values (tenant_id, branch_id, variant_type_id, name, is_active)
+        VALUES ($1, $2, $3, $4, true)
         RETURNING id, name
       `,
-      [variantTypeId, valueName],
+      [branchId, variantTypeId, valueName],
     )
     return { id: rows[0].id, name: rows[0].name, created: true }
   } catch (err) {
@@ -899,11 +906,12 @@ async function upsertVariantValue(client, tenantId, variantTypeId, name) {
         SELECT id, name
         FROM variant_values
         WHERE tenant_id = $1
-          AND variant_type_id = $2
-          AND lower(trim(name)) = lower($3)
+          AND branch_id = $2
+          AND variant_type_id = $3
+          AND lower(trim(name)) = lower($4)
         LIMIT 1
       `,
-      [variantTypeId, valueName],
+      [branchId, variantTypeId, valueName],
     )
     if (!rows[0]) throw err
     return { id: rows[0].id, name: rows[0].name, created: false }
@@ -964,7 +972,16 @@ async function notifyCustomVariantCatalog(tenantId, { productId, productName, cr
   }
 }
 
-async function attachVariantOptions(client, tenantId, productId, parts = [], catalogMap = null) {
+async function attachVariantOptions(
+  client,
+  tenantId,
+  productId,
+  parts = [],
+  catalogMap = null,
+  branchId = null,
+) {
+  if (!branchId) throw httpError(422, 'branchId is required to attach variant options')
+
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i]
     const typeName = String(part.typeName || '').trim()
@@ -985,13 +1002,18 @@ async function attachVariantOptions(client, tenantId, productId, parts = [], cat
     let resolvedValueName = valueName
     let valueCreated = false
 
-    // Prefer catalog UUID when client selected an existing type
+    // Prefer catalog UUID when client selected an existing type in this branch
     if (typeId && !wantsCustomType) {
       const { rows } = await tenantClientQuery(
         client,
         tenantId,
-        `SELECT id, name FROM variant_types WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
-        [typeId],
+        `
+          SELECT id, name
+          FROM variant_types
+          WHERE tenant_id = $1 AND id = $2 AND branch_id = $3
+          LIMIT 1
+        `,
+        [typeId, branchId],
       )
       if (rows[0]) {
         resolvedTypeId = rows[0].id
@@ -999,9 +1021,9 @@ async function attachVariantOptions(client, tenantId, productId, parts = [], cat
       }
     }
 
-    // Custom / missing type → upsert into BM Resources catalog
+    // Custom / missing type → save into this branch's Variant Management
     if (!resolvedTypeId) {
-      const upserted = await upsertVariantType(client, tenantId, typeName)
+      const upserted = await upsertVariantType(client, tenantId, branchId, typeName)
       resolvedTypeId = upserted.id
       resolvedTypeName = upserted.name
       typeCreated = upserted.created
@@ -1014,11 +1036,11 @@ async function attachVariantOptions(client, tenantId, productId, parts = [], cat
         `
           SELECT id, name
           FROM variant_values
-          WHERE tenant_id = $1 AND id = $2
-            AND ($3::uuid IS NULL OR variant_type_id = $3)
+          WHERE tenant_id = $1 AND id = $2 AND branch_id = $3
+            AND ($4::uuid IS NULL OR variant_type_id = $4)
           LIMIT 1
         `,
-        [valueId, resolvedTypeId],
+        [valueId, branchId, resolvedTypeId],
       )
       if (rows[0]) {
         resolvedValueId = rows[0].id
@@ -1026,9 +1048,15 @@ async function attachVariantOptions(client, tenantId, productId, parts = [], cat
       }
     }
 
-    // Custom / missing value → upsert under resolved type
+    // Custom / missing value → save under type in this branch catalog
     if (!resolvedValueId) {
-      const upserted = await upsertVariantValue(client, tenantId, resolvedTypeId, valueName)
+      const upserted = await upsertVariantValue(
+        client,
+        tenantId,
+        branchId,
+        resolvedTypeId,
+        valueName,
+      )
       resolvedValueId = upserted.id
       resolvedValueName = upserted.name
       valueCreated = upserted.created
@@ -1181,7 +1209,14 @@ export async function createVariantProduct(tenantId, payload) {
         })
 
         await attachTaxes(client, tenantId, child.id, resolvedTaxIds)
-        await attachVariantOptions(client, tenantId, child.id, variant.parts || [], catalogMap)
+        await attachVariantOptions(
+          client,
+          tenantId,
+          child.id,
+          variant.parts || [],
+          catalogMap,
+          payload.branchId,
+        )
         await applyOpeningStockInTx(client, tenantId, {
           productId: child.id,
           quantity: openingQty,
@@ -1512,7 +1547,14 @@ async function syncVariantChildrenInTx(
         `DELETE FROM product_variant_options WHERE tenant_id = $1 AND product_id = $2`,
         [variant.id],
       )
-      await attachVariantOptions(client, tenantId, variant.id, variant.parts || [], catalogMap)
+      await attachVariantOptions(
+        client,
+        tenantId,
+        variant.id,
+        variant.parts || [],
+        catalogMap,
+        effectiveBranchId,
+      )
       if (payload.taxIds !== undefined) {
         await attachTaxes(client, tenantId, variant.id, resolvedTaxIds)
       }
@@ -1551,7 +1593,14 @@ async function syncVariantChildrenInTx(
         createdAt,
       })
       await attachTaxes(client, tenantId, child.id, resolvedTaxIds)
-      await attachVariantOptions(client, tenantId, child.id, variant.parts || [], catalogMap)
+      await attachVariantOptions(
+        client,
+        tenantId,
+        child.id,
+        variant.parts || [],
+        catalogMap,
+        effectiveBranchId,
+      )
 
       const openingQty =
         childStatus === 'inactive' ? 0 : Math.max(0, Number(variant.quantity) || 0)
@@ -1970,6 +2019,25 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
   }
 }
 
+// Drop ledger rows for product + variant SKUs so unused products can hard-delete
+async function deleteProductLedgerRows(client, tenantId, productId) {
+  await tenantClientQuery(
+    client,
+    tenantId,
+    `
+      DELETE FROM inventory_ledger
+      WHERE tenant_id = $1
+        AND (
+          product_id = $2
+          OR product_id IN (
+            SELECT id FROM products WHERE tenant_id = $1 AND parent_id = $2
+          )
+        )
+    `,
+    [productId],
+  )
+}
+
 export async function permanentDeleteProduct(tenantId, id, { branchId = null } = {}) {
   const eligibility = await getProductDeleteEligibility(tenantId, id, { branchId })
   if (!eligibility.found) return null
@@ -1978,6 +2046,7 @@ export async function permanentDeleteProduct(tenantId, id, { branchId = null } =
   }
 
   return withTransaction(async (client) => {
+    await deleteProductLedgerRows(client, tenantId, id)
     const { rows } = await tenantClientQuery(
       client,
       tenantId,
@@ -2028,6 +2097,8 @@ export async function deleteProduct(tenantId, id, { branchId = null, permanent =
     }
 
     if (permanent) {
+      // Ledger from opening stock / adjustments must go before product DELETE (no CASCADE)
+      await deleteProductLedgerRows(client, tenantId, id)
       const { rows } = await tenantClientQuery(
         client,
         tenantId,

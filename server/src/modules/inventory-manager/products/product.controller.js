@@ -47,7 +47,9 @@ export async function taxProfitDefaults(req, res) {
 }
 
 export async function offers(req, res) {
-  return success(res, await listOffers(req.tenantId))
+  // IM sees only their branch's discount offers
+  const { tenantId, branchId } = resolveInventoryScope(req)
+  return success(res, await listOffers(tenantId, { branchId }))
 }
 
 export async function addCategory(req, res) {

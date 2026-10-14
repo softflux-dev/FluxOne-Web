@@ -42,6 +42,7 @@ export const listVariantTypesSchema = z.object({
     q: optionalString,
     active: activeFilter,
     includeValues: includeValuesField,
+    branchId: optionalUuid,
   }),
 })
 
@@ -49,6 +50,7 @@ export const createVariantTypeSchema = z.object({
   body: z.object({
     name: nameField,
     isActive: booleanField.optional().default(true),
+    branchId: optionalUuid,
   }),
   query: empty,
   params: empty,
@@ -59,6 +61,7 @@ export const updateVariantTypeSchema = z.object({
     .object({
       name: nameField.optional(),
       isActive: booleanField.optional(),
+      branchId: optionalUuid,
     })
     .refine((data) => data.name !== undefined || data.isActive !== undefined, {
       message: 'At least one of name or isActive is required',
@@ -69,7 +72,7 @@ export const updateVariantTypeSchema = z.object({
 
 export const variantTypeIdParamsSchema = z.object({
   body: empty,
-  query: empty,
+  query: z.object({ branchId: optionalUuid }),
   params: idParams,
 })
 
@@ -80,6 +83,7 @@ export const listVariantValuesSchema = z.object({
     q: optionalString,
     variantTypeId: optionalUuid,
     active: activeFilter,
+    branchId: optionalUuid,
   }),
 })
 
@@ -88,6 +92,7 @@ export const createVariantValueSchema = z.object({
     variantTypeId: z.string().uuid('Invalid variant type'),
     name: nameField,
     isActive: booleanField.optional().default(true),
+    branchId: optionalUuid,
   }),
   query: empty,
   params: empty,
@@ -99,6 +104,7 @@ export const updateVariantValueSchema = z.object({
       variantTypeId: z.string().uuid('Invalid variant type').optional(),
       name: nameField.optional(),
       isActive: booleanField.optional(),
+      branchId: optionalUuid,
     })
     .refine(
       (data) =>
@@ -113,6 +119,6 @@ export const updateVariantValueSchema = z.object({
 
 export const variantValueIdParamsSchema = z.object({
   body: empty,
-  query: empty,
+  query: z.object({ branchId: optionalUuid }),
   params: idParams,
 })

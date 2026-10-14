@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/select'
-import { BRAND } from '@/lib/constants'
+import { BRAND, UI_RADIUS } from '@/lib/constants'
+import { cn } from '@/lib/utils'
 import { Award, Columns, RotateCcw, Search, TrendingUp } from 'lucide-react'
 
 const COLUMN_LABELS = {
@@ -15,15 +16,20 @@ const COLUMN_LABELS = {
   finalPrice: 'Final Price',
 }
 
-const selectClass =
-  'h-10 w-full min-w-[8.5rem] rounded-xl border-border bg-white text-xs font-medium text-slate-800 sm:w-40'
+// Shared select chrome — h-10 + 8px radius (QA Bug 2)
+const selectClass = cn(
+  'h-10 w-full min-w-[8.5rem] border-border bg-white text-xs font-medium text-slate-800 sm:w-40',
+  UI_RADIUS,
+)
 
 function presetClass(active) {
-  return `rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5 ${
+  return cn(
+    'px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5',
+    UI_RADIUS,
     active
       ? 'bg-purple-900 text-white border-purple-900 shadow-xs'
-      : 'bg-white text-slate-700 border-slate-200 hover:border-purple-200'
-  }`
+      : 'bg-white text-slate-700 border-slate-200 hover:border-purple-200',
+  )
 }
 
 export function TaxProfitPresetPills({ presetFilter, setPresetFilter, totalCatalog }) {
@@ -92,7 +98,10 @@ export function TaxProfitFilters({
             placeholder="Search by SKU, name, or barcode..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 w-full rounded-xl border border-border bg-white py-2 pl-9 pr-4 text-xs text-slate-900 outline-none focus:border-purple-300 focus:ring-1 focus:ring-purple-300 sm:text-sm"
+            className={cn(
+              'h-10 w-full border border-border bg-white py-2 pl-9 pr-4 text-xs text-slate-900 outline-none focus:border-purple-300 focus:ring-1 focus:ring-purple-300 sm:text-sm',
+              UI_RADIUS,
+            )}
           />
         </div>
 
@@ -191,7 +200,10 @@ export function TaxProfitFilters({
           <button
             type="button"
             onClick={onClearTableFilters}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm font-semibold cursor-pointer transition-opacity hover:opacity-80"
+            className={cn(
+              'inline-flex h-10 shrink-0 items-center gap-1.5 px-2.5 text-sm font-semibold cursor-pointer transition-opacity hover:opacity-80',
+              UI_RADIUS,
+            )}
             style={{ color: BRAND.purple }}
           >
             <RotateCcw className="size-4" />
@@ -206,7 +218,10 @@ export function TaxProfitFilters({
             type="button"
             variant="outline"
             onClick={() => setColMenuOpen(!colMenuOpen)}
-            className="h-10 cursor-pointer gap-1.5 rounded-xl border-border px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className={cn(
+              'h-10 cursor-pointer gap-1.5 border-border px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50',
+              UI_RADIUS,
+            )}
           >
             <Columns className="size-4 text-slate-500" />
             <span>Columns</span>

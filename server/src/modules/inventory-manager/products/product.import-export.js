@@ -128,17 +128,19 @@ async function resolveCategoryPair(tenantId, branchId, categoryName, subcategory
   return { categoryId, subcategoryId }
 }
 
-async function findOfferIdByName(tenantId, offerName) {
+async function findOfferIdByName(tenantId, offerName, branchId = null) {
   const name = normName(offerName)
   if (!name) return undefined
   const { rows } = await tenantQuery(
     tenantId,
     `
       SELECT id FROM offers
-      WHERE tenant_id = $1 AND lower(name) = lower($2)
+      WHERE tenant_id = $1
+        AND lower(name) = lower($2)
+        AND ($3::uuid IS NULL OR branch_id = $3)
       LIMIT 1
     `,
-    [name],
+    [name, branchId],
   )
   return rows[0]?.id
 }
@@ -482,7 +484,7 @@ async function importOneSingle(tenantId, branchId, row, categoryCache, createdBy
     row.subcategory,
     categoryCache,
   )
-  const offerId = await findOfferIdByName(tenantId, row.offerName)
+  const offerId = await findOfferIdByName(tenantId, row.offerName, branchId)
   const taxIds = await resolveTaxIdsForRow(tenantId, row)
 
   // Always create new — server generates UUID + human-readable itemCode
@@ -523,7 +525,7 @@ async function importOneVariant(tenantId, branchId, parentRow, childRows, catego
     parentRow.subcategory,
     categoryCache,
   )
-  const offerId = await findOfferIdByName(tenantId, parentRow.offerName)
+  const offerId = await findOfferIdByName(tenantId, parentRow.offerName, branchId)
   const taxIds = await resolveTaxIdsForRow(tenantId, parentRow)
 
   const variants = childRows.map((child, index) => {
@@ -616,7 +618,7 @@ async function importOneBundle(
     parentRow.subcategory,
     categoryCache,
   )
-  const offerId = await findOfferIdByName(tenantId, parentRow.offerName)
+  const offerId = await findOfferIdByName(tenantId, parentRow.offerName, branchId)
   const taxIds = await resolveTaxIdsForRow(tenantId, parentRow)
 
   return createProduct(tenantId, {
