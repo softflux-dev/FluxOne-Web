@@ -453,22 +453,27 @@ export async function getProductDeleteEligibility(tenantId, id, { branchId = nul
     }
   }
 
-  const { rows: branchStock } = await tenantQuery(
-    tenantId,
-    `
-      SELECT COALESCE(sum(quantity), 0)::numeric AS total
-      FROM branch_inventory
-      WHERE tenant_id = $1 AND ${productScope}
-    `,
-    [id],
-  )
-  const branchOnHand = Number(branchStock[0]?.total || 0)
-  if (branchOnHand > 0) {
-    return {
-      found: true,
-      canPermanentDelete: false,
-      stockOnHand: branchOnHand,
-      reason: `This product has ${branchOnHand} branch stock available — stock out first, then delete, or deactivate instead`,
+  // Branch allocation must follow IM on-hand. When products.quantity is already 0,
+  // leftover branch_inventory rows are orphans (pre-sync bug) and cascade on DELETE —
+  // do not block permanent delete. Only block while on-hand still remains elsewhere.
+  if (onHand > 0) {
+    const { rows: branchStock } = await tenantQuery(
+      tenantId,
+      `
+        SELECT COALESCE(sum(quantity), 0)::numeric AS total
+        FROM branch_inventory
+        WHERE tenant_id = $1 AND ${productScope}
+      `,
+      [id],
+    )
+    const branchOnHand = Number(branchStock[0]?.total || 0)
+    if (branchOnHand > 0) {
+      return {
+        found: true,
+        canPermanentDelete: false,
+        stockOnHand: branchOnHand,
+        reason: `This product has ${branchOnHand} branch stock available — stock out first, then delete, or deactivate instead`,
+      }
     }
   }
 

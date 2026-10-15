@@ -27,8 +27,8 @@ function StatusBadge({ active }) {
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1',
         isActive
-          ? 'bg-emerald-50 text-emerald-800 ring-emerald-100'
-          : 'bg-slate-100 text-slate-600 ring-slate-200',
+          ? 'bg-emerald-50 text-emerald-800 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25'
+          : 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-muted dark:text-slate-300 dark:ring-border',
       )}
     >
       <span
@@ -133,8 +133,8 @@ export function PoliciesTable({
                 <DataCard key={p.id}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 space-y-1">
-                      <p className="font-mono text-xs font-bold text-purple-700">{displayId}</p>
-                      <p className="truncate text-sm font-semibold text-slate-900">{p.name}</p>
+                      <p className="font-mono text-xs font-bold text-primary">{displayId}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
                       <PolicyTypeBadge category={p.category} config={cfg} />
                     </div>
                     <PolicyRowActions
@@ -178,11 +178,11 @@ export function PoliciesTable({
                       categoryConfig[p.category] || categoryConfig[DEFAULT_POLICY_TYPE]
                     const displayId = referenceFromUuid(p.id, 'POL')
                     return (
-                      <TableRow key={p.id} className="hover:bg-slate-50/80">
-                        <TableCell className="px-3 py-3 font-mono text-xs font-bold text-purple-800">
+                      <TableRow key={p.id}>
+                        <TableCell className="px-3 py-3 font-mono text-xs font-bold text-primary">
                           {displayId}
                         </TableCell>
-                        <TableCell className="px-3 py-3 font-medium text-slate-900">
+                        <TableCell className="px-3 py-3 font-medium text-foreground">
                           {p.name}
                         </TableCell>
                         <TableCell className="px-3 py-3">
@@ -207,7 +207,7 @@ export function PoliciesTable({
                             />
                           </div>
                         </TableCell>
-                        <TableCell className="px-3 py-3 whitespace-nowrap text-slate-600">
+                        <TableCell className="px-3 py-3 whitespace-nowrap text-foreground">
                           <DateTimeLines value={p.updatedAt || p.createdAt} />
                         </TableCell>
                         <TableCell className="px-3 py-3">

@@ -2,7 +2,12 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
-import { ADJUSTMENT_LEDGER_TYPES, CONTROL_UI_TAB } from '@/lib/controlTabs'
+import {
+  ADJUSTMENT_LEDGER_TYPES,
+  CONTROL_SOURCES,
+  CONTROL_UI_TAB,
+  STOCK_OUT_LEDGER_TYPES,
+} from '@/lib/controlTabs'
 import { mapStockMovement, MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 import { mapPurchaseOrder } from '@/lib/mapPurchaseOrder'
 import { mapProduct } from '@/lib/mapProduct'
@@ -239,7 +244,17 @@ export const createMovement = createAsyncThunk(
     const result = await apiClient.post(path, body)
     if (!result.success) return rejectWithValue(result.error || 'Create failed')
     void refetchWithState(dispatch, getState, movementType)
-    if (ADJUSTMENT_LEDGER_TYPES.includes(movementType)) {
+    // Dual-display: Adjustment stock-out ↔ Stock Out + Adjustment tabs
+    if (ADJUSTMENT_LEDGER_TYPES.includes(movementType) || STOCK_OUT_LEDGER_TYPES.includes(movementType)) {
+      void refetchWithState(dispatch, getState, MOVEMENT_TYPES.ADJUSTMENT)
+      void refetchWithState(dispatch, getState, MOVEMENT_TYPES.OUT)
+    }
+    // Dual-display: Adjustment stock-in ↔ Stock In + Adjustment tabs
+    const lines = Array.isArray(body?.lines) ? body.lines : []
+    const fromAdjustment =
+      body?.controlSource === CONTROL_SOURCES.ADJUSTMENT ||
+      lines.some((line) => line?.controlSource === CONTROL_SOURCES.ADJUSTMENT)
+    if (movementType === MOVEMENT_TYPES.IN && fromAdjustment) {
       void refetchWithState(dispatch, getState, MOVEMENT_TYPES.ADJUSTMENT)
     }
     return result

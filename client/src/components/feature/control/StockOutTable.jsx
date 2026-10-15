@@ -14,7 +14,7 @@ export function StockOutTable({
   return (
     <MovementHistoryTable
       title="Stock out history"
-      description="Outgoing stock recorded automatically when items are sold"
+      description="POS sales and Adjustment stock-out (damaged, expired, other)"
       items={items}
       loading={loading}
       pagination={pagination}
@@ -22,7 +22,7 @@ export function StockOutTable({
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       emptyTitle="No stock-out records"
-      emptyHint="Sales stock-out records appear here automatically."
+      emptyHint="Sales and Adjustment stock-out records appear here."
       className={className}
     />
   )

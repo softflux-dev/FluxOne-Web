@@ -1,13 +1,14 @@
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
-import { MOVEMENT_TYPES } from '../../../config/constants.js'
+import { CONTROL_SOURCES, MOVEMENT_TYPES } from '../../../config/constants.js'
 import {
   applyPriceLayersForMovement,
   shouldKeepExistingStockPrice,
 } from './priceLayers.js'
 
-// products.quantity = company-wide on-hand.
-// branch_inventory = per-branch allocation (subset of total).
-// Stock-in with branchId bumps both; transfers only move between branches.
+// products.quantity = on-hand for that branch-scoped product row (IM source of truth).
+// branch_inventory = per-branch allocation — must stay in sync when IM adjusts stock
+// for their JWT branch (stock-in / stock-out / damaged / expired / other / adjustment).
+// Transfers only move qty between branch_inventory rows (on-hand delta = 0).
 function onHandDelta(movementType, quantity) {
   const amount = Number(quantity)
   if (movementType === MOVEMENT_TYPES.IN) return amount
@@ -254,7 +255,14 @@ async function assertBranchExists(client, tenantId, branchId) {
   if (!rows[0]) throw httpError(404, 'Branch not found')
 }
 
-async function adjustBranchInventory(client, tenantId, branchId, productId, delta, { optional = false } = {}) {
+async function adjustBranchInventory(
+  client,
+  tenantId,
+  branchId,
+  productId,
+  delta,
+  { optional = false, clamp = false } = {},
+) {
   const amount = Number(delta)
   if (!amount) return
 
@@ -273,7 +281,7 @@ async function adjustBranchInventory(client, tenantId, branchId, productId, delt
   if (!rows[0]) {
     // POS may run before branch stock is seeded — skip outbound when not tracked
     if (amount < 0) {
-      if (optional) return
+      if (optional || clamp) return
       throw httpError(422, 'Insufficient branch stock')
     }
     await tenantClientQuery(
@@ -289,8 +297,12 @@ async function adjustBranchInventory(client, tenantId, branchId, productId, delt
   }
 
   const current = Number(rows[0].quantity)
-  const next = current + amount
-  if (next < 0) throw httpError(422, 'Insufficient branch stock')
+  let next = current + amount
+  // IM stock-out is authoritative: never leave orphan branch qty below zero intent
+  if (next < 0) {
+    if (clamp) next = 0
+    else throw httpError(422, 'Insufficient branch stock')
+  }
 
   await tenantClientQuery(
     client,
@@ -485,6 +497,8 @@ const LEDGER_LIST_WHERE = `
           AND pvo.variant_value_id = $14
       )
     )
+    -- When set (Adjustment tab), only include stock-in rows tagged from Adjustment dialog
+    AND ($15::text IS NULL OR l.movement_type <> 'in' OR l.control_source = $15)
 `
 
 function ledgerFilterParams(filters = {}, overrides = {}) {
@@ -504,6 +518,10 @@ function ledgerFilterParams(filters = {}, overrides = {}) {
     ? overrides.to
     : filters.to || null
 
+  const controlSourceForIn = Object.prototype.hasOwnProperty.call(overrides, 'controlSourceForIn')
+    ? overrides.controlSourceForIn
+    : filters.controlSourceForIn || null
+
   return [
     types,
     filters.q || null,
@@ -518,6 +536,7 @@ function ledgerFilterParams(filters = {}, overrides = {}) {
     filters.variantLabel || null,
     filters.variantTypeId || null,
     filters.variantValueId || null,
+    controlSourceForIn,
   ]
 }
 
@@ -630,7 +649,9 @@ export async function getControlSummary(tenantId, filters = {}) {
       SELECT
         COALESCE(sum(l.quantity) FILTER (WHERE l.movement_type = 'in'), 0)::numeric AS "stockInToday",
         COALESCE(
-          sum(ABS(l.quantity)) FILTER (WHERE l.movement_type = 'out'),
+          sum(ABS(l.quantity)) FILTER (
+            WHERE l.movement_type IN ('out', 'damaged', 'expired', 'other')
+          ),
           0
         )::numeric AS "stockOutToday"
       FROM inventory_ledger l
@@ -687,7 +708,10 @@ export async function getControlSummary(tenantId, filters = {}) {
         count(*) FILTER (WHERE l.movement_type = 'adjustment')::int AS "adjustment",
         count(*) FILTER (WHERE l.movement_type = 'damaged')::int AS "damaged",
         count(*) FILTER (WHERE l.movement_type = 'expired')::int AS "expired",
-        count(*) FILTER (WHERE l.movement_type = 'other')::int AS "other"
+        count(*) FILTER (WHERE l.movement_type = 'other')::int AS "other",
+        count(*) FILTER (
+          WHERE l.movement_type = 'in' AND l.control_source = 'adjustment'
+        )::int AS "adjustmentStockIn"
       FROM inventory_ledger l
       JOIN products p ON p.id = l.product_id AND p.tenant_id = l.tenant_id
       ${LEDGER_LIST_WHERE}
@@ -731,12 +755,17 @@ export async function getControlSummary(tenantId, filters = {}) {
       const damaged = Number(tabCounts.damaged) || 0
       const expired = Number(tabCounts.expired) || 0
       const other = Number(tabCounts.other) || 0
+      const outOnly = Number(tabCounts.out) || 0
+      const adjustmentStockIn = Number(tabCounts.adjustmentStockIn) || 0
       return {
         in: Number(tabCounts.in) || 0,
-        out: Number(tabCounts.out) || 0,
-        // Adjustment tab badge = full unified ledger set
-        adjustment: adjustmentOnly + damaged + expired + other,
+        // Stock Out badge = POS out + Adjustment stock-out reasons
+        out: outOnly + damaged + expired + other,
+        outOnly,
+        // Adjustment tab badge = adjust + out-reasons + tagged stock-in
+        adjustment: adjustmentOnly + damaged + expired + other + adjustmentStockIn,
         adjustmentOnly,
+        adjustmentStockIn,
         damaged,
         expired,
         other,
@@ -781,6 +810,7 @@ export async function listLedger(tenantId, filters = {}) {
         l.damaged_location AS "damagedLocation",
         l.unit_cost AS "unitCost",
         l.to_branch_id AS "toBranchId",
+        l.control_source AS "controlSource",
         p.name AS "productName",
         p.image_url AS "imageUrl",
         p.type AS "productType",
@@ -801,7 +831,7 @@ export async function listLedger(tenantId, filters = {}) {
       LEFT JOIN users du ON du.id = l.damaged_by_user_id AND du.tenant_id = l.tenant_id
       ${LEDGER_LIST_WHERE}
       ORDER BY l.created_at DESC
-      LIMIT $15 OFFSET $16
+      LIMIT $16 OFFSET $17
     `,
     [...filterParams, limit, offset],
   )
@@ -891,10 +921,22 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
     await assertBranchExists(client, tenantId, destinationBranchId)
   }
 
-  // POS sale/refund at a branch: keep branch allocation in sync with company on-hand
+  // Keep branch_inventory in sync with on-hand for this branch (IM / POS).
+  // IM adjustments clamp so leftover orphan rows cannot block a full stock-out.
   if (event.branchId && OUTBOUND_TYPES.has(event.movementType)) {
     await adjustBranchInventory(client, tenantId, event.branchId, event.productId, -outboundQty, {
       optional: Boolean(event.posEventId),
+      clamp: !event.posEventId,
+    })
+  }
+  if (
+    event.branchId &&
+    (event.movementType === MOVEMENT_TYPES.ADJUSTMENT ||
+      event.movementType === MOVEMENT_TYPES.OTHER)
+  ) {
+    await adjustBranchInventory(client, tenantId, event.branchId, event.productId, qty, {
+      optional: qty < 0,
+      clamp: qty < 0,
     })
   }
   if (event.branchId && event.movementType === MOVEMENT_TYPES.IN && event.posEventId) {
@@ -908,9 +950,10 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
       INSERT INTO inventory_ledger (
         tenant_id, product_id, movement_type, quantity, scale, reason,
         damaged_by_user_id, damaged_location, supplier_id, purchase_order_id,
-        expires_at, unit_cost, created_by, pos_event_id, from_branch_id, to_branch_id
+        expires_at, unit_cost, created_by, pos_event_id, from_branch_id, to_branch_id,
+        control_source
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING id, movement_type AS "movementType", quantity
     `,
     [
@@ -931,6 +974,7 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
       destinationBranchId && event.movementType === MOVEMENT_TYPES.IN && !event.posEventId
         ? destinationBranchId
         : event.toBranchId || null,
+      event.controlSource || null,
     ],
   )
 
@@ -1579,7 +1623,16 @@ export async function importControlMovements(
           reason: reason || null,
           createdBy,
           scopeBranchId: branchId,
-          branchId: movementType === MOVEMENT_TYPES.IN ? branchId : undefined,
+          // Always sync branch_inventory for scoped import (in + out / damaged / other)
+          branchId,
+          controlSource:
+            movementType === MOVEMENT_TYPES.IN ||
+            movementType === MOVEMENT_TYPES.DAMAGED ||
+            movementType === MOVEMENT_TYPES.EXPIRED ||
+            movementType === MOVEMENT_TYPES.OTHER ||
+            movementType === MOVEMENT_TYPES.ADJUSTMENT
+              ? CONTROL_SOURCES.ADJUSTMENT
+              : null,
           unitCost:
             row.unitCost != null && row.unitCost !== ''
               ? Math.round(Number(row.unitCost))

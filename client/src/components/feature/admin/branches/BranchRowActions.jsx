@@ -20,7 +20,7 @@ export function BranchRowActions({
         disabled={mutating}
         title="Edit"
         aria-label={`Edit ${b.name}`}
-        className="size-8 text-purple-800 hover:bg-purple-50 hover:text-purple-950"
+        className="size-8 text-purple-700 hover:bg-purple-50 hover:text-purple-900 dark:text-[#d8b4fe] dark:hover:bg-muted dark:hover:text-[#f3e8ff]"
       >
         <Pencil className="size-4" />
       </Button>
@@ -33,7 +33,7 @@ export function BranchRowActions({
           disabled={mutating}
           title="Manage credentials"
           aria-label={`Manage credentials for ${b.name}`}
-          className="size-8 text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+          className="size-8 text-amber-700 hover:bg-amber-50 hover:text-amber-900 dark:text-amber-400 dark:hover:bg-muted dark:hover:text-amber-300"
         >
           <KeyRound className="size-4" />
         </Button>
@@ -48,8 +48,8 @@ export function BranchRowActions({
         aria-label={isOpen ? `Block ${b.name}` : `Unblock ${b.name}`}
         className={`size-8 ${
           isOpen
-            ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-800'
-            : 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900'
+            ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:hover:bg-muted dark:hover:text-rose-300'
+            : 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 dark:text-emerald-400 dark:hover:bg-muted dark:hover:text-emerald-300'
         }`}
       >
         {isOpen ? <Ban className="size-4" /> : <Unlock className="size-4" />}
@@ -62,7 +62,7 @@ export function BranchRowActions({
         disabled={mutating}
         title="Delete"
         aria-label={`Delete ${b.name}`}
-        className="size-8 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+        className="size-8 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-muted dark:hover:text-slate-200"
       >
         <Trash2 className="size-4" />
       </Button>

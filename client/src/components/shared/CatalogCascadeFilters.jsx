@@ -78,6 +78,7 @@ export function CatalogCascadeFilters({
   showType = false,
   showStatus = false,
   showLedgerKind = false,
+  ledgerKindOptions = LEDGER_KIND_OPTIONS,
   title = 'Filter your inventory',
   description = null,
   idPrefix = 'catalog',
@@ -409,7 +410,7 @@ export function CatalogCascadeFilters({
                 label="Ledger kind"
                 value={ledgerKind}
                 placeholder="All types"
-                options={LEDGER_KIND_OPTIONS.map((opt) => ({
+                options={(ledgerKindOptions || LEDGER_KIND_OPTIONS).map((opt) => ({
                   id: opt.id,
                   label: opt.label,
                 }))}

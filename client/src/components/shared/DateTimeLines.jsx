@@ -6,7 +6,7 @@ import { formatDateTimeParts } from '@/lib/formatDateTime'
 export function DateTimeLines({
   value,
   className = '',
-  timeClassName = 'text-[11px] text-slate-500',
+  timeClassName = 'text-[11px] text-muted-foreground',
 }) {
   const parts = formatDateTimeParts(value)
   if (parts.date === '—') return '—'

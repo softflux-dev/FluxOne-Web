@@ -74,6 +74,8 @@ export const stockInSchema = z.object({
           sellingPrice: z.coerce.number().nonnegative().optional(),
           expiresAt: z.coerce.date().optional(),
           reason: z.string().min(1).max(2000).optional(),
+          // Adjustment dialog stock-in → dual-list on Adjustment tab
+          controlSource: z.enum(['adjustment']).optional(),
         }),
       )
       .min(1),

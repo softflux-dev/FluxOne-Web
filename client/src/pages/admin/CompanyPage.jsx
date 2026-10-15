@@ -432,13 +432,13 @@ export function CompanyPage() {
       </MotionHeader>
 
       <MotionReveal delay={0.05}>
-        <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 w-fit">
+        <div className="flex rounded-xl bg-muted p-1 border border-border w-fit">
           <button
             type="button"
             onClick={() => setActiveTab('details')}
             className={`rounded-lg px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'details'
-                ? 'bg-white text-purple-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-card text-foreground shadow-xs font-bold dark:bg-primary dark:text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
               }`}
           >
             <Building2 className="size-4" />
@@ -448,8 +448,8 @@ export function CompanyPage() {
             type="button"
             onClick={() => setActiveTab('policies')}
             className={`rounded-lg px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${activeTab === 'policies'
-                ? 'bg-white text-purple-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-card text-foreground shadow-xs font-bold dark:bg-primary dark:text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
               }`}
           >
             <FileText className="size-4" />
@@ -678,20 +678,20 @@ export function CompanyPage() {
           {slowPolicies ? <SlowLoadingBanner show className="mb-3" /> : null}
 
           <div className="space-y-5">
-            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 shadow-2xs">
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-2xs">
               <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search policies by name, clause, ID, or policy type..."
                   value={policySearch}
                   onChange={(e) => setPolicySearch(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-slate-50/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-slate-900 outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-300"
+                  className="w-full rounded-xl border border-border bg-muted/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-foreground outline-none focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-white border border-border shadow-2xs">
+            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-card border border-border shadow-2xs">
               {CATEGORIES.map((cat) => {
                 const isSelected = selectedCategory === cat
                 const count =
@@ -705,13 +705,13 @@ export function CompanyPage() {
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
                     className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${isSelected
-                        ? 'bg-purple-900 text-white shadow-xs font-bold'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                       }`}
                   >
                     <span>{cat === 'all' ? 'All Policies' : cat}</span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
                         }`}
                     >
                       {count}
@@ -723,7 +723,7 @@ export function CompanyPage() {
 
             <div className="space-y-4">
               {policiesLoading ? (
-                <div className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-white py-12 text-sm text-slate-500">
+                <div className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-12 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
                   Loading policies…
                 </div>

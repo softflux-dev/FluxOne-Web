@@ -46,6 +46,27 @@ export const MOVEMENT_TYPES = {
   OTHER: 'other',
 }
 
+// Control UI origin — Adjustment dialog rows also list on Stock In / Stock Out tabs
+export const CONTROL_SOURCES = {
+  ADJUSTMENT: 'adjustment',
+}
+
+// Stock Out history = POS sales + Adjustment stock-out reasons
+export const STOCK_OUT_LEDGER_TYPES = [
+  MOVEMENT_TYPES.OUT,
+  MOVEMENT_TYPES.DAMAGED,
+  MOVEMENT_TYPES.EXPIRED,
+  MOVEMENT_TYPES.OTHER,
+]
+
+// Adjustment tab = manual adjust + stock-out reasons (+ tagged stock-in via control_source)
+export const ADJUSTMENT_LEDGER_TYPES = [
+  MOVEMENT_TYPES.ADJUSTMENT,
+  MOVEMENT_TYPES.DAMAGED,
+  MOVEMENT_TYPES.EXPIRED,
+  MOVEMENT_TYPES.OTHER,
+]
+
 export const PURCHASE_ORDER_STATUS = {
   PENDING: 'pending',
   // Generate sets APPROVED immediately (UI label: Accepted)

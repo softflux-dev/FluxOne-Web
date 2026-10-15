@@ -18,7 +18,7 @@ const COLUMN_LABELS = {
 
 // Shared select chrome — h-10 + 8px radius (QA Bug 2)
 const selectClass = cn(
-  'h-10 w-full min-w-[8.5rem] border-border bg-white text-xs font-medium text-slate-800 sm:w-40',
+  'h-10 w-full min-w-[8.5rem] border-border bg-card text-xs font-medium text-foreground sm:w-40',
   UI_RADIUS,
 )
 
@@ -27,8 +27,8 @@ function presetClass(active) {
     'px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer border flex items-center gap-1.5',
     UI_RADIUS,
     active
-      ? 'bg-purple-900 text-white border-purple-900 shadow-xs'
-      : 'bg-white text-slate-700 border-slate-200 hover:border-purple-200',
+      ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+      : 'bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
   )
 }
 
@@ -89,17 +89,17 @@ export function TaxProfitFilters({
   setColMenuOpen,
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-white p-3 shadow-2xs sm:p-4">
+    <div className="rounded-2xl border border-border bg-card p-3 shadow-2xs sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[14rem] flex-1 basis-[16rem]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search by SKU, name, or barcode..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'h-10 w-full border border-border bg-white py-2 pl-9 pr-4 text-xs text-slate-900 outline-none focus:border-purple-300 focus:ring-1 focus:ring-purple-300 sm:text-sm',
+              'h-10 w-full border border-border bg-muted/70 py-2 pl-9 pr-4 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm',
               UI_RADIUS,
             )}
           />
@@ -228,14 +228,14 @@ export function TaxProfitFilters({
           </Button>
 
           {colMenuOpen && (
-            <div className="absolute right-0 top-12 z-50 w-56 space-y-1.5 rounded-xl border border-border bg-white p-3 text-xs shadow-xl">
-              <span className="block border-b border-slate-100 pb-1 text-[11px] font-bold tracking-wider text-slate-700 uppercase">
+            <div className="absolute right-0 top-12 z-50 w-56 space-y-1.5 rounded-xl border border-border bg-card p-3 text-xs shadow-xl">
+              <span className="block border-b border-border pb-1 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
                 Toggle Table Columns
               </span>
               {Object.keys(visibleColumns).map((colKey) => (
                 <label
                   key={colKey}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 font-medium text-slate-700 hover:bg-slate-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 font-medium text-foreground hover:bg-muted"
                 >
                   <input
                     type="checkbox"

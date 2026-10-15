@@ -25,7 +25,11 @@ import { endpoints } from '@/api/endpoints'
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch'
 import { useInventoryControl } from '@/hooks/useInventoryControl'
 import { downloadControlExport } from '@/lib/controlCsv'
-import { CONTROL_UI_TAB } from '@/lib/controlTabs'
+import {
+  CONTROL_UI_TAB,
+  LEDGER_KIND_OPTIONS,
+  STOCK_OUT_KIND_OPTIONS,
+} from '@/lib/controlTabs'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 import { toastError, toastInfo, toastSuccess } from '@/lib/toast'
 import { useAppSelector } from '@/rtk/hooks'
@@ -96,6 +100,8 @@ export function InventoryControlPage() {
     setUpdateStockRow(null)
     setThresholdTarget(null)
     setDetailsTarget(null)
+    // Reset kind filter — options differ between Adjustment and Stock Out tabs
+    if (filters.ledgerKind) updateFilters({ ledgerKind: '' })
     setTab(nextTab)
   }
 
@@ -325,7 +331,12 @@ export function InventoryControlPage() {
           ledgerKind={filters.ledgerKind || ''}
           from={filters.from || ''}
           to={filters.to || ''}
-          showLedgerKind={tab === MOVEMENT_TYPES.ADJUSTMENT}
+          showLedgerKind={
+            tab === MOVEMENT_TYPES.ADJUSTMENT || tab === MOVEMENT_TYPES.OUT
+          }
+          ledgerKindOptions={
+            tab === MOVEMENT_TYPES.OUT ? STOCK_OUT_KIND_OPTIONS : LEDGER_KIND_OPTIONS
+          }
           categories={catalog.parents || []}
           subcategories={selectedCategorySubs || []}
           onSearchChange={onSearchChange}

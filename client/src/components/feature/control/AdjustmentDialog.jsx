@@ -17,6 +17,7 @@ import { FieldError } from '@/components/shared/FieldError'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 import { BRAND } from '@/lib/constants'
 import { PRODUCT_TYPES } from '@/lib/mapProduct'
+import { CONTROL_SOURCES } from '@/lib/controlTabs'
 import { DAMAGED_LOCATIONS, MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 import { deriveVariantAxes } from '@/lib/variantAxes'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
@@ -248,6 +249,7 @@ export function AdjustmentDialog({
     try {
       if (operation === OPERATIONS.IN) {
         // Stock-in path handled by parent via stock-in API.
+        // Stock In API + controlSource so row also appears on Adjustment tab
         const result = await onSubmit?.({
           kind: 'stock_in',
           supplierId: supplierId || undefined,
@@ -256,6 +258,7 @@ export function AdjustmentDialog({
               productId: resolvedProductId,
               quantity: qty,
               reason: reasonText,
+              controlSource: CONTROL_SOURCES.ADJUSTMENT,
             },
           ],
         })

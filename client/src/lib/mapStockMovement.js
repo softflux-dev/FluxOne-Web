@@ -61,6 +61,7 @@ export function mapStockMovement(row = {}) {
     damagedByName: row.damagedByName || row.damaged_by_name || '',
     damagedLocation: row.damagedLocation || row.damaged_location || '',
     unitCost: row.unitCost != null ? Number(row.unitCost) : null,
+    controlSource: row.controlSource || row.control_source || null,
   }
 }
 

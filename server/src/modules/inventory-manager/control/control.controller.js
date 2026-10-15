@@ -24,7 +24,12 @@ import {
   resolveInventoryBranchId,
   resolveInventoryScope,
 } from '../shared.access.js'
-import { MOVEMENT_TYPES } from '../../../config/constants.js'
+import {
+  ADJUSTMENT_LEDGER_TYPES,
+  CONTROL_SOURCES,
+  MOVEMENT_TYPES,
+  STOCK_OUT_LEDGER_TYPES,
+} from '../../../config/constants.js'
 import { fail, failFromError, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 
@@ -94,26 +99,39 @@ export async function getSummary(req, res) {
 }
 
 export const listStockIn = listByType(MOVEMENT_TYPES.IN)
-export const listStockOut = listByType(MOVEMENT_TYPES.OUT)
 export const listAdjustments = listByType(MOVEMENT_TYPES.ADJUSTMENT)
 
-// Unified adjustment tab — adjustment + damaged + expired + other ledger rows.
+// Stock Out tab — POS sales (`out`) + Adjustment stock-out reasons (dual display)
+export async function listStockOut(req, res) {
+  try {
+    const { tenantId, branchId } = resolveInventoryScope(req)
+    const { ledgerKind, ...query } = req.validated.query
+    const movementTypes = ledgerKind ? [ledgerKind] : STOCK_OUT_LEDGER_TYPES
+    const result = await listLedger(tenantId, {
+      ...query,
+      movementTypes,
+      branchId,
+    })
+    return success(res, paginatedResult(result.items, result))
+  } catch (err) {
+    return failFromError(res, err)
+  }
+}
+
+// Adjustment tab — adjust + damaged/expired/other + tagged Adjustment stock-in
 export async function listAdjustmentLedger(req, res) {
   try {
     const { tenantId, branchId } = resolveInventoryScope(req)
     const { ledgerKind, ...query } = req.validated.query
     const movementTypes = ledgerKind
       ? [ledgerKind]
-      : [
-          MOVEMENT_TYPES.ADJUSTMENT,
-          MOVEMENT_TYPES.DAMAGED,
-          MOVEMENT_TYPES.EXPIRED,
-          MOVEMENT_TYPES.OTHER,
-        ]
+      : [...ADJUSTMENT_LEDGER_TYPES, MOVEMENT_TYPES.IN]
     const result = await listLedger(tenantId, {
       ...query,
       movementTypes,
       branchId,
+      // Restrict `in` rows to Adjustment-dialog origin only
+      controlSourceForIn: CONTROL_SOURCES.ADJUSTMENT,
     })
     return success(res, paginatedResult(result.items, result))
   } catch (err) {
@@ -169,6 +187,8 @@ export async function createStockIn(req, res) {
         branchId,
         scopeBranchId: branchId,
         createdBy: req.user.id,
+        // Adjustment dialog stock-in → also listed on Adjustment tab
+        controlSource: line.controlSource || null,
       })),
     )
     return success(res, saved, 201)
@@ -195,11 +215,14 @@ export async function stockInFromOrder(req, res) {
 export async function createAdjustment(req, res) {
   try {
     const { tenantId, branchId } = resolveInventoryScope(req)
+    // branchId mirrors products.quantity onto branch_inventory for this IM branch only
     const row = await insertLedgerEvent(tenantId, {
       ...req.validated.body,
       movementType: MOVEMENT_TYPES.ADJUSTMENT,
       createdBy: req.user.id,
       scopeBranchId: branchId,
+      branchId,
+      controlSource: CONTROL_SOURCES.ADJUSTMENT,
     })
     return success(res, row, 201)
   } catch (err) {
@@ -215,6 +238,8 @@ export async function createDamaged(req, res) {
       movementType: MOVEMENT_TYPES.DAMAGED,
       createdBy: req.user.id,
       scopeBranchId: branchId,
+      branchId,
+      controlSource: CONTROL_SOURCES.ADJUSTMENT,
     })
     return success(res, row, 201)
   } catch (err) {
@@ -230,6 +255,8 @@ export async function createOther(req, res) {
       movementType: MOVEMENT_TYPES.OTHER,
       createdBy: req.user.id,
       scopeBranchId: branchId,
+      branchId,
+      controlSource: CONTROL_SOURCES.ADJUSTMENT,
     })
     return success(res, row, 201)
   } catch (err) {
@@ -245,6 +272,8 @@ export async function createStockOut(req, res) {
       movementType: MOVEMENT_TYPES.OUT,
       createdBy: req.user.id,
       scopeBranchId: branchId,
+      branchId,
+      controlSource: CONTROL_SOURCES.ADJUSTMENT,
     })
     return success(res, row, 201)
   } catch (err) {
@@ -260,6 +289,8 @@ export async function createExpired(req, res) {
       movementType: MOVEMENT_TYPES.EXPIRED,
       createdBy: req.user.id,
       scopeBranchId: branchId,
+      branchId,
+      controlSource: CONTROL_SOURCES.ADJUSTMENT,
     })
     return success(res, row, 201)
   } catch (err) {
@@ -302,17 +333,21 @@ export async function exportControl(req, res) {
     const movementType = query.movementType
     const { ledgerKind, ...rest } = query
 
-    // Adjustment tab export = same scope as adjustment-ledger list.
+    // Export scope mirrors each tab's list (Adjustment / Stock Out dual display)
     let filters
     if (movementType === MOVEMENT_TYPES.ADJUSTMENT) {
       const movementTypes = ledgerKind
         ? [ledgerKind]
-        : [
-            MOVEMENT_TYPES.ADJUSTMENT,
-            MOVEMENT_TYPES.DAMAGED,
-            MOVEMENT_TYPES.EXPIRED,
-            MOVEMENT_TYPES.OTHER,
-          ]
+        : [...ADJUSTMENT_LEDGER_TYPES, MOVEMENT_TYPES.IN]
+      filters = {
+        ...rest,
+        branchId,
+        movementTypes,
+        controlSourceForIn: CONTROL_SOURCES.ADJUSTMENT,
+      }
+      delete filters.movementType
+    } else if (movementType === MOVEMENT_TYPES.OUT) {
+      const movementTypes = ledgerKind ? [ledgerKind] : STOCK_OUT_LEDGER_TYPES
       filters = {
         ...rest,
         branchId,

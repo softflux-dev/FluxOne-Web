@@ -53,7 +53,7 @@ export function ControlSecondaryActions({
 
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      <Button
+      {/* <Button
         type="button"
         variant="outline"
         className="relative cursor-pointer"
@@ -67,7 +67,7 @@ export function ControlSecondaryActions({
             {badge > 99 ? '99+' : badge}
           </span>
         ) : null}
-      </Button>
+      </Button> */}
 
       <Button
         type="button"

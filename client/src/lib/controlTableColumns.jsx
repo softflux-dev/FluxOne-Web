@@ -15,6 +15,16 @@ const SOURCE_LABEL = {
   out: 'Sale / stock out',
   damaged: 'Damaged',
   expired: 'Expired',
+  other: 'Other',
+}
+
+const MOVEMENT_KIND_LABEL = {
+  out: 'Sale',
+  damaged: 'Damaged',
+  expired: 'Expired',
+  other: 'Other',
+  in: 'Stock in',
+  adjustment: 'Adjustment',
 }
 
 function typeLabel(type) {
@@ -127,6 +137,15 @@ export function controlColumnsForTab(tab) {
   if (tab === MOVEMENT_TYPES.OUT) {
     return [
       ...shared,
+      {
+        key: 'ledgerKind',
+        label: 'Kind',
+        render: (row) => (
+          <span className="capitalize text-slate-700">
+            {MOVEMENT_KIND_LABEL[row.movementType] || row.movementType || '—'}
+          </span>
+        ),
+      },
       { key: 'type', label: 'Type', render: typeBadge },
       {
         key: 'qty',

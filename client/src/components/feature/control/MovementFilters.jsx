@@ -1,6 +1,7 @@
 import { CatalogCascadeFilters } from '@/components/shared/CatalogCascadeFilters'
+import { LEDGER_KIND_OPTIONS } from '@/lib/controlTabs'
 
-// Control filter bar — shared cascade + dates + product type (+ ledger kind on Adjustment).
+// Control filter bar — shared cascade + dates + product type (+ ledger kind on Adj/Out).
 export function MovementFilters({
   q = '',
   type = '',
@@ -13,6 +14,7 @@ export function MovementFilters({
   from = '',
   to = '',
   showLedgerKind = false,
+  ledgerKindOptions = LEDGER_KIND_OPTIONS,
   categories = [],
   subcategories = [],
   onSearchChange,
@@ -34,6 +36,7 @@ export function MovementFilters({
       showDates
       showType
       showLedgerKind={showLedgerKind}
+      ledgerKindOptions={ledgerKindOptions}
       title="Filter your inventory"
       description="Filters apply across all tabs."
       idPrefix="control"

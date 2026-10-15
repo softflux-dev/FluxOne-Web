@@ -26,7 +26,7 @@ export function InventoryControlTabs({
   return (
     <div
       className={cn(
-        'flex flex-wrap gap-1 border-b border-slate-200 pb-px',
+        'flex flex-wrap gap-1 border-b border-border pb-px',
         className,
       )}
       role="tablist"
@@ -48,8 +48,8 @@ export function InventoryControlTabs({
             className={cn(
               'relative inline-flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm font-semibold transition-colors duration-200 sm:px-4',
               active
-                ? 'text-slate-900'
-                : 'text-slate-500 hover:text-slate-800',
+                ? 'text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <Icon className="size-4 shrink-0" strokeWidth={2} />
@@ -59,8 +59,9 @@ export function InventoryControlTabs({
                 className={cn(
                   'inline-flex min-w-5 items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums',
                   active
-                    ? 'bg-purple-100 text-purple-800'
-                    : 'bg-slate-100 text-slate-600',
+                    ? // Light: purple chip; Dark: solid primary so count stays readable
+                      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100'
+                    : 'bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground',
                 )}
               >
                 {Number(count).toLocaleString()}

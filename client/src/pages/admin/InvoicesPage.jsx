@@ -260,16 +260,16 @@ export function InvoicesPage() {
       </MotionReveal>
 
       <MotionReveal delay={0.1}>
-        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search by Tracking ID or Source..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
-                'w-full border border-border bg-slate-50/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-slate-900 outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-300',
+                'w-full border border-border bg-muted/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-foreground outline-none focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary',
                 UI_RADIUS,
               )}
             />
@@ -279,7 +279,7 @@ export function InvoicesPage() {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div
               className={cn(
-                'flex items-center border border-border bg-white px-2.5 py-1.5',
+                'flex items-center border border-border bg-card px-2.5 py-1.5',
                 UI_RADIUS,
               )}
             >
@@ -287,7 +287,7 @@ export function InvoicesPage() {
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 aria-label="Filter by month"
-                className="h-7 border-0 bg-transparent py-0 text-xs font-semibold text-slate-800 shadow-none focus:ring-0"
+                className="h-7 border-0 bg-transparent py-0 text-xs font-semibold text-foreground shadow-none focus:ring-0"
               >
                 {MONTHS_OPTIONS.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -299,7 +299,7 @@ export function InvoicesPage() {
 
             <div
               className={cn(
-                'flex items-center border border-border bg-white px-2.5 py-1.5',
+                'flex items-center border border-border bg-card px-2.5 py-1.5',
                 UI_RADIUS,
               )}
             >
@@ -307,7 +307,7 @@ export function InvoicesPage() {
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
                 aria-label="Filter by year"
-                className="h-7 border-0 bg-transparent py-0 text-xs font-semibold text-slate-800 shadow-none focus:ring-0"
+                className="h-7 border-0 bg-transparent py-0 text-xs font-semibold text-foreground shadow-none focus:ring-0"
               >
                 <option value="all">All Years</option>
                 {yearOptions.map((y) => (
@@ -473,7 +473,7 @@ export function InvoicesPage() {
                             {inv.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="sticky right-0 z-[1] bg-white px-4 py-3.5 text-right group-hover:bg-slate-50/50">
+                        <TableCell className="sticky right-0 z-[1] bg-card px-4 py-3.5 text-right group-hover:bg-muted">
                           <div className="flex items-center justify-end gap-1.5">
                             <Button
                               type="button"

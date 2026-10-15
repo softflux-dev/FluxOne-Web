@@ -224,7 +224,7 @@ export function TaxProfitTable({
                     <TableHead className="px-3 py-3 font-medium">Tax %</TableHead>
                   )}
                   {visibleColumns.finalPrice && (
-                    <TableHead className="sticky right-0 z-[1] bg-white px-3 py-3 text-right font-bold text-slate-900">
+                    <TableHead className="sticky right-0 z-[1] bg-muted px-3 py-3 text-right font-bold text-foreground">
                       Final Price
                     </TableHead>
                   )}
@@ -316,7 +316,7 @@ export function TaxProfitTable({
                       )}
 
                       {visibleColumns.finalPrice && (
-                        <TableCell className="sticky right-0 z-[1] bg-white px-3 py-3 text-right group-hover:bg-slate-50/70">
+                        <TableCell className="sticky right-0 z-[1] bg-card px-3 py-3 text-right group-hover:bg-muted">
                           <span className="font-extrabold text-sm text-purple-950 block">
                             {formatPlain(finalPrice)}
                           </span>

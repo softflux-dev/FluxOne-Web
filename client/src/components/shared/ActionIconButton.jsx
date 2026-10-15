@@ -4,15 +4,15 @@ import { cn } from '@/lib/utils'
 
 // Standard table row actions — direct icons + hover tooltip (title/aria-label). No ⋮ menus.
 const ACTION_STYLES = {
-  view: 'text-purple-700 hover:bg-purple-50 hover:text-purple-900 hover:scale-110 active:scale-95',
-  edit: 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110 active:scale-95',
-  delete: 'text-slate-500 hover:bg-rose-50 hover:text-rose-700 hover:scale-110 active:scale-95',
-  approve: 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 hover:scale-110 active:scale-95',
-  reject: 'text-red-600 hover:bg-rose-50 hover:text-rose-700 hover:scale-110 active:scale-95',
+  view: 'text-purple-600 hover:bg-purple-50 hover:text-purple-800 dark:text-[#d8b4fe] dark:hover:bg-accent dark:hover:text-[#f3e8ff] hover:scale-110 active:scale-95',
+  edit: 'text-sky-600 hover:bg-sky-50 hover:text-sky-800 dark:text-sky-400 dark:hover:bg-muted dark:hover:text-sky-300 hover:scale-110 active:scale-95',
+  delete: 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-muted dark:hover:text-rose-300 hover:scale-110 active:scale-95',
+  approve: 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-muted dark:hover:text-emerald-300 hover:scale-110 active:scale-95',
+  reject: 'text-red-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-muted dark:hover:text-rose-300 hover:scale-110 active:scale-95',
   // Soft block / deactivate (Ban) — keep separate from hard delete (trash)
-  block: 'text-rose-600 hover:bg-rose-50 hover:text-rose-800 hover:scale-110 active:scale-95',
-  unblock: 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 hover:scale-110 active:scale-95',
-  addChild: 'text-teal-700 hover:bg-teal-50 hover:text-teal-900 hover:scale-110 active:scale-95',
+  block: 'text-rose-600 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:hover:bg-muted dark:hover:text-rose-300 hover:scale-110 active:scale-95',
+  unblock: 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 dark:text-emerald-400 dark:hover:bg-muted dark:hover:text-emerald-300 hover:scale-110 active:scale-95',
+  addChild: 'text-teal-700 hover:bg-teal-50 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-muted dark:hover:text-teal-300 hover:scale-110 active:scale-95',
 }
 
 const ACTION_ICONS = {

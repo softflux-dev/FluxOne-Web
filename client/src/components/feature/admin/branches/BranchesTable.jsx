@@ -68,11 +68,11 @@ export function BranchesTable({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-slate-900">{b.name}</p>
+                                <p className="truncate text-sm font-bold text-foreground">{b.name}</p>
                                 {/* Human-readable ID; title shows full UUID on hover */}
                                 <p
                                   title={b.id || undefined}
-                                  className="mt-0.5 font-mono text-[11px] font-semibold text-purple-800"
+                                  className="mt-0.5 font-mono text-[11px] font-semibold text-primary"
                                 >
                                   {displayBranchRef(b)}
                                 </p>
@@ -98,7 +98,7 @@ export function BranchesTable({
                               <span className="line-clamp-2">{b.location || '—'}</span>
                             </p>
                             {formatHoursRange(b.openingTime, b.closingTime) ? (
-                              <p className="mt-0.5 text-[10px] font-medium text-purple-800">
+                              <p className="mt-0.5 text-[10px] font-medium text-primary">
                                 Hours {formatHoursRange(b.openingTime, b.closingTime)}
                               </p>
                             ) : null}
@@ -114,7 +114,7 @@ export function BranchesTable({
                                 className="size-8 shrink-0 rounded-full border border-slate-200 object-cover"
                               />
                               <div className="min-w-0">
-                                <p className="truncate text-xs font-bold text-slate-900">
+                                <p className="truncate text-xs font-bold text-foreground">
                                   {b.manager?.name || '—'}
                                 </p>
                                 <p className="truncate text-[10px] text-slate-500">
@@ -161,7 +161,7 @@ export function BranchesTable({
                             Branch Staff
                           </TableHead>
                           <TableHead className="px-2 py-3 font-medium whitespace-nowrap sm:px-3">Status</TableHead>
-                          <TableHead className="sticky right-0 z-[1] bg-slate-200/80 px-2 py-3 font-medium whitespace-nowrap sm:px-3">
+                          <TableHead className="sticky right-0 z-[1] bg-slate-200/80 dark:bg-muted px-2 py-3 font-medium whitespace-nowrap sm:px-3">
                             Actions
                           </TableHead>
                         </TableRow>
@@ -171,12 +171,12 @@ export function BranchesTable({
                           const isOpen = b.status === 'open'
                           const imageSrc = b.image || DEFAULT_BRANCH_IMAGE
                           return (
-                            <TableRow key={b.id} className="group hover:bg-slate-50/80">
+                            <TableRow key={b.id} className="group">
                               {/* Compact ID cell — aligned with other modules (no pill / truncation) */}
                               <TableCell className="px-2 py-3 align-middle whitespace-nowrap sm:px-3">
                                 <span
                                   title={b.id || undefined}
-                                  className="font-mono text-xs font-bold text-purple-800 select-all"
+                                  className="font-mono text-xs font-bold text-primary select-all"
                                 >
                                   {displayBranchRef(b)}
                                 </span>
@@ -189,17 +189,17 @@ export function BranchesTable({
                                 />
                               </TableCell>
                               <TableCell className="px-2 py-3 sm:px-3">
-                                <p className="font-bold text-slate-900 text-xs sm:text-sm">{b.name}</p>
-                                <span className="text-[10px] sm:text-[11px] text-slate-400 whitespace-nowrap">
+                                <p className="font-bold text-foreground text-xs sm:text-sm">{b.name}</p>
+                                <span className="text-[10px] sm:text-[11px] text-muted-foreground whitespace-nowrap">
                                   Est. {formatCreatedAt(b.createdAt)}
                                 </span>
                                 {formatHoursRange(b.openingTime, b.closingTime) ? (
-                                  <p className="mt-0.5 text-[10px] font-medium text-purple-800 whitespace-nowrap">
+                                  <p className="mt-0.5 text-[10px] font-medium text-primary whitespace-nowrap">
                                     Hours {formatHoursRange(b.openingTime, b.closingTime)}
                                   </p>
                                 ) : null}
                                 {formatWorkingDaysShort(b.workingDays) ? (
-                                  <p className="mt-0.5 text-[10px] text-slate-500 whitespace-nowrap">
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
                                     Days {formatWorkingDaysShort(b.workingDays)}
                                   </p>
                                 ) : null}
@@ -219,7 +219,7 @@ export function BranchesTable({
                                   />
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1.5">
-                                      <p className="font-bold text-slate-900 text-xs truncate">
+                                      <p className="font-bold text-foreground text-xs truncate">
                                         {b.manager?.name || '—'}
                                       </p>
                                       {b.manager?.gender ? (
@@ -262,7 +262,7 @@ export function BranchesTable({
                                   {isOpen ? 'Open' : 'Blocked'}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="sticky right-0 z-[1] bg-white px-1.5 py-3 whitespace-nowrap sm:px-3 group-hover:bg-slate-50/80">
+                              <TableCell className="sticky right-0 z-[1] bg-card px-1.5 py-3 whitespace-nowrap sm:px-3 group-hover:bg-muted">
                                 <BranchRowActions
                                   branch={b}
                                   mutating={mutating}
