@@ -3,22 +3,20 @@ import { FormDialog, DialogCancelButton } from '@/components/shared/FormDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useFormBaseline } from '@/hooks/useFormBaseline'
 import { referenceFromUuid, displayStaffRef } from '@/lib/formatDisplayId'
 import { formatDateLine } from '@/lib/formatDateTime'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
+import {
+  isLeaveDecision,
+  LeaveDecisionSelect,
+  LEAVE_DECISION_UNSET,
+} from '@/components/shared/LeaveDecisionSelect'
 import { cn } from '@/lib/utils'
 
-// TC-BM-leave-002 — Admin decides Pending leave; Pending is system status only (not selectable)
-const DECISION_OPTIONS = [
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-]
-
 // Empty = no decision yet (Confirm stays disabled until Approved / Rejected)
-const UNSET_DECISION = ''
+const UNSET_DECISION = LEAVE_DECISION_UNSET
 
 function displayLeaveRef(row = {}) {
   return row.id ? referenceFromUuid(row.id, 'LV') : '—'
@@ -99,7 +97,7 @@ export function LeaveDetailDialog({
   )
   const dirty = isPending ? isDirty(formSnapshot) : false
 
-  const hasDecision = decisionStatus === 'approved' || decisionStatus === 'rejected'
+  const hasDecision = isLeaveDecision(decisionStatus)
   const showReasonBox = isPending && hasDecision
   const reasonRequired = decisionStatus === 'rejected'
 
@@ -205,22 +203,11 @@ export function LeaveDetailDialog({
 
                 <DetailRow label="Status">
                   {isPending ? (
-                    // Only Approved / Rejected — Pending stays the existing record status
-                    <NativeSelect
+                    <LeaveDecisionSelect
                       value={decisionStatus}
-                      onChange={(e) => setDecisionStatus(e.target.value)}
+                      onChange={setDecisionStatus}
                       className="max-w-xs"
-                      aria-label="Leave decision status"
-                    >
-                      <option value={UNSET_DECISION} disabled>
-                        Select decision…
-                      </option>
-                      {DECISION_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </NativeSelect>
+                    />
                   ) : (
                     <Badge className={cn('border capitalize', statusBadgeClass(row.status))}>
                       {row.status}

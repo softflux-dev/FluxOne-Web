@@ -29,16 +29,7 @@ import {
   PRODUCT_STATUS,
 } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
-
-// "1.5 L – mint": values only (type names are implied by the column), en dash between.
-function variantCapsuleLabel(sku) {
-  const parts = Array.isArray(sku.parts) ? sku.parts : []
-  const values = parts
-    .map((part) => String(part.valueName || part.value_name || '').trim())
-    .filter(Boolean)
-  if (values.length) return values.join(' \u2013 ')
-  return sku.variantLabel || 'Variant'
-}
+import { variantSkuLabel } from '@/lib/variantDisplay'
 
 function promotionLabel(sku) {
   const offer = Number(sku.offerPercent || 0)
@@ -175,7 +166,7 @@ export function VariantSkusDialog({
                     const hasPromo =
                       disc > 0 || sku.offerName || Number(sku.offerPercent) > 0
 
-                    const skuLabel = variantCapsuleLabel(sku)
+                    const skuLabel = variantSkuLabel(sku)
                     return (
                       <TableRow key={sku.id} className={inactive ? 'opacity-60' : ''}>
                         <TableCell className="px-3 py-3">

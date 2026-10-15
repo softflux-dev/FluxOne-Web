@@ -8,6 +8,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
 import {
+  isLeaveDecision,
+  LeaveDecisionSelect,
+  LEAVE_DECISION_UNSET,
+} from '@/components/shared/LeaveDecisionSelect'
+import {
   Table,
   TableHeader,
   TableBody,
@@ -66,7 +71,7 @@ export function StaffLeavesTab({
   const [editStart, setEditStart] = useState('')
   const [editEnd, setEditEnd] = useState('')
   const [editReason, setEditReason] = useState('')
-  const [editStatus, setEditStatus] = useState('approved')
+  const [editStatus, setEditStatus] = useState(LEAVE_DECISION_UNSET)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const fetchLeaves = async () => {
@@ -106,13 +111,20 @@ export function StaffLeavesTab({
     setEditStart(toInputDate(row.startDate))
     setEditEnd(toInputDate(row.endDate))
     setEditReason(row.reason || '')
-    setEditStatus(row.status || 'approved')
+    // Pending → placeholder until BM picks Approved / Rejected
+    setEditStatus(isLeaveDecision(row.status) ? row.status : LEAVE_DECISION_UNSET)
   }
+
+  const canSaveEdit =
+    Boolean(editStart && editEnd) && !editDateError && isLeaveDecision(editStatus)
 
   const handleUpdateLeave = async () => {
     if (!editing) return
     if (!editStart || !editEnd) return toastError('Please select both dates')
     if (editDateError) return
+    if (!isLeaveDecision(editStatus)) {
+      return toastError('Select Approved or Rejected before saving')
+    }
     setMutating(true)
     const res = await apiClient.put(`/branch/leaves/${editing.id}`, {
       startDate: editStart,
@@ -310,19 +322,20 @@ export function StaffLeavesTab({
             </div>
             <div className="space-y-1.5">
               <Label>Status</Label>
-              <NativeSelect value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                <option value="approved">approved</option>
-                <option value="cancelled">cancelled</option>
-                <option value="rejected">rejected</option>
-              </NativeSelect>
+              <LeaveDecisionSelect value={editStatus} onChange={setEditStatus} />
             </div>
           </div>
           <DialogFooter>
             <DialogCancelButton onClick={() => setEditing(null)}>Cancel</DialogCancelButton>
             <Button
               onClick={handleUpdateLeave}
-              disabled={mutating}
+              disabled={mutating || !canSaveEdit}
               variant="brand"
+              title={
+                !isLeaveDecision(editStatus)
+                  ? 'Select Approved or Rejected before saving'
+                  : undefined
+              }
             >
               {mutating ? 'Saving…' : 'Save changes'}
             </Button>
