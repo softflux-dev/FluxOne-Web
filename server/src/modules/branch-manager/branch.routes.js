@@ -6,11 +6,10 @@ import activityLogsRoutes from './activity-logs/activity_logs.routes.js'
 import { attendanceList, markAttendance } from './attendance/attendance.controller.js'
 import {
   listScales,
-  createScale,
-  updateScale,
-  deleteScale,
-  scoreStaff,
+  saveScale,
   getStaffScores,
+  postEvaluation,
+  getEmployeeDetail,
 } from './performance/performance.controller.js'
 import { holidaysList, addHoliday, editHoliday, removeHoliday } from './holidays/holidays.controller.js'
 import {
@@ -96,10 +95,9 @@ import {
 import {
   listScalesSchema,
   listScoresSchema,
-  createScaleSchema,
-  updateScaleSchema,
-  scaleIdParamsSchema,
-  scoreStaffSchema,
+  saveScaleSchema,
+  createEvaluationSchema,
+  employeeDetailSchema,
 } from './performance/performance.validator.js'
 import {
   listHardwareSchema,
@@ -221,30 +219,18 @@ router.post(
   asyncHandler(processRefund),
 )
 
-// Performance Scoring & Scales
+// Performance Scoring & Scales (versioned) + evaluations
 router.get(
   '/performance/scales',
   requirePermission('performance:read'),
   validate(listScalesSchema),
   asyncHandler(listScales),
 )
-router.post(
+router.put(
   '/performance/scales',
   requirePermission('staff:write'),
-  validate(createScaleSchema),
-  asyncHandler(createScale),
-)
-router.put(
-  '/performance/scales/:id',
-  requirePermission('staff:write'),
-  validate(updateScaleSchema),
-  asyncHandler(updateScale),
-)
-router.delete(
-  '/performance/scales/:id',
-  requirePermission('staff:write'),
-  validate(scaleIdParamsSchema),
-  asyncHandler(deleteScale),
+  validate(saveScaleSchema),
+  asyncHandler(saveScale),
 )
 router.get(
   '/performance/scores',
@@ -253,10 +239,16 @@ router.get(
   asyncHandler(getStaffScores),
 )
 router.post(
-  '/performance/scores',
+  '/performance/evaluations',
   requirePermission('staff:write'),
-  validate(scoreStaffSchema),
-  asyncHandler(scoreStaff),
+  validate(createEvaluationSchema),
+  asyncHandler(postEvaluation),
+)
+router.get(
+  '/performance/employees/:staffId',
+  requirePermission('performance:read'),
+  validate(employeeDetailSchema),
+  asyncHandler(getEmployeeDetail),
 )
 
 // Discounts

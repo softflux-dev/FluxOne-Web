@@ -14,8 +14,35 @@ import {
 } from '@/components/ui/table'
 import { BRAND, UI_RADIUS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
-import { finalPriceFromCost } from '@/lib/pricing'
+import {
+  actualMarginAmount,
+  actualMarginPercent,
+  finalPriceFromSelling,
+} from '@/lib/pricing'
+import {
+  ADMIN_PRICING_LEGEND,
+  FINAL_PRICE_FORMULA,
+  MARGIN_FORMULA,
+  PROFIT_PCT_FORMULA,
+  PURCHASE_COST_FORMULA,
+  SELLING_PRICE_FORMULA,
+  TAX_PCT_FORMULA,
+} from '@/lib/pricingFormulaCopy'
 import { BadgePercent, Loader2, PackageOpen, Receipt } from 'lucide-react'
+
+function resolveRowPricing(p) {
+  const sellingPrice = Number(p.sellingPrice ?? 0)
+  const discountPercent = Number(p.discountPercent ?? 0)
+  const taxPct = Number(p.taxPct ?? 0)
+  const baseCost = Number(p.baseCost ?? 0)
+  const finalPrice =
+    p.finalPrice ?? finalPriceFromSelling(sellingPrice, discountPercent, taxPct)
+  const marginAmount =
+    p.marginAmount ?? actualMarginAmount(baseCost, sellingPrice)
+  const marginPercent =
+    p.marginPercent ?? actualMarginPercent(baseCost, sellingPrice)
+  return { sellingPrice, finalPrice, marginAmount, marginPercent, baseCost }
+}
 
 export function TaxProfitTable({
   currency,
@@ -40,7 +67,7 @@ export function TaxProfitTable({
   return (
     <SurfaceCard
       title="Catalog Pricing & Profit Margins"
-      description={`Final Price = (Purchase Cost + Profit) + Tax on Subtotal · Currency: ${currency}`}
+      description={`${ADMIN_PRICING_LEGEND} · Currency: ${currency}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {selectedIds.length > 0 && (
@@ -104,11 +131,16 @@ export function TaxProfitTable({
         />
       ) : (
         <>
+          <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+            <span className="font-semibold text-slate-700">Formulas: </span>
+            {FINAL_PRICE_FORMULA}. {MARGIN_FORMULA}
+          </p>
+
           <div className="space-y-3 md:hidden">
             {products.map((p) => {
               const isChecked = selectedIds.includes(p.id)
-              const finalPrice =
-                p.finalPrice ?? finalPriceFromCost(p.baseCost, p.profitPct, p.taxPct)
+              const { sellingPrice, finalPrice, marginAmount, marginPercent, baseCost } =
+                resolveRowPricing(p)
 
               return (
                 <article
@@ -154,28 +186,45 @@ export function TaxProfitTable({
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <span
                           className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700"
-                          aria-label={`Profit margin ${p.profitPct} percent`}
+                          title={PROFIT_PCT_FORMULA}
+                          aria-label={`Profit ${p.profitPct} percent`}
                         >
                           +{p.profitPct}%
                         </span>
                         <span
                           className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700"
+                          title={TAX_PCT_FORMULA}
                           aria-label={`Tax ${p.taxPct > 0 ? `${p.taxPct} percent` : 'exempt'}`}
                         >
                           {p.taxPct > 0 ? `${p.taxPct}%` : '0% (Exempt)'}
                         </span>
                       </div>
-                      <div className="mt-2 flex items-end justify-between gap-2">
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-400">
+                        <p>
+                          Purchase{' '}
+                          <span className="font-medium text-slate-600">
+                            {formatPlain(baseCost)}
+                          </span>
+                        </p>
+                        <p>
+                          Selling{' '}
+                          <span className="font-medium text-slate-600">
+                            {formatPlain(sellingPrice)}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="mt-1 flex items-end justify-between gap-2">
                         <div>
-                          <p className="text-[10px] text-slate-400">
-                            Purchase {formatPlain(p.baseCost)}
+                          <p className="text-[10px] text-slate-400" title={FINAL_PRICE_FORMULA}>
+                            Final (incl. tax)
                           </p>
                           <p className="text-sm font-extrabold text-purple-950">
                             {formatPlain(finalPrice)}
                           </p>
                         </div>
-                        <p className="text-[10px] text-slate-400">
-                          Margin {formatPlain(Number(finalPrice) - Number(p.baseCost || 0))}
+                        <p className="text-[10px] text-slate-400" title={MARGIN_FORMULA}>
+                          Margin {formatPlain(marginAmount)}
+                          {marginPercent ? ` (${marginPercent}%)` : ''}
                         </p>
                       </div>
                     </div>
@@ -186,7 +235,7 @@ export function TaxProfitTable({
           </div>
 
           <div className="hidden overflow-x-auto md:block">
-            <Table className="min-w-[50rem] text-left text-sm">
+            <Table className="min-w-[56rem] text-left text-sm">
               <TableHeader>
                 <TableRow className="text-xs text-slate-500 uppercase">
                   <TableHead className="w-10 px-3 py-3 text-center">
@@ -215,17 +264,36 @@ export function TaxProfitTable({
                     <TableHead className="px-3 py-3 font-medium">Category</TableHead>
                   )}
                   {visibleColumns.baseCost && (
-                    <TableHead className="px-3 py-3 font-medium">Purchase Cost</TableHead>
+                    <TableHead className="px-3 py-3 font-medium" title={PURCHASE_COST_FORMULA}>
+                      Purchase
+                    </TableHead>
                   )}
                   {visibleColumns.profitPct && (
-                    <TableHead className="px-3 py-3 font-medium">Profit %</TableHead>
+                    <TableHead className="px-3 py-3 font-medium" title={PROFIT_PCT_FORMULA}>
+                      Profit %
+                    </TableHead>
                   )}
                   {visibleColumns.taxPct && (
-                    <TableHead className="px-3 py-3 font-medium">Tax %</TableHead>
+                    <TableHead className="px-3 py-3 font-medium" title={TAX_PCT_FORMULA}>
+                      Tax %
+                    </TableHead>
+                  )}
+                  {visibleColumns.sellingPrice && (
+                    <TableHead className="px-3 py-3 font-medium" title={SELLING_PRICE_FORMULA}>
+                      Selling
+                    </TableHead>
+                  )}
+                  {visibleColumns.margin && (
+                    <TableHead className="px-3 py-3 font-medium" title={MARGIN_FORMULA}>
+                      Margin
+                    </TableHead>
                   )}
                   {visibleColumns.finalPrice && (
-                    <TableHead className="sticky right-0 z-[1] bg-muted px-3 py-3 text-right font-bold text-foreground">
-                      Final Price
+                    <TableHead
+                      className="sticky right-0 z-[1] bg-muted px-3 py-3 text-right font-bold text-foreground"
+                      title={FINAL_PRICE_FORMULA}
+                    >
+                      Final (incl. tax)
                     </TableHead>
                   )}
                 </TableRow>
@@ -233,8 +301,8 @@ export function TaxProfitTable({
               <TableBody>
                 {products.map((p) => {
                   const isChecked = selectedIds.includes(p.id)
-                  const finalPrice =
-                    p.finalPrice ?? finalPriceFromCost(p.baseCost, p.profitPct, p.taxPct)
+                  const { sellingPrice, finalPrice, marginAmount, marginPercent, baseCost } =
+                    resolveRowPricing(p)
 
                   return (
                     <TableRow
@@ -295,13 +363,16 @@ export function TaxProfitTable({
 
                       {visibleColumns.baseCost && (
                         <TableCell className="px-3 py-3 font-semibold text-slate-800 text-xs">
-                          {formatPlain(p.baseCost)}
+                          {formatPlain(baseCost)}
                         </TableCell>
                       )}
 
                       {visibleColumns.profitPct && (
                         <TableCell className="px-3 py-3">
-                          <span className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                          <span
+                            className="inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700"
+                            title={PROFIT_PCT_FORMULA}
+                          >
                             +{p.profitPct}%
                           </span>
                         </TableCell>
@@ -309,19 +380,39 @@ export function TaxProfitTable({
 
                       {visibleColumns.taxPct && (
                         <TableCell className="px-3 py-3">
-                          <span className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                          <span
+                            className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700"
+                            title={TAX_PCT_FORMULA}
+                          >
                             {p.taxPct > 0 ? `${p.taxPct}%` : '0%'}
                           </span>
                         </TableCell>
                       )}
 
+                      {visibleColumns.sellingPrice && (
+                        <TableCell className="px-3 py-3 font-semibold text-slate-800 text-xs">
+                          {formatPlain(sellingPrice)}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.margin && (
+                        <TableCell className="px-3 py-3 text-xs text-slate-700">
+                          <span className="font-semibold">{formatPlain(marginAmount)}</span>
+                          {marginPercent ? (
+                            <span className="mt-0.5 block text-[10px] text-slate-400">
+                              {marginPercent}%
+                            </span>
+                          ) : null}
+                        </TableCell>
+                      )}
+
                       {visibleColumns.finalPrice && (
                         <TableCell className="sticky right-0 z-[1] bg-card px-3 py-3 text-right group-hover:bg-muted">
-                          <span className="font-extrabold text-sm text-purple-950 block">
+                          <span
+                            className="font-extrabold text-sm text-purple-950 block"
+                            title={FINAL_PRICE_FORMULA}
+                          >
                             {formatPlain(finalPrice)}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            Margin: {formatPlain(Number(finalPrice) - Number(p.baseCost || 0))}
                           </span>
                         </TableCell>
                       )}

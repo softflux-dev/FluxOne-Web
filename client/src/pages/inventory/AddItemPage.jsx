@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import {
   CombinationTable,
+  ImTaxPolicyFields,
   NormalProductFields,
-  TaxProfitFields,
 } from '@/components/feature/products/add-item/CombinationTable'
 import { SearchableMultiSelect } from '@/components/feature/products/add-item/SearchableMultiSelect'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
@@ -29,8 +29,8 @@ import {
 } from '@/lib/addItem'
 import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
+import { resolveInitialApplyDefaultTax } from '@/lib/imTaxProfitPolicy'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
-import { validatePercentage } from '@/lib/validation/formValidators'
 import { cn } from '@/lib/utils'
 
 function newId(prefix) {
@@ -54,9 +54,8 @@ function emptyForm() {
     offerId: '',
     discountPercent: '',
     offerName: '',
-    // Pre-filled from Admin Tax & Profit defaults (override per product)
-    taxPercent: '',
-    profitPercent: '',
+    // as per company code policy — Apply Default Tax only (profit % Admin-owned)
+    applyDefaultTax: false,
     // Optional product image (File) — uploaded after create via PATCH
     image: null,
   }
@@ -77,11 +76,12 @@ export function AddItemPage() {
   const [selectedValuesByType, setSelectedValuesByType] = useState({})
   const [combinations, setCombinations] = useState([])
   const [selectedComboKeys, setSelectedComboKeys] = useState([])
-  // Skip re-applying catalog defaults after the user edits Tax % / Profit %
-  const [taxProfitTouched, setTaxProfitTouched] = useState(false)
+  // Skip re-applying initial Apply Default Tax after the user toggles the checkbox
+  const [applyDefaultTaxTouched, setApplyDefaultTaxTouched] = useState(false)
 
   const isVariant = form.productKind === PRODUCT_KIND.VARIANT
   const isNormal = form.productKind === PRODUCT_KIND.NORMAL
+  const defaultTaxPercent = Math.round(Number(catalog.defaults?.defaultTaxPercent) || 0)
 
   const categories = catalog.parents || []
   const subcategories = useMemo(() => {
@@ -149,20 +149,16 @@ export function AddItemPage() {
     })
   }, [selectedTypeIds])
 
-  // Create only: pre-fill Tax % / Profit % from tenant defaults once catalog loads
+  // Create only: default Apply Default Tax from tenant default tax % once catalog loads
   useEffect(() => {
-    if (taxProfitTouched || catalogLoading) return
+    if (applyDefaultTaxTouched || catalogLoading) return
     const defaults = catalog.defaults
     if (!defaults) return
-    setForm((prev) => {
-      if (prev.taxPercent !== '' || prev.profitPercent !== '') return prev
-      return {
-        ...prev,
-        taxPercent: String(Math.round(Number(defaults.defaultTaxPercent) || 0)),
-        profitPercent: String(Math.round(Number(defaults.defaultProfitPercent) || 0)),
-      }
-    })
-  }, [catalog.defaults, catalogLoading, taxProfitTouched])
+    setForm((prev) => ({
+      ...prev,
+      applyDefaultTax: resolveInitialApplyDefaultTax(defaults.defaultTaxPercent),
+    }))
+  }, [catalog.defaults, catalogLoading, applyDefaultTaxTouched])
 
   useEffect(() => {
     if (!isVariant) {
@@ -189,11 +185,10 @@ export function AddItemPage() {
 
   function patch(field, value) {
     if (
-      field === 'taxPercent' ||
-      field === 'profitPercent' ||
-      (field && typeof field === 'object' && ('taxPercent' in field || 'profitPercent' in field))
+      field === 'applyDefaultTax' ||
+      (field && typeof field === 'object' && 'applyDefaultTax' in field)
     ) {
-      setTaxProfitTouched(true)
+      setApplyDefaultTaxTouched(true)
     }
     setForm((prev) => {
       if (field && typeof field === 'object' && value === undefined) {
@@ -274,24 +269,6 @@ export function AddItemPage() {
       }
     }
     if (tabId === 'save') {
-      if (form.taxPercent === '' || form.taxPercent == null) {
-        return 'Tax percentage is required'
-      }
-      if (form.profitPercent === '' || form.profitPercent == null) {
-        return 'Profit percentage is required'
-      }
-      const taxErr = validatePercentage(form.taxPercent, {
-        min: 0,
-        max: 100,
-        fieldName: 'Tax percentage',
-      })
-      if (taxErr) return taxErr
-      const profitErr = validatePercentage(form.profitPercent, {
-        min: 0,
-        max: 100,
-        fieldName: 'Profit percentage',
-      })
-      if (profitErr) return profitErr
       if (isNormal) {
         if (form.purchasePrice === '' || form.sellingPrice === '') {
           return 'Purchase and selling price are required'
@@ -356,6 +333,7 @@ export function AddItemPage() {
         productKind: form.productKind,
         combinations,
         offers: catalog.offers || [],
+        defaultTaxPercent,
       })
       // Attach optional image for create → then image PATCH
       if (form.image) payload.image = form.image
@@ -639,16 +617,24 @@ export function AddItemPage() {
               </div>
 
               {isNormal ? (
-                <NormalProductFields form={form} patch={patch} offers={catalog.offers || []} />
+                <NormalProductFields
+                  form={form}
+                  patch={patch}
+                  offers={catalog.offers || []}
+                  defaultTaxPercent={defaultTaxPercent}
+                />
               ) : (
                 <div className="space-y-4">
                   <p className="text-sm text-slate-600">
                     Variant details were filled on the Combinations tab. Save creates the parent and
                     each active combination as its own SKU (shared batch timestamp).
                   </p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <TaxProfitFields form={form} patch={patch} idPrefix="variant" />
-                  </div>
+                  <ImTaxPolicyFields
+                    form={form}
+                    patch={patch}
+                    defaultTaxPercent={defaultTaxPercent}
+                    idPrefix="variant"
+                  />
                 </div>
               )}
             </div>

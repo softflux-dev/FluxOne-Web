@@ -223,13 +223,13 @@ export function buildProductPayload(fields, { withConfirmed = true } = {}) {
     purchasePrice: Number(fields.purchasePrice ?? 0),
     sellingPrice: Number(fields.sellingPrice ?? 0),
     ...(hasTaxIdsKey ? { taxIds } : {}),
-    // Optional; when set, server find-or-creates tax at this rate (wins over taxIds)
+    // IM forms use buildImTaxPayload (Apply Default Tax). Custom % is Admin-only.
     ...(fields.taxPercent !== undefined &&
     fields.taxPercent !== null &&
     fields.taxPercent !== ''
       ? { taxPercent: Math.round(Number(fields.taxPercent)) }
       : {}),
-    // Optional override; omit → server uses tenant default profit %
+    // as per company code policy — omit from IM UI; Admin bulk / server default owns profit %
     ...(fields.profitPercent !== undefined &&
     fields.profitPercent !== null &&
     fields.profitPercent !== ''

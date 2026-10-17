@@ -5,14 +5,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
-import { parseScaleMaxPoints, sumScalePoints } from '@/lib/performanceScales'
+import {
+  parseScaleMaxPoints,
+  SCALE_SUM_TARGET,
+  sumScalePoints,
+} from '@/lib/performanceScales'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
-import { toastError, toastSuccess } from '@/lib/toast'
-import { apiClient } from '@/api/api'
-import { Checkbox } from '@/components/ui/checkbox'
 
-const EMPTY = { name: '', maxPoints: '', isActive: true }
+const EMPTY = { name: '', maxPoints: '' }
 
 const FIELD_IDS = {
   name: 'scale-name',
@@ -21,24 +22,21 @@ const FIELD_IDS = {
 
 const SCALE_FIELD_ORDER = ['name', 'maxPoints']
 
-// Add / Edit scoring factor — dynamic max points, no fixed 100 budget.
+// Add / Edit one criterion in the local draft (parent saves the full version)
 export function ScaleFormDialog({
   open,
   onOpenChange,
   mode = 'create',
   initialScale = null,
   scales = [],
-  onSuccess,
+  onApply,
 }) {
   const isEdit = mode === 'edit'
   const [form, setForm] = useState(EMPTY)
-  const [mutating, setMutating] = useState(false)
   const [touchedPoints, setTouchedPoints] = useState(false)
   const { fieldErrors, formError, resetErrors, clearField, applyErrors } = useFieldErrors()
 
   const excludeId = isEdit ? initialScale?.id : null
-
-  // Other factors already allocated (excludes the row being edited).
   const otherUsed = useMemo(() => sumScalePoints(scales, excludeId), [scales, excludeId])
 
   useEffect(() => {
@@ -53,10 +51,9 @@ export function ScaleFormDialog({
       setForm({
         name: initialScale.name || '',
         maxPoints: String(initialScale.maxPoints ?? ''),
-        isActive: initialScale.isActive !== false,
       })
     } else {
-      setForm({ name: '', maxPoints: '', isActive: true })
+      setForm({ name: '', maxPoints: '' })
     }
   }, [open, isEdit, initialScale, resetErrors])
 
@@ -70,19 +67,17 @@ export function ScaleFormDialog({
         : null
 
   const pointsHint = fieldErrors.maxPoints || rangeError
-
-  // Live total max points reference for the Branch Manager.
   const projectedTotal = pointsValue == null ? otherUsed : otherUsed + pointsValue
-  const canSubmit = Boolean(form.name.trim()) && parsed.ok && !mutating
+  const overBudget = projectedTotal > SCALE_SUM_TARGET
+  const canSubmit = Boolean(form.name.trim()) && parsed.ok && !overBudget
 
   const dirty =
     isEdit && initialScale
       ? form.name !== (initialScale.name || '') ||
-        String(form.maxPoints) !== String(initialScale.maxPoints ?? '') ||
-        Boolean(form.isActive) !== (initialScale.isActive !== false)
+        String(form.maxPoints) !== String(initialScale.maxPoints ?? '')
       : Boolean(form.name || form.maxPoints)
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
     setTouchedPoints(true)
 
@@ -92,6 +87,9 @@ export function ScaleFormDialog({
 
     const check = parseScaleMaxPoints(form.maxPoints)
     if (!check.ok) errors.maxPoints = check.error
+    else if (otherUsed + check.value > SCALE_SUM_TARGET) {
+      errors.maxPoints = `Total cannot exceed ${SCALE_SUM_TARGET} (remaining ${Math.max(0, SCALE_SUM_TARGET - otherUsed)})`
+    }
 
     if (Object.keys(errors).length) {
       applyErrors(errors, FIELD_IDS, SCALE_FIELD_ORDER)
@@ -99,29 +97,13 @@ export function ScaleFormDialog({
     }
 
     resetErrors()
-    setMutating(true)
-    try {
-      const payload = {
-        name,
-        maxPoints: check.value,
-        isActive: Boolean(form.isActive),
-      }
-      const res = isEdit
-        ? await apiClient.put(`/branch/performance/scales/${initialScale.id}`, payload)
-        : await apiClient.post('/branch/performance/scales', payload)
-
-      if (res.success) {
-        toastSuccess(isEdit ? 'Scoring scale updated' : 'Scoring scale added')
-        onOpenChange?.(false)
-        onSuccess?.()
-      } else {
-        toastError(res.error || (isEdit ? 'Failed to update scale' : 'Failed to add scale'))
-      }
-    } catch (err) {
-      toastError(err?.message || (isEdit ? 'Failed to update scale' : 'Failed to add scale'))
-    } finally {
-      setMutating(false)
-    }
+    onApply?.({
+      id: isEdit ? initialScale?.id : undefined,
+      name,
+      maxPoints: check.value,
+      _localKey: isEdit ? initialScale?._localKey : `local-${Date.now()}`,
+    })
+    onOpenChange?.(false)
   }
 
   return (
@@ -129,14 +111,14 @@ export function ScaleFormDialog({
       open={open}
       onOpenChange={onOpenChange}
       dirty={dirty}
-      title={isEdit ? 'Edit Scoring Scale' : 'Add Scoring Scale'}
-      description="Assign any maximum points per factor. Final employee scores are always normalized to 100%."
+      title={isEdit ? 'Edit Criterion' : 'Add Criterion'}
+      description={`Maximums across all criteria must total exactly ${SCALE_SUM_TARGET}.`}
       contentClassName="sm:max-w-md"
       footer={
         <>
-          <DialogCancelButton disabled={mutating} />
+          <DialogCancelButton />
           <Button type="submit" form="scale-form" disabled={!canSubmit} variant="brand">
-            {mutating ? 'Saving…' : isEdit ? 'Update Scale' : 'Add Scale'}
+            {isEdit ? 'Update' : 'Add'}
           </Button>
         </>
       }
@@ -148,19 +130,21 @@ export function ScaleFormDialog({
       <form id="scale-form" className="space-y-4 py-1" onSubmit={handleSubmit} noValidate>
         <div
           className={`rounded-lg border px-3 py-2 text-xs ${
-            pointsHint
+            overBudget || pointsHint
               ? 'border-rose-200 bg-rose-50 text-rose-700'
-              : 'border-slate-200 bg-slate-50 text-slate-600'
+              : projectedTotal === SCALE_SUM_TARGET
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-slate-200 bg-slate-50 text-slate-600'
           }`}
         >
-          Total maximum points: <strong>{projectedTotal}</strong>
+          Projected total: <strong>{projectedTotal}</strong> / {SCALE_SUM_TARGET}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="scale-name">Criteria Name</Label>
           <Input
             id="scale-name"
-            placeholder="e.g. Punctuality, Teamwork"
+            placeholder="e.g. Customer Service"
             value={form.name}
             onChange={(e) => {
               setForm((prev) => ({ ...prev, name: e.target.value }))
@@ -177,36 +161,19 @@ export function ScaleFormDialog({
           <WholeNumberInput
             id="scale-points"
             min={1}
-            placeholder="e.g. 50"
+            max={SCALE_SUM_TARGET}
+            placeholder="e.g. 25"
             value={form.maxPoints}
             onChange={(e) => {
               setForm((prev) => ({ ...prev, maxPoints: e.target.value }))
               clearField('maxPoints')
             }}
             onBlur={() => setTouchedPoints(true)}
-            aria-invalid={Boolean(fieldErrors.maxPoints || rangeError)}
-            className={fieldErrorClass(fieldErrors.maxPoints || rangeError)}
+            aria-invalid={Boolean(fieldErrors.maxPoints || rangeError || overBudget)}
+            className={fieldErrorClass(fieldErrors.maxPoints || rangeError || overBudget)}
           />
           <FieldError message={fieldErrors.maxPoints || (touchedPoints ? rangeError : null)} />
         </div>
-
-        <label
-          htmlFor="scale-active"
-          className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3"
-        >
-          <Checkbox
-            id="scale-active"
-            checked={Boolean(form.isActive)}
-            onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-            className="mt-0.5"
-          />
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold text-slate-900">Enable factor</span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Disabled factors are excluded from employee evaluation and final % calculation.
-            </span>
-          </span>
-        </label>
       </form>
     </FormDialog>
   )

@@ -36,6 +36,11 @@ import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { EMPTY_DASH, formatInventoryStock, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { BRAND } from '@/lib/constants'
+import {
+  FINAL_PRICE_FORMULA,
+  SELLING_PRICE_FORMULA,
+  TAX_PCT_FORMULA,
+} from '@/lib/pricingFormulaCopy'
 
 // Print / Add Stock / Edit / Deactivate|Activate / Delete for one catalog row
 function ProductRowActions({
@@ -420,9 +425,9 @@ export function ProductTable({
                   {/* Row 2 — only subheads under Prices / Last purchase / Current purchase */}
                   <TableRow className="text-[10px] tracking-wide text-slate-500 uppercase">
                     <TableSubHead>Purchase</TableSubHead>
-                    <TableSubHead>Selling</TableSubHead>
-                    <TableSubHead>Tax %</TableSubHead>
-                    <TableSubHead>Final Price</TableSubHead>
+                    <TableSubHead title={SELLING_PRICE_FORMULA}>Selling</TableSubHead>
+                    <TableSubHead title={TAX_PCT_FORMULA}>Tax %</TableSubHead>
+                    <TableSubHead title={FINAL_PRICE_FORMULA}>Final (incl. tax)</TableSubHead>
                     <TableSubHead>Price</TableSubHead>
                     <TableSubHead>Vendor</TableSubHead>
                     <TableSubHead>Price</TableSubHead>
@@ -478,7 +483,10 @@ export function ProductTable({
                           {Number(row.taxPercent || 0)}%
                         </span>
                       </TableCell>
-                      <TableCell className="px-2 py-3 text-xs font-bold tabular-nums text-slate-900 whitespace-nowrap">
+                      <TableCell
+                        className="px-2 py-3 text-xs font-bold tabular-nums text-slate-900 whitespace-nowrap"
+                        title={FINAL_PRICE_FORMULA}
+                      >
                         {priceOrDash(row, row.finalPrice)}
                       </TableCell>
                       <TableCell className="px-2 py-3">

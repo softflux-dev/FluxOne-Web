@@ -14,7 +14,10 @@ export async function renderBarcodePng(text) {
     bcid: 'code128',
     text: String(text),
     scale: 3,
-    height: 12,
+    height: 10,
+    paddingwidth: 12,
+    paddingheight: 12,
+    backgroundcolor: 'FFFFFF',
     includetext: true,
     textxalign: 'center',
   })

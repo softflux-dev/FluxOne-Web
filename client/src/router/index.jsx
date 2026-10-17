@@ -30,6 +30,7 @@ import { AttendancePage } from '@/pages/branch/AttendancePage'
 import { HolidaysPage } from '@/pages/branch/HolidaysPage'
 import { LeavesPage } from '@/pages/branch/LeavesPage'
 import { PerformancePage } from '@/pages/branch/PerformancePage'
+import { PerformanceEmployeePage } from '@/pages/branch/PerformanceEmployeePage'
 import { SalesPage } from '@/pages/branch/SalesPage'
 // Phase 2 placeholders live under pages/phase2/ — restore imports when modules ship
 // import { CustomerPage } from '@/pages/phase2/CustomerPage'
@@ -133,6 +134,10 @@ const router = createBrowserRouter([
               { path: 'holidays', element: <HolidaysPage /> },
               { path: 'leaves', element: <LeavesPage /> },
               { path: 'performance', element: <PerformancePage /> },
+              {
+                path: 'performance/employees/:staffId',
+                element: <PerformanceEmployeePage />,
+              },
               { path: 'sales', element: <SalesPage /> },
               // TODO(phase2): customer + branch reports — see pages/phase2/
               // { path: 'customer', element: <CustomerPage /> },

@@ -1,9 +1,8 @@
 /**
  * Shared pricing helpers — keep Admin Tax & Profit, IM catalog, and create flows aligned.
  *
- * Two intentional formulas:
- * - Cost-based (Admin Tax & Profit table): cost → +profit% → +tax% on that subtotal
- * - Selling-based (IM list / POS shelf): selling → −discount% → +tax%
+ * Canonical Final: selling → −discount% → +tax%
+ * Cost-based helpers remain for bulk-profit / suggested selling only — not labeled Final.
  */
 
 /** Auto selling price from purchase + profit % (whole currency units). */
@@ -14,7 +13,7 @@ export function sellingFromPurchase(purchase, profitPercent) {
 }
 
 /**
- * Admin Tax & Profit “Final Price”:
+ * Suggested / legacy cost-based total (not customer Final).
  * (cost + cost×profit%) + tax on that subtotal.
  */
 export function finalPriceFromCost(cost, profitPercent, taxPercent) {
@@ -28,7 +27,7 @@ export function finalPriceFromCost(cost, profitPercent, taxPercent) {
 }
 
 /**
- * IM / POS shelf final (JS mirror of product list SQL):
+ * Canonical Final (JS mirror of product list SQL):
  * selling × (1 − discount%) × (1 + tax%), rounded to whole units.
  */
 export function finalPriceFromSelling(selling, discountPercent, taxPercent) {
@@ -36,4 +35,19 @@ export function finalPriceFromSelling(selling, discountPercent, taxPercent) {
   const d = Number(discountPercent) || 0
   const t = Number(taxPercent) || 0
   return Math.round(s * (1 - d / 100) * (1 + t / 100))
+}
+
+/** Actual margin amount: selling − purchase. */
+export function actualMarginAmount(purchase, selling) {
+  const p = Number(purchase) || 0
+  const s = Number(selling) || 0
+  return Math.round((s - p) * 100) / 100
+}
+
+/** Actual margin % on purchase; 0 when purchase is 0. */
+export function actualMarginPercent(purchase, selling) {
+  const p = Number(purchase) || 0
+  if (p <= 0) return 0
+  const s = Number(selling) || 0
+  return Math.round(((s - p) / p) * 10000) / 100
 }

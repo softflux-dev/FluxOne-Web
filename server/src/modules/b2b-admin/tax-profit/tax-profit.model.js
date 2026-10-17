@@ -1,16 +1,25 @@
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../../config/db.js'
-import { finalPriceFromCost } from '../../../utils/pricing.util.js'
+import {
+  actualMarginAmount,
+  actualMarginPercent,
+  finalPriceFromSelling,
+} from '../../../utils/pricing.util.js'
 import { findOrCreateTaxByRate } from '../../../utils/tax.util.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 
 const SALES_WINDOW_DAYS = 30
 
+// as per company code policy — Final matches IM/POS: selling − discount + tax
 function mapProductRow(row) {
   if (!row) return null
   const baseCost = Number(row.baseCost) || 0
+  const sellingPrice = Number(row.sellingPrice) || 0
+  const discountPercent = Number(row.discountPercent) || 0
   const profitPct = Number(row.profitPct) || 0
   const taxPct = Number(row.taxPct) || 0
-  const finalPrice = finalPriceFromCost(baseCost, profitPct, taxPct)
+  const finalPrice = finalPriceFromSelling(sellingPrice, discountPercent, taxPct)
+  const marginAmount = actualMarginAmount(baseCost, sellingPrice)
+  const marginPercent = actualMarginPercent(baseCost, sellingPrice)
 
   return {
     id: row.id,
@@ -30,8 +39,12 @@ function mapProductRow(row) {
     branchId: row.branchId || null,
     branchName: row.branchName || '',
     baseCost,
+    sellingPrice,
+    discountPercent,
     profitPct,
     taxPct,
+    marginAmount,
+    marginPercent,
     salesVolume30D: Number(row.salesVolume30D) || 0,
     finalPrice,
     status: row.status || 'open',
@@ -89,6 +102,8 @@ export async function listTaxProfitProducts(tenantId, filters = {}) {
         p.subcategory_id AS "subcategoryId",
         sc.name AS "subcategoryName",
         p.purchase_price AS "baseCost",
+        p.selling_price AS "sellingPrice",
+        COALESCE(p.discount_percent, o.percent, 0) AS "discountPercent",
         COALESCE(p.profit_percent, 0) AS "profitPct",
         COALESCE(tax.tax_percent, 0) AS "taxPct",
         COALESCE(sales.qty_30d, 0) AS "salesVolume30D",
@@ -99,6 +114,7 @@ export async function listTaxProfitProducts(tenantId, filters = {}) {
       LEFT JOIN branches b ON b.id = p.branch_id AND b.tenant_id = p.tenant_id
       LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
       LEFT JOIN categories sc ON sc.id = p.subcategory_id AND sc.tenant_id = p.tenant_id
+      LEFT JOIN offers o ON o.id = p.offer_id AND o.tenant_id = p.tenant_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(t.rate_percent), 0) AS tax_percent
         FROM product_taxes pt
@@ -115,6 +131,7 @@ export async function listTaxProfitProducts(tenantId, filters = {}) {
           AND s.sold_at >= now() - ($9::int * INTERVAL '1 day')
       ) sales ON true
       WHERE p.tenant_id = $1
+        AND p.status = 'active'
         -- Hide empty variant parent shells from pricing table (children are priced)
         AND NOT (p.type = 'variant' AND p.parent_id IS NULL)
         AND (
@@ -191,11 +208,12 @@ export async function getTaxProfitMeta(tenantId) {
                 FROM products c
                 WHERE c.tenant_id = p.tenant_id
                   AND c.parent_id = p.id
+                  AND c.status = 'active'
               ),
               '[]'::json
             ) AS variants
           FROM products p
-          WHERE p.tenant_id = $1
+          WHERE p.tenant_id = $1 AND p.status = 'active'
             AND p.parent_id IS NULL
           ORDER BY p.name ASC
         `,

@@ -696,6 +696,22 @@ async function resolveTenantTaxProfitDefaults(client, tenantId) {
   }
 }
 
+// as per company code policy — inventory create/update cannot set custom tax percentages;
+// only Admin default rate (Apply Default Tax) or explicit exempt (taxIds: []).
+function assertImTaxPercentAllowed(taxPercent, defaultTax) {
+  if (taxPercent === undefined || taxPercent === null) return
+  const rate = Math.round(Number(taxPercent))
+  const def = Math.round(Number(defaultTax) || 0)
+  if (!Number.isFinite(rate)) {
+    throw httpError(422, 'Invalid tax percentage')
+  }
+  if (rate !== def) {
+    throw httpError(
+      422,
+      'Custom tax percentage is not allowed. Apply Admin default tax or leave the product tax-exempt. Change rates from Admin Tax & Profit.',
+    )
+  }
+}
 
 async function loadProductTaxIds(client, tenantId, productId) {
   const { rows } = await tenantClientQuery(
@@ -1118,8 +1134,9 @@ export async function createVariantProduct(tenantId, payload) {
       }
 
       const { defaultProfit, defaultTax } = await resolveTenantTaxProfitDefaults(client, tenantId)
-      const profitPercent =
-        payload.profitPercent !== undefined ? Number(payload.profitPercent) : defaultProfit
+      // as per company code policy — profit % is Admin-owned (tenant default on create)
+      const profitPercent = defaultProfit
+      assertImTaxPercentAllowed(payload.taxPercent, defaultTax)
       const resolvedTaxIds = await resolveTaxIdsForCreate(client, tenantId, {
         taxIds: payload.taxIds,
         taxPercent: payload.taxPercent,
@@ -1274,8 +1291,9 @@ export async function createProduct(tenantId, payload) {
       }
 
       const { defaultProfit, defaultTax } = await resolveTenantTaxProfitDefaults(client, tenantId)
-      const profitPercent =
-        payload.profitPercent !== undefined ? Number(payload.profitPercent) : defaultProfit
+      // as per company code policy — profit % is Admin-owned (tenant default on create)
+      const profitPercent = defaultProfit
+      assertImTaxPercentAllowed(payload.taxPercent, defaultTax)
 
       let purchasePrice = payload.purchasePrice ?? 0
       let sellingPrice = payload.sellingPrice ?? 0
@@ -1758,6 +1776,14 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
       if (existing.type !== PRODUCT_TYPES.BUNDLE && 'quantity' in payload) {
         delete payload.quantity
       }
+
+      // as per company code policy — profit % changes only via Admin Tax & Profit bulk
+      if ('profitPercent' in payload) {
+        delete payload.profitPercent
+      }
+
+      const { defaultTax } = await resolveTenantTaxProfitDefaults(client, tenantId)
+      assertImTaxPercentAllowed(payload.taxPercent, defaultTax)
 
       // taxPercent → taxIds (find-or-create); takes precedence over explicit taxIds
       if (payload.taxPercent !== undefined && payload.taxPercent !== null) {

@@ -1,5 +1,6 @@
 // Add Item wizard constants + combination builder (API-backed create).
 import { roundMoney } from '@/lib/money'
+import { buildImTaxPayload } from '@/lib/imTaxProfitPolicy'
 
 // Form display for prices — whole units only (10, not 10.01)
 function formatPriceInput(value) {
@@ -109,16 +110,15 @@ export function assertSellingGtePurchase(purchasePrice, sellingPrice) {
   return null
 }
 
-/** Snapshot Tax % / Profit % from the form (defaults pre-filled; admin may override). */
-function taxProfitFromForm(form) {
-  const fields = {}
-  if (form.profitPercent !== '' && form.profitPercent != null) {
-    fields.profitPercent = Math.round(Number(form.profitPercent))
-  }
-  if (form.taxPercent !== '' && form.taxPercent != null) {
-    fields.taxPercent = Math.round(Number(form.taxPercent))
-  }
-  return fields
+// as per company code policy — IM tax payload from Apply Default Tax only (no profit %)
+function imTaxFromForm(form, defaultTaxPercent) {
+  return buildImTaxPayload({
+    applyDefaultTax: Boolean(form.applyDefaultTax),
+    defaultTaxPercent:
+      defaultTaxPercent !== undefined && defaultTaxPercent !== null
+        ? defaultTaxPercent
+        : form.defaultTaxPercent,
+  })
 }
 
 // Build POST /inventory/products body from wizard state
@@ -127,12 +127,13 @@ export function buildAddItemApiPayload({
   productKind,
   combinations = [],
   offers = [],
+  defaultTaxPercent,
 }) {
   const name = String(form.name || '').trim()
   const description = String(form.description || '').trim() || undefined
   const categoryId = form.categoryId || undefined
   const subcategoryId = form.subcategoryId || undefined
-  const taxProfit = taxProfitFromForm(form)
+  const imTax = imTaxFromForm(form, defaultTaxPercent)
 
   if (productKind === PRODUCT_KIND.NORMAL) {
     const itemCode = String(form.sku || '').trim()
@@ -157,7 +158,7 @@ export function buildAddItemApiPayload({
       dailyPriceChange: Boolean(form.dailyPriceChange),
       offerId: promo.offerId,
       discountPercent: promo.discountPercent,
-      ...taxProfit,
+      ...imTax,
       confirmed: true,
     }
   }
@@ -203,7 +204,7 @@ export function buildAddItemApiPayload({
     scale: 'unit',
     confirmed: true,
     variants,
-    ...taxProfit,
+    ...imTax,
   }
 }
 
@@ -410,12 +411,14 @@ export function buildEditItemApiPayload({
   productKind,
   combinations = [],
   offers = [],
+  defaultTaxPercent,
 }) {
   const name = String(form.name || '').trim()
   const description = String(form.description || '').trim() || undefined
   const categoryId = form.categoryId || undefined
   const subcategoryId = form.subcategoryId || undefined
-  const taxProfit = taxProfitFromForm(form)
+  // as per company code policy — omit profitPercent; tax via Apply Default Tax only
+  const imTax = imTaxFromForm(form, defaultTaxPercent)
 
   if (productKind === PRODUCT_KIND.NORMAL) {
     const itemCode = String(form.sku || '').trim()
@@ -440,7 +443,7 @@ export function buildEditItemApiPayload({
       offerId: promo.offerId,
       discountPercent: promo.discountPercent,
       status: form.status === 'inactive' ? 'inactive' : 'active',
-      ...taxProfit,
+      ...imTax,
     }
   }
 
@@ -490,7 +493,7 @@ export function buildEditItemApiPayload({
     scale: 'unit',
     status: form.status === 'inactive' ? 'inactive' : 'active',
     variants,
-    ...taxProfit,
+    ...imTax,
   }
 }
 

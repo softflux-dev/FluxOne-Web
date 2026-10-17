@@ -31,8 +31,14 @@ import {
   PRODUCT_TYPES,
   mapProduct,
   money,
-  taxIdsForDefaultRate,
 } from '@/lib/mapProduct'
+import {
+  buildImTaxPayload,
+  normalizeDefaultTaxPercent,
+  resolveApplyDefaultTaxFromProduct,
+  resolveInitialApplyDefaultTax,
+} from '@/lib/imTaxProfitPolicy'
+import { ApplyDefaultTaxField } from '@/components/feature/products/ApplyDefaultTaxField'
 import { PATHS } from '@/router/paths'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
@@ -89,10 +95,9 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
   const [image, setImage] = useState(null)
   const [existingImageUrl, setExistingImageUrl] = useState(null)
   const [status, setStatus] = useState(PRODUCT_STATUS.ACTIVE)
-  // Tax: yes = apply admin default tax %; no = exempt
-  const [applyTax, setApplyTax] = useState('yes')
-  const [profitPercent, setProfitPercent] = useState('')
-  const [profitTouched, setProfitTouched] = useState(false)
+  // as per company code policy — Apply Default Tax only (profit % Admin-owned)
+  const [applyDefaultTax, setApplyDefaultTax] = useState(false)
+  const [applyDefaultTaxTouched, setApplyDefaultTaxTouched] = useState(false)
   const [offerId, setOfferId] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [subcategoryId, setSubcategoryId] = useState('')
@@ -127,9 +132,8 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
     setExistingImageUrl(initialBundle.imageUrl || null)
     setStatus(initialBundle.status || PRODUCT_STATUS.ACTIVE)
     setOfferId(initialBundle.offerId || '')
-    setApplyTax(initialBundle.taxIds?.length || Number(initialBundle.taxPercent) > 0 ? 'yes' : 'no')
-    setProfitPercent(String(Math.round(Number(initialBundle.profitPercent) || 0)))
-    setProfitTouched(true)
+    setApplyDefaultTax(resolveApplyDefaultTaxFromProduct(initialBundle))
+    setApplyDefaultTaxTouched(true)
     setBundlePrice(
       initialBundle.sellingPrice != null ? String(Math.round(Number(initialBundle.sellingPrice))) : '',
     )
@@ -186,13 +190,13 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
     }
   }, [isEdit, lines, itemCache])
 
-  // Create only: pre-fill Profit % from tenant defaults
+  // Create only: default Apply Default Tax from tenant default tax % once catalog loads
   useEffect(() => {
-    if (isEdit || profitTouched || catalogLoading) return
+    if (isEdit || applyDefaultTaxTouched || catalogLoading) return
     const defaults = catalog.defaults
     if (!defaults) return
-    setProfitPercent(String(Math.round(Number(defaults.defaultProfitPercent) || 0)))
-  }, [isEdit, catalog.defaults, catalogLoading, profitTouched])
+    setApplyDefaultTax(resolveInitialApplyDefaultTax(defaults.defaultTaxPercent))
+  }, [isEdit, catalog.defaults, catalogLoading, applyDefaultTaxTouched])
 
   const parents = (catalog.parents || []).filter((row) => row.isActive !== false)
   const subcategories = useMemo(() => {
@@ -323,25 +327,15 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
     setBundleStock(maxBundles > 0 ? String(maxBundles) : '')
   }, [maxBundles, isEdit])
 
-  const defaultTaxPercent = Math.round(Number(catalog.defaults?.defaultTaxPercent) || 0)
-  const adminTaxIds = useMemo(
-    () => taxIdsForDefaultRate(catalog.taxes, defaultTaxPercent),
-    [catalog.taxes, defaultTaxPercent],
-  )
-  const adminTax = (catalog.taxes || []).find((t) => t.id === adminTaxIds[0])
+  const defaultTaxPercent = normalizeDefaultTaxPercent(catalog.defaults?.defaultTaxPercent)
   const selectedOffer = (catalog.offers || []).find((offer) => offer.id === offerId)
 
   const offerPercent =
     selectedOffer?.percent != null ? Number(selectedOffer.percent) : 0
   const priceNum = Number(bundlePrice) || 0
   const finalAfterOffer = Math.round(priceNum * (1 - offerPercent / 100))
-  // Prefer matching catalog tax row; else tenant default % (server find-or-creates on save)
-  const taxRate =
-    applyTax === 'yes'
-      ? adminTax
-        ? Number(adminTax.ratePercent) || 0
-        : defaultTaxPercent
-      : 0
+  // Preview only — save uses buildImTaxPayload (Admin default rate when checked)
+  const taxRate = applyDefaultTax ? defaultTaxPercent : 0
   const taxAmount = Math.round(finalAfterOffer * (taxRate / 100))
 
   function resetPicker() {
@@ -438,17 +432,8 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
       return
     }
 
-    // Yes → send taxPercent so server find-or-creates; No → explicit exempt ([]).
-    // Prefer taxPercent over taxIds so missing catalog tax rows still get the default %.
-    const taxPayload =
-      applyTax === 'yes'
-        ? { taxPercent: taxRate }
-        : { taxIds: [] }
-    const profitNum = Math.round(Number(profitPercent) || 0)
-    if (profitNum < 0 || profitNum > 100) {
-      setError('Profit percentage must be between 0% and 100%.')
-      return
-    }
+    // as per company code policy — Apply Default Tax only; omit profitPercent (Admin-owned)
+    const taxPayload = buildImTaxPayload({ applyDefaultTax, defaultTaxPercent })
 
     if (isEdit) {
       const topUp = Number(bundleStock) || 0
@@ -462,7 +447,6 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
         // purchasePrice: 0,
         quantity: nextQty,
         ...taxPayload,
-        profitPercent: profitNum,
         offerId: offerId || null,
         discountPercent:
           offerId && selectedOffer?.percent != null
@@ -491,7 +475,6 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
       purchasePrice: 0,
       quantity: Number(bundleStock),
       ...taxPayload,
-      profitPercent: profitNum,
       offerId: offerId || null,
       discountPercent:
         offerId && selectedOffer?.percent != null
@@ -572,9 +555,9 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
             </div>
           </dl>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button type="button" variant="brand" asChild>
+            {/* <Button type="button" variant="brand" asChild>
               <Link to={PATHS.inventory.bundles}>Add another bundle</Link>
-            </Button>
+            </Button> */}
             <Button type="button" variant="outline" asChild>
               <Link to={PATHS.inventory.products}>Back to products</Link>
             </Button>
@@ -666,41 +649,16 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="bundle-tax">Tax</Label>
-            <NativeSelect
-              id="bundle-tax"
-              value={applyTax}
-              onChange={(event) => setApplyTax(event.target.value)}
-            >
-              <option value="yes">Yes — Apply Admin Tax ({defaultTaxPercent}%)</option>
-              <option value="no">No — Tax exempt</option>
-            </NativeSelect>
-            <p className="text-[11px] text-slate-400">
-              {applyTax === 'yes'
-                ? adminTax
-                  ? `Admin default: ${adminTax.name} (${adminTax.ratePercent}%).`
-                  : `Admin default tax ${defaultTaxPercent}% will be applied on save.`
-                : 'This bundle will be saved without tax.'}
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="bundle-profit">Profit %</Label>
-            <WholeNumberInput
-              id="bundle-profit"
-              min={0}
-              max={100}
-              value={profitPercent}
-              onChange={(event) => {
-                setProfitTouched(true)
-                setProfitPercent(event.target.value)
-              }}
-            />
-            <p className="text-[11px] text-slate-400">
-              Pre-filled from Admin defaults — change to override for this bundle only.
-            </p>
-          </div>
+          <ApplyDefaultTaxField
+            id="bundle-apply-default-tax"
+            checked={applyDefaultTax}
+            defaultTaxPercent={defaultTaxPercent}
+            onCheckedChange={(next) => {
+              setApplyDefaultTaxTouched(true)
+              setApplyDefaultTax(next)
+            }}
+            className="rounded-lg border border-border bg-slate-50/60 px-3 py-2.5"
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="bundle-status">Status</Label>
@@ -953,12 +911,12 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
           <div className="space-y-1.5">
             <Label>Tax amount</Label>
             <Input
-              value={applyTax === 'yes' && taxRate ? money(taxAmount) : money(0)}
+              value={applyDefaultTax && taxRate ? money(taxAmount) : money(0)}
               disabled
               className="bg-slate-50"
             />
             <p className="text-[11px] text-slate-400">
-              {applyTax === 'yes' && taxRate
+              {applyDefaultTax && taxRate
                 ? `${taxRate}% of final price (invoice line).`
                 : 'Tax not applied.'}
             </p>

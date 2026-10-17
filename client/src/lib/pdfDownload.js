@@ -54,9 +54,20 @@ export async function downloadBarcodePdf({ product, pngUrl }) {
   doc.setFontSize(8)
   doc.text([code, barcode].filter(Boolean).join('  ·  '), 50, 16, { align: 'center' })
 
-  const imgW = 70
-  const imgH = 28
-  doc.addImage(dataUrl, 'PNG', (100 - imgW) / 2, 22, imgW, imgH)
+  // Fit barcode into the label while preserving aspect ratio and quiet zone
+  const maxW = 70
+  const maxH = 32
+  const props = doc.getImageProperties(dataUrl)
+  const ratio = props.width / Math.max(props.height, 1)
+  let imgW = maxW
+  let imgH = imgW / ratio
+  if (imgH > maxH) {
+    imgH = maxH
+    imgW = imgH * ratio
+  }
+  const imgX = (100 - imgW) / 2
+  const imgY = 20 + (maxH - imgH) / 2
+  doc.addImage(dataUrl, 'PNG', imgX, imgY, imgW, imgH)
 
   const filename = `${safeFilename(barcode || code || name, 'barcode')}.pdf`
   doc.save(filename)

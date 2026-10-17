@@ -224,7 +224,7 @@ export function StaffPage() {
           className="w-full sm:w-auto"
         >
           <Plus className="size-4" />
-          Add Scale
+          Add Criterion
         </Button>
       )
     }

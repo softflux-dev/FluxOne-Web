@@ -8,6 +8,7 @@ import { endpoints } from '@/api/endpoints'
 export function PerformancePage() {
   const [designations, setDesignations] = useState([])
   const [loading, setLoading] = useState(false)
+  const [scaleCreateOpen, setScaleCreateOpen] = useState(false)
 
   const loadData = async () => {
     setLoading(true)
@@ -36,7 +37,11 @@ export function PerformancePage() {
         {loading ? (
           <p className="text-center py-8 text-slate-400">Loading performance tracker...</p>
         ) : (
-          <StaffPerformanceTab designations={designations} />
+          <StaffPerformanceTab
+            designations={designations}
+            createOpen={scaleCreateOpen}
+            onCreateOpenChange={setScaleCreateOpen}
+          />
         )}
       </MotionReveal>
     </div>

@@ -1,30 +1,22 @@
 import { z } from 'zod'
 import { empty, idParams } from '../shared.validator.js'
 
-const optionalBool = z.preprocess((value) => {
-  if (value === '' || value === null || value === undefined) return undefined
-  if (value === true || value === 'true') return true
-  if (value === false || value === 'false') return false
-  return value
-}, z.boolean().optional())
+const criterionBody = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1).max(120),
+  maxPoints: z.coerce.number().int().min(1).max(100),
+})
 
-// Score a staff member against one enabled scale factor
-export const scoreStaffSchema = z.object({
-  body: z.object({
-    staffId: z.string().uuid(),
-    scaleId: z.string().uuid(),
-    // Actual score must be non-negative; max is enforced against the factor in the controller
-    points: z.coerce.number().int().nonnegative(),
-  }),
+export const listScalesSchema = z.object({
+  body: empty,
   query: empty,
   params: empty,
 })
 
-// Back-compat alias used by older imports
-export const performanceSchema = scoreStaffSchema
-
-export const listScalesSchema = z.object({
-  body: empty,
+export const saveScaleSchema = z.object({
+  body: z.object({
+    criteria: z.array(criterionBody).min(1),
+  }),
   query: empty,
   params: empty,
 })
@@ -35,34 +27,40 @@ export const listScoresSchema = z.object({
   params: empty,
 })
 
-export const createScaleSchema = z.object({
+export const createEvaluationSchema = z.object({
   body: z.object({
-    name: z.string().trim().min(1).max(120),
-    maxPoints: z.coerce.number().int().min(1),
-    isActive: optionalBool,
+    staffId: z.string().uuid(),
+    remarks: z.string().trim().max(2000).optional().nullable(),
+    items: z
+      .array(
+        z.object({
+          criterionId: z.string().uuid(),
+          points: z.coerce.number().int().nonnegative(),
+        }),
+      )
+      .min(1),
   }),
   query: empty,
   params: empty,
 })
 
-export const updateScaleSchema = z.object({
-  body: z
-    .object({
-      name: z.string().trim().min(1).max(120).optional(),
-      maxPoints: z.coerce.number().int().min(1).optional(),
-      isActive: optionalBool,
-    })
-    .refine(
-      (body) =>
-        body.name !== undefined ||
-        body.maxPoints !== undefined ||
-        body.isActive !== undefined,
-      { message: 'Provide name, maxPoints, and/or isActive' },
-    ),
-  query: empty,
-  params: idParams,
+export const employeeDetailSchema = z.object({
+  body: empty,
+  query: z.object({
+    range: z.enum(['3M', '6M', '12M', 'All', 'all', '3m', '6m', '12m']).optional(),
+    timelinePage: z.coerce.number().int().min(1).optional(),
+    timelineLimit: z.coerce.number().int().min(1).max(50).optional(),
+  }),
+  params: z.object({
+    staffId: z.string().uuid(),
+  }),
 })
 
+// Legacy aliases kept so older route imports do not break during rollout
+export const scoreStaffSchema = createEvaluationSchema
+export const performanceSchema = createEvaluationSchema
+export const createScaleSchema = saveScaleSchema
+export const updateScaleSchema = saveScaleSchema
 export const scaleIdParamsSchema = z.object({
   body: empty,
   query: empty,

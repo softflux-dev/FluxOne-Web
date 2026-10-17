@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import {
   CombinationTable,
+  ImTaxPolicyFields,
   NormalProductFields,
-  TaxProfitFields,
 } from '@/components/feature/products/add-item/CombinationTable'
 import { SearchableMultiSelect } from '@/components/feature/products/add-item/SearchableMultiSelect'
 import { ImageUploadField } from '@/components/shared/ImageUploadField'
@@ -34,8 +34,8 @@ import {
 import { PRODUCT_TYPES } from '@/lib/mapProduct'
 import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
+import { resolveApplyDefaultTaxFromProduct } from '@/lib/imTaxProfitPolicy'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
-import { validatePercentage } from '@/lib/validation/formValidators'
 import { cn } from '@/lib/utils'
 
 function newId(prefix) {
@@ -59,8 +59,8 @@ function emptyForm() {
     offerId: '',
     discountPercent: '',
     offerName: '',
-    taxPercent: '',
-    profitPercent: '',
+    // as per company code policy — Apply Default Tax only (profit % Admin-owned)
+    applyDefaultTax: false,
     status: 'active',
     image: null,
     imageUrl: null,
@@ -91,6 +91,7 @@ export function EditItemPage() {
 
   const isVariant = form.productKind === PRODUCT_KIND.VARIANT
   const isNormal = form.productKind === PRODUCT_KIND.NORMAL
+  const defaultTaxPercent = Math.round(Number(catalog.defaults?.defaultTaxPercent) || 0)
 
   // One gate for the whole page — avoid section-by-section flashes
   const pageReady =
@@ -216,8 +217,7 @@ export function EditItemPage() {
             ? String(Math.round(Number(product.discountPercent)))
             : '',
         offerName: product.offerName || '',
-        taxPercent: String(Math.round(Number(product.taxPercent) || 0)),
-        profitPercent: String(Math.round(Number(product.profitPercent) || 0)),
+        applyDefaultTax: resolveApplyDefaultTaxFromProduct(product),
         status: product.status === 'inactive' ? 'inactive' : 'active',
         image: null,
         imageUrl: product.imageUrl || null,
@@ -371,24 +371,6 @@ export function EditItemPage() {
       }
     }
     if (tabId === 'save') {
-      if (form.taxPercent === '' || form.taxPercent == null) {
-        return 'Tax percentage is required'
-      }
-      if (form.profitPercent === '' || form.profitPercent == null) {
-        return 'Profit percentage is required'
-      }
-      const taxErr = validatePercentage(form.taxPercent, {
-        min: 0,
-        max: 100,
-        fieldName: 'Tax percentage',
-      })
-      if (taxErr) return taxErr
-      const profitErr = validatePercentage(form.profitPercent, {
-        min: 0,
-        max: 100,
-        fieldName: 'Profit percentage',
-      })
-      if (profitErr) return profitErr
       if (isNormal) {
         if (form.purchasePrice === '' || form.sellingPrice === '') {
           return 'Purchase and selling price are required'
@@ -453,6 +435,7 @@ export function EditItemPage() {
         productKind: form.productKind,
         combinations,
         offers: catalog.offers || [],
+        defaultTaxPercent,
       })
       if (form.image) payload.image = form.image
       // Per-SKU images uploaded after save (client-only)
@@ -758,6 +741,7 @@ export function EditItemPage() {
                   patch={patch}
                   stockMode="edit"
                   offers={catalog.offers || []}
+                  defaultTaxPercent={defaultTaxPercent}
                 />
               ) : (
                 <div className="space-y-4">
@@ -783,9 +767,12 @@ export function EditItemPage() {
                       )
                     })}
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <TaxProfitFields form={form} patch={patch} idPrefix="variant-edit" />
-                  </div>
+                  <ImTaxPolicyFields
+                    form={form}
+                    patch={patch}
+                    defaultTaxPercent={defaultTaxPercent}
+                    idPrefix="variant-edit"
+                  />
                 </div>
               )}
             </div>

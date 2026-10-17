@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
+import { ApplyDefaultTaxField } from '@/components/feature/products/ApplyDefaultTaxField'
 import { CombinationImageCell } from '@/components/feature/products/add-item/CombinationImageCell'
 import { formatOfferOptionLabel, promoFromOfferId } from '@/lib/addItem'
 import { BRAND } from '@/lib/constants'
@@ -427,41 +428,31 @@ export function CombinationTable({
   )
 }
 
-/** Tax % / Profit % — pre-filled from Admin defaults on create; editable override. */
-export function TaxProfitFields({ form, patch, idPrefix = 'item' }) {
+// as per company code policy — IM Apply Default Tax only; profit % is Admin-owned
+export function ImTaxPolicyFields({
+  form,
+  patch,
+  defaultTaxPercent = 0,
+  idPrefix = 'item',
+}) {
   return (
-    <>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-tax`}>Tax %</Label>
-        <WholeNumberInput
-          id={`${idPrefix}-tax`}
-          min={0}
-          max={100}
-          value={form.taxPercent}
-          onChange={(e) => patch('taxPercent', e.target.value)}
-        />
-        <p className="text-[11px] text-slate-400">
-          Pre-filled from Admin defaults — change to override for this product only.
-        </p>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-profit`}>Profit %</Label>
-        <WholeNumberInput
-          id={`${idPrefix}-profit`}
-          min={0}
-          max={100}
-          value={form.profitPercent}
-          onChange={(e) => patch('profitPercent', e.target.value)}
-        />
-        <p className="text-[11px] text-slate-400">
-          Pre-filled from Admin defaults — change to override for this product only.
-        </p>
-      </div>
-    </>
+    <ApplyDefaultTaxField
+      id={`${idPrefix}-apply-default-tax`}
+      checked={Boolean(form.applyDefaultTax)}
+      defaultTaxPercent={defaultTaxPercent}
+      onCheckedChange={(next) => patch('applyDefaultTax', next)}
+      className="sm:col-span-2 rounded-lg border border-border bg-slate-50/60 px-3 py-2.5"
+    />
   )
 }
 
-export function NormalProductFields({ form, patch, stockMode = 'create', offers = [] }) {
+export function NormalProductFields({
+  form,
+  patch,
+  stockMode = 'create',
+  offers = [],
+  defaultTaxPercent = 0,
+}) {
   const stockLocked = stockMode === 'edit'
   const isEdit = stockMode === 'edit'
   return (
@@ -509,7 +500,12 @@ export function NormalProductFields({ form, patch, stockMode = 'create', offers 
           onChange={(e) => patch('sellingPrice', e.target.value)}
         />
       </div>
-      <TaxProfitFields form={form} patch={patch} idPrefix="normal" />
+      <ImTaxPolicyFields
+        form={form}
+        patch={patch}
+        defaultTaxPercent={defaultTaxPercent}
+        idPrefix="normal"
+      />
       <div className="space-y-1.5 sm:col-span-2">
         <Label htmlFor="normal-discount-offer">Discount / Offer</Label>
         <NativeSelect

@@ -1,4 +1,9 @@
 import { EMPTY_DASH, money, PRODUCT_TYPES } from '@/lib/mapProduct'
+import {
+  FINAL_PRICE_FORMULA,
+  SELLING_PRICE_FORMULA,
+  TAX_PCT_FORMULA,
+} from '@/lib/pricingFormulaCopy'
 
 //
 // Shared price display helpers for catalog rows.
@@ -22,21 +27,21 @@ export function PricingColumns({ row }) {
           {isVariantParent ? EMPTY_DASH : money(row.purchasePrice)}
         </span>
       </p>
-      <p>
+      <p title={SELLING_PRICE_FORMULA}>
         <span className="text-slate-400">Selling</span>{' '}
         <span className="font-semibold text-slate-800">
           {isVariantParent ? EMPTY_DASH : money(row.sellingPrice)}
         </span>
       </p>
-      <p>
+      <p title={TAX_PCT_FORMULA}>
         <span className="text-slate-400">Tax</span>{' '}
         <span className="font-medium text-slate-700">{Number(row.taxPercent || 0)}%</span>
         {row.taxNames?.length ? (
           <span className="text-slate-400"> ({row.taxNames.join(', ')})</span>
         ) : null}
       </p>
-      <p>
-        <span className="text-slate-400">Final</span>{' '}
+      <p title={FINAL_PRICE_FORMULA}>
+        <span className="text-slate-400">Final (incl. tax)</span>{' '}
         <span className="font-bold text-slate-900">
           {isVariantParent ? EMPTY_DASH : money(row.finalPrice)}
         </span>

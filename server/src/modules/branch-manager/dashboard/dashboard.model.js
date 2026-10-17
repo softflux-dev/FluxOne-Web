@@ -1,34 +1,8 @@
 import { pool, requireTenantId, tenantQuery } from '../../../config/db.js'
+import { LATEST_EVALUATION_SCORE_SQL } from '../performance/performance.model.js'
 
-// Final % = (Σ actual / Σ max) × 100 — enabled (is_active) factors only
-const WEIGHTED_RATING_SQL = `
-  COALESCE(
-    ROUND(
-      (
-        COALESCE((
-          SELECT SUM(lp.points)::numeric
-          FROM (
-            SELECT DISTINCT ON (ps.scale_id) ps.points
-            FROM performance_scores ps
-            INNER JOIN scoring_scales ss_live
-              ON ss_live.id = ps.scale_id
-              AND ss_live.tenant_id = ps.tenant_id
-              AND ss_live.is_active = true
-            WHERE ps.staff_id = s.id AND ps.tenant_id = s.tenant_id
-            ORDER BY ps.scale_id, ps.scored_on DESC, ps.id DESC
-          ) lp
-        ), 0)
-        /
-        NULLIF((
-          SELECT SUM(ss_all.max_points)::numeric
-          FROM scoring_scales ss_all
-          WHERE ss_all.tenant_id = s.tenant_id
-            AND ss_all.is_active = true
-        ), 0)
-      ) * 100
-    , 2)
-  , 0)
-`
+// Latest append-only evaluation total % (0 when never scored)
+const WEIGHTED_RATING_SQL = LATEST_EVALUATION_SCORE_SQL
 
 function toDateParam(value) {
   if (!value) return null

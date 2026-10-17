@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Settings, Star } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowDownUp, Eye, Settings, Star } from 'lucide-react'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
-import { EntityStatusToggle } from '@/components/shared/EntityStatusToggle'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
 import { ScaleFormDialog } from '@/components/feature/branch/staff/ScaleFormDialog'
+import { ScoreEmployeeDialog } from '@/components/feature/branch/performance/ScoreEmployeeDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,31 +21,37 @@ import {
   TableCell,
   TablePagination,
 } from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogCancelButton,
-} from '@/components/ui/dialog'
 import { apiClient } from '@/api/api'
 import { useAuth } from '@/context/AuthContext'
 import { useClientPagination } from '@/hooks/useClientPagination'
 import {
-  activeScales,
-  calcWeightedScorePercent,
   formatScorePercent,
-  sumActualPoints,
+  isScaleSumValid,
+  SCALE_SUM_TARGET,
   sumScalePoints,
 } from '@/lib/performanceScales'
+import {
+  formatRelativeScored,
+  ratingBadgeClass,
+  trendDisplay,
+} from '@/lib/performanceRatings'
+import { formatDateLine } from '@/lib/formatDateTime'
 import { BRAND } from '@/lib/constants'
 import { displayStaffRef, matchesDisplayRef } from '@/lib/formatDisplayId'
+import { PATHS } from '@/router/paths'
 import { toastError, toastSuccess } from '@/lib/toast'
 
 function isBranchManagerDesignation(name) {
   return /branch\s*manager/i.test(String(name || ''))
+}
+
+function detailHref(staffId, searchQuery, filterDesignation) {
+  const params = new URLSearchParams()
+  if (searchQuery) params.set('q', searchQuery)
+  if (filterDesignation) params.set('designation', filterDesignation)
+  const qs = params.toString()
+  const base = PATHS.branch.performanceEmployee(staffId)
+  return qs ? `${base}?${qs}` : base
 }
 
 export function StaffPerformanceTab({
@@ -54,31 +61,33 @@ export function StaffPerformanceTab({
   onSubTabChange,
 }) {
   const { user } = useAuth()
-  const [activeSubTab, setActiveSubTab] = useState('roster') // 'roster' | 'scales'
+  const [searchParams] = useSearchParams()
+  const [activeSubTab, setActiveSubTab] = useState('roster')
 
-  // Roster
   const [roster, setRoster] = useState([])
   const [loadingRoster, setLoadingRoster] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterDesignation, setFilterDesignation] = useState('')
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '')
+  const [filterDesignation, setFilterDesignation] = useState(
+    searchParams.get('designation') || '',
+  )
+  const [sortLastScored, setSortLastScored] = useState(null)
 
-  // BM evaluates managed staff only — hide Branch Manager from filter
+  const [scoringEmployee, setScoringEmployee] = useState(null)
+
+  const [criteriaDraft, setCriteriaDraft] = useState([])
+  // Saved active scale — used for Score Employee (not unsaved draft)
+  const [activeCriteria, setActiveCriteria] = useState([])
+  const [scaleMeta, setScaleMeta] = useState(null)
+  const [loadingScales, setLoadingScales] = useState(false)
+  const [savingScale, setSavingScale] = useState(false)
+  const [editingScale, setEditingScale] = useState(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState(null)
+
   const rosterDesignations = useMemo(
     () => designations.filter((d) => !isBranchManagerDesignation(d.name)),
     [designations],
   )
-
-  // Score employee modal
-  const [scoringEmployee, setScoringEmployee] = useState(null)
-  const [scales, setScales] = useState([])
-  const [scores, setScores] = useState({})
-  const [mutatingScore, setMutatingScore] = useState(false)
-
-  // Scales CRUD
-  const [loadingScales, setLoadingScales] = useState(false)
-  const [editingScale, setEditingScale] = useState(null)
-  const [editOpen, setEditOpen] = useState(false)
-  const [deleteTargetScale, setDeleteTargetScale] = useState(null)
 
   const switchSubTab = (next) => {
     setActiveSubTab(next)
@@ -96,7 +105,15 @@ export function StaffPerformanceTab({
     setLoadingScales(true)
     const res = await apiClient.get('/branch/performance/scales')
     setLoadingScales(false)
-    if (res.success) setScales(res.data || [])
+    if (res.success) {
+      const list = (res.data?.criteria || []).map((c) => ({
+        ...c,
+        _localKey: c.id,
+      }))
+      setCriteriaDraft(list)
+      setActiveCriteria(res.data?.criteria || [])
+      setScaleMeta(res.data?.version || null)
+    }
   }
 
   useEffect(() => {
@@ -105,129 +122,127 @@ export function StaffPerformanceTab({
     onSubTabChange?.('roster')
   }, [])
 
-  const filteredRoster = roster.filter((emp) => {
-    // Defense in depth — exclude BM designation / logged-in user
-    if (isBranchManagerDesignation(emp.designation)) return false
-    if (emp.role === 'branch_manager') return false
-    if (user?.id && emp.userId && String(emp.userId) === String(user.id)) return false
+  const filteredRoster = useMemo(() => {
+    let rows = roster.filter((emp) => {
+      if (isBranchManagerDesignation(emp.designation)) return false
+      if (emp.role === 'branch_manager') return false
+      if (user?.id && emp.userId && String(emp.userId) === String(user.id)) return false
+      if (filterDesignation && emp.designationId !== filterDesignation) return false
+      if (searchQuery) {
+        const matchesName = String(emp.fullName || '')
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
+        const matchesId = matchesDisplayRef(emp.id || emp.staffId, searchQuery, 'STF')
+        if (!matchesName && !matchesId) return false
+      }
+      return true
+    })
 
-    if (filterDesignation && emp.designationId !== filterDesignation) return false
-    if (searchQuery) {
-      const matchesName = String(emp.fullName || '')
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase())
-      // STF-XXXXXXXX or bare hex both match via display-ref helper
-      const matchesId = matchesDisplayRef(emp.id || emp.staffId, searchQuery, 'STF')
-      if (!matchesName && !matchesId) return false
+    if (sortLastScored) {
+      rows = [...rows].sort((a, b) => {
+        const aTime = a.lastScoredAt ? new Date(a.lastScoredAt).getTime() : 0
+        const bTime = b.lastScoredAt ? new Date(b.lastScoredAt).getTime() : 0
+        return sortLastScored === 'asc' ? aTime - bTime : bTime - aTime
+      })
     }
-    return true
-  })
+    return rows
+  }, [roster, filterDesignation, searchQuery, user?.id, sortLastScored])
 
   const rosterPaging = useClientPagination(filteredRoster)
-  const scalesPaging = useClientPagination(scales)
+  const scalesPaging = useClientPagination(criteriaDraft)
+  const pointsUsed = sumScalePoints(criteriaDraft)
+  const canSaveScale = isScaleSumValid(criteriaDraft)
 
-  // Enabled factors only — disabled are excluded from totals / evaluation
-  const enabledScales = useMemo(() => activeScales(scales), [scales])
-
-  // Running total of enabled factor max points (reference for BM)
-  const pointsUsed = sumScalePoints(enabledScales)
-
-  // Live evaluation summary while scoring
-  const evaluationSummary = useMemo(() => {
-    const actualTotal = sumActualPoints(scores, enabledScales)
-    const maxTotal = sumScalePoints(enabledScales)
-    const percent = calcWeightedScorePercent(scores, scales)
-    return { actualTotal, maxTotal, percent }
-  }, [scores, enabledScales, scales])
-
-  const openScoringModal = (employee) => {
-    setScoringEmployee(employee)
-    // Default each enabled factor mid-range; missing values still count as 0 on submit
-    const initialScores = {}
-    enabledScales.forEach((s) => {
-      initialScores[s.id] = Math.round(s.maxPoints / 2)
-    })
-    setScores(initialScores)
-  }
-
-  const handleScoreSliderChange = (scaleId, val) => {
-    setScores((prev) => ({
-      ...prev,
-      [scaleId]: parseInt(val, 10),
-    }))
-  }
-
-  const submitScores = async () => {
-    if (enabledScales.length === 0) {
-      return toastError('At least one scoring factor must be enabled before evaluating')
-    }
-
-    setMutatingScore(true)
-    let successCount = 0
-    for (const scale of enabledScales) {
-      // Treat unset factors as 0
-      const pts = Number(scores[scale.id])
-      const safePts = Number.isFinite(pts) && pts >= 0 ? pts : 0
-      const res = await apiClient.post('/branch/performance/scores', {
-        staffId: scoringEmployee.staffId,
-        scaleId: scale.id,
-        points: Math.min(safePts, scale.maxPoints),
-      })
-      if (res.success) successCount++
-    }
-    setMutatingScore(false)
-    if (successCount > 0) {
-      toastSuccess(
-        `Performance scores recorded — final score ${formatScorePercent(evaluationSummary.percent)}`,
-      )
-      setScoringEmployee(null)
-      void fetchRoster()
-    } else {
-      toastError('Failed to record performance scores')
-    }
-  }
+  const openScoringModal = (employee) => setScoringEmployee(employee)
 
   const openEditScale = (scale) => {
     setEditingScale(scale)
     setEditOpen(true)
   }
 
-  const handleToggleScaleActive = async (scale, next) => {
-    const res = await apiClient.put(`/branch/performance/scales/${scale.id}`, {
-      isActive: next,
+  const applyCriterion = (row) => {
+    setCriteriaDraft((prev) => {
+      if (row.id || row._localKey) {
+        const key = row.id || row._localKey
+        const exists = prev.some((c) => c.id === key || c._localKey === key)
+        if (exists) {
+          return prev.map((c) =>
+            c.id === key || c._localKey === key
+              ? { ...c, name: row.name, maxPoints: row.maxPoints }
+              : c,
+          )
+        }
+      }
+      return [
+        ...prev,
+        {
+          id: row.id,
+          name: row.name,
+          maxPoints: row.maxPoints,
+          _localKey: row._localKey || `local-${Date.now()}`,
+        },
+      ]
     })
+  }
+
+  const confirmRemoveCriterion = () => {
+    if (!removeTarget) return
+    const key = removeTarget.id || removeTarget._localKey
+    setCriteriaDraft((prev) =>
+      prev.filter((c) => c.id !== key && c._localKey !== key),
+    )
+    setRemoveTarget(null)
+  }
+
+  const handleSaveScaleVersion = async () => {
+    if (!canSaveScale) {
+      return toastError(`Criteria maximums must total exactly ${SCALE_SUM_TARGET}`)
+    }
+    setSavingScale(true)
+    const res = await apiClient.put('/branch/performance/scales', {
+      criteria: criteriaDraft.map((c) => ({
+        ...(c.id ? { id: c.id } : {}),
+        name: c.name,
+        maxPoints: Number(c.maxPoints),
+      })),
+    })
+    setSavingScale(false)
     if (!res.success) {
-      toastError(res.error || 'Failed to update factor status')
+      toastError(res.error || 'Failed to save scoring scale')
       return
     }
-    toastSuccess(next ? `"${scale.name}" enabled` : `"${scale.name}" disabled`)
+    toastSuccess(
+      res.data?.version
+        ? `Scoring scale saved (v${res.data.version.versionNumber})`
+        : 'Scoring scale saved',
+    )
     void fetchScales()
     void fetchRoster()
   }
 
-  const confirmDeleteScale = async () => {
-    if (!deleteTargetScale) return
-    setLoadingScales(true)
-    const res = await apiClient.delete(`/branch/performance/scales/${deleteTargetScale.id}`)
-    setLoadingScales(false)
-    if (res.success) {
-      toastSuccess('Scoring scale deleted')
-      setDeleteTargetScale(null)
-      void fetchScales()
-      void fetchRoster()
-    } else {
-      toastError(res.error || 'Failed to delete scale')
-    }
+  const toggleLastScoredSort = () => {
+    setSortLastScored((prev) => {
+      if (prev === 'desc') return 'asc'
+      if (prev === 'asc') return null
+      return 'desc'
+    })
   }
 
-  const getRatingBadgeStyle = (rating) => {
-    if (rating >= 75) {
-      return 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-none font-bold rounded-lg px-2.5 py-1 text-sm'
+  const renderTrend = (emp) => {
+    const t = trendDisplay(emp.trendDirection, emp.trendDelta)
+    return <span className={t.className}>{t.text}</span>
+  }
+
+  const renderLastScored = (emp) => {
+    if (!emp.lastScoredAt) {
+      return <span className="text-slate-400">Not scored yet</span>
     }
-    if (rating >= 50) {
-      return 'bg-amber-50 text-amber-800 hover:bg-amber-100 border-none font-bold rounded-lg px-2.5 py-1 text-sm'
-    }
-    return 'bg-rose-50 text-rose-800 hover:bg-rose-100 border-none font-bold rounded-lg px-2.5 py-1 text-sm'
+    const relative = formatRelativeScored(emp.lastScoredAt)
+    return (
+      <span title={relative ? `${formatDateLine(emp.lastScoredAt)} (${relative})` : undefined}>
+        {formatDateLine(emp.lastScoredAt)}
+      </span>
+    )
   }
 
   return (
@@ -250,7 +265,7 @@ export function StaffPerformanceTab({
           className={activeSubTab === 'scales' ? 'text-white' : ''}
         >
           <Settings className="mr-1 size-4" />
-          Scoring Scales
+          Scoring Scale
         </Button>
       </div>
 
@@ -291,7 +306,12 @@ export function StaffPerformanceTab({
                 <DataCard key={emp.staffId}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{emp.fullName}</p>
+                      <Link
+                        to={detailHref(emp.staffId, searchQuery, filterDesignation)}
+                        className="truncate text-sm font-semibold text-purple-700 hover:underline"
+                      >
+                        {emp.fullName}
+                      </Link>
                       <p
                         title={emp.staffId || undefined}
                         className="mt-0.5 font-mono text-[11px] font-bold text-purple-800"
@@ -299,20 +319,43 @@ export function StaffPerformanceTab({
                         {displayStaffRef(emp)}
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">{emp.designation || '—'}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Trend: {renderTrend(emp)} · {renderLastScored(emp)}
+                      </p>
                     </div>
-                    <Badge variant="outline" className={getRatingBadgeStyle(emp.rating)}>
-                      <Star className="mr-1 size-3.5 fill-current" />
-                      {formatScorePercent(emp.rating)}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-sm font-bold text-slate-800">
+                        {emp.score == null ? '—' : `${Number(emp.score).toFixed(0)} / 100`}
+                      </span>
+                      {emp.ratingLabel ? (
+                        <Badge variant="outline" className={ratingBadgeClass(emp.ratingLabel)}>
+                          <Star className="mr-1 size-3.5 fill-current" />
+                          {emp.ratingLabel}
+                        </Badge>
+                      ) : null}
+                    </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="brand"
-                    className="mt-3 h-8 w-full text-xs"
-                    onClick={() => openScoringModal(emp)}
-                  >
-                    Score Employee
-                  </Button>
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 flex-1 text-xs"
+                      asChild
+                    >
+                      <Link to={detailHref(emp.staffId, searchQuery, filterDesignation)}>
+                        <Eye className="mr-1 size-3.5" />
+                        View Details
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="brand"
+                      className="h-8 flex-1 text-xs"
+                      onClick={() => openScoringModal(emp)}
+                    >
+                      Score Employee
+                    </Button>
+                  </div>
                 </DataCard>
               ))}
               desktop={
@@ -322,14 +365,34 @@ export function StaffPerformanceTab({
                       <TableHead>Employee</TableHead>
                       <TableHead>Staff ID</TableHead>
                       <TableHead>Designation</TableHead>
-                      <TableHead>Score rating</TableHead>
+                      <TableHead>Score</TableHead>
+                      <TableHead>Trend</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer items-center gap-1 hover:text-slate-800"
+                          onClick={toggleLastScoredSort}
+                          title="Sort by last scored"
+                        >
+                          Last Scored
+                          <ArrowDownUp className="size-3.5" />
+                        </button>
+                      </TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rosterPaging.slice.map((emp) => (
                       <TableRow key={emp.staffId}>
-                        <TableCell className="font-semibold text-slate-900">{emp.fullName}</TableCell>
+                        <TableCell>
+                          <Link
+                            to={detailHref(emp.staffId, searchQuery, filterDesignation)}
+                            className="font-semibold text-purple-700 hover:underline"
+                          >
+                            {emp.fullName}
+                          </Link>
+                        </TableCell>
                         <TableCell>
                           <span
                             title={emp.staffId || undefined}
@@ -339,21 +402,39 @@ export function StaffPerformanceTab({
                           </span>
                         </TableCell>
                         <TableCell className="text-slate-600">{emp.designation || '—'}</TableCell>
+                        <TableCell className="font-semibold text-slate-800">
+                          {emp.score == null ? '—' : `${Number(emp.score).toFixed(0)} / 100`}
+                        </TableCell>
+                        <TableCell>{renderTrend(emp)}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={getRatingBadgeStyle(emp.rating)}>
-                            <Star className="mr-1 size-3.5 fill-current" />
-                            {formatScorePercent(emp.rating)}
-                          </Badge>
+                          {emp.ratingLabel ? (
+                            <Badge variant="outline" className={ratingBadgeClass(emp.ratingLabel)}>
+                              <Star className="mr-1 size-3.5 fill-current" />
+                              {emp.ratingLabel}
+                            </Badge>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {renderLastScored(emp)}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="brand"
-                            className="h-8 text-xs"
-                            onClick={() => openScoringModal(emp)}
-                          >
-                            Score Employee
-                          </Button>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button size="sm" variant="outline" className="h-8 text-xs" asChild>
+                              <Link to={detailHref(emp.staffId, searchQuery, filterDesignation)}>
+                                View Details
+                              </Link>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="brand"
+                              className="h-8 text-xs"
+                              onClick={() => openScoringModal(emp)}
+                            >
+                              Score Employee
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -375,16 +456,44 @@ export function StaffPerformanceTab({
       ) : (
         <SurfaceCard
           title="Configured Scoring Criteria"
-          description={`Enabled max points total: ${pointsUsed} · ${enabledScales.length} enabled / ${scales.length} total`}
+          description={
+            scaleMeta
+              ? `Active version v${scaleMeta.versionNumber} · Total ${pointsUsed} / ${SCALE_SUM_TARGET}`
+              : `Draft total ${pointsUsed} / ${SCALE_SUM_TARGET}`
+          }
+          actions={
+            <Button
+              size="sm"
+              variant="brand"
+              disabled={!canSaveScale || savingScale}
+              onClick={handleSaveScaleVersion}
+            >
+              {savingScale ? 'Saving…' : 'Save Scale'}
+            </Button>
+          }
         >
+          <div
+            className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
+              canSaveScale
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-amber-200 bg-amber-50 text-amber-800'
+            }`}
+          >
+            Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Save is enabled only
+            when the total is exactly {SCALE_SUM_TARGET}. Saving creates a new scale version;
+            past evaluations keep their snapshots.
+          </div>
+
           {loadingScales ? (
             <p className="py-8 text-center text-sm text-slate-400">Loading...</p>
-          ) : scales.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">No scales configured</p>
+          ) : criteriaDraft.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              No criteria yet. Add criteria until the total is {SCALE_SUM_TARGET}.
+            </p>
           ) : (
             <ResponsiveDataShell
               mobile={scalesPaging.slice.map((s) => (
-                <DataCard key={s.id}>
+                <DataCard key={s.id || s._localKey}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900">{s.name}</p>
@@ -392,17 +501,7 @@ export function StaffPerformanceTab({
                     </div>
                     <RowActionButtons
                       onEdit={() => openEditScale(s)}
-                      onDelete={() => setDeleteTargetScale(s)}
-                    />
-                  </div>
-                  <div className="mt-3">
-                    <EntityStatusToggle
-                      active={s.isActive !== false}
-                      onChange={(next) => handleToggleScaleActive(s, next)}
-                      activeLabel="Enabled"
-                      inactiveLabel="Disabled"
-                      activeTitle="Click to disable this scoring factor"
-                      inactiveTitle="Click to enable this scoring factor"
+                      onDelete={() => setRemoveTarget(s)}
                     />
                   </div>
                 </DataCard>
@@ -411,31 +510,20 @@ export function StaffPerformanceTab({
                 <Table>
                   <TableHeader>
                     <TableRow className="text-xs text-slate-500 uppercase">
-                      <TableHead>Scale Name</TableHead>
-                      <TableHead>Max Weights/Points</TableHead>
-                      <TableHead>Enable / Disable</TableHead>
+                      <TableHead>Criterion</TableHead>
+                      <TableHead>Max Points</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {scalesPaging.slice.map((s) => (
-                      <TableRow key={s.id}>
+                      <TableRow key={s.id || s._localKey}>
                         <TableCell className="font-semibold text-slate-900">{s.name}</TableCell>
                         <TableCell className="font-mono text-slate-700">{s.maxPoints} pts</TableCell>
                         <TableCell>
-                          <EntityStatusToggle
-                            active={s.isActive !== false}
-                            onChange={(next) => handleToggleScaleActive(s, next)}
-                            activeLabel="Enabled"
-                            inactiveLabel="Disabled"
-                            activeTitle="Click to disable this scoring factor"
-                            inactiveTitle="Click to enable this scoring factor"
-                          />
-                        </TableCell>
-                        <TableCell>
                           <RowActionButtons
                             onEdit={() => openEditScale(s)}
-                            onDelete={() => setDeleteTargetScale(s)}
+                            onDelete={() => setRemoveTarget(s)}
                           />
                         </TableCell>
                       </TableRow>
@@ -461,8 +549,8 @@ export function StaffPerformanceTab({
         open={createOpen}
         onOpenChange={onCreateOpenChange}
         mode="create"
-        scales={scales}
-        onSuccess={fetchScales}
+        scales={criteriaDraft}
+        onApply={applyCriterion}
       />
 
       <ScaleFormDialog
@@ -473,92 +561,31 @@ export function StaffPerformanceTab({
         }}
         mode="edit"
         initialScale={editingScale}
-        scales={scales}
-        onSuccess={fetchScales}
+        scales={criteriaDraft}
+        onApply={applyCriterion}
       />
 
-      <Dialog
+      <ScoreEmployeeDialog
         open={Boolean(scoringEmployee)}
         onOpenChange={(open) => {
           if (!open) setScoringEmployee(null)
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Evaluate Performance: {scoringEmployee?.fullName}</DialogTitle>
-            <DialogDescription>
-              Assign actual points per factor (0 to max). Final score is normalized to 100%.
-            </DialogDescription>
-          </DialogHeader>
-
-          {enabledScales.length === 0 ? (
-            <p className="py-4 text-center text-slate-400">
-              Please enable at least one scoring scale first.
-            </p>
-          ) : (
-            <div className="space-y-4 py-2">
-              {enabledScales.map((s) => {
-                const currentVal = scores[s.id] ?? 0
-                return (
-                  <div
-                    key={s.id}
-                    className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2"
-                  >
-                    <div className="flex justify-between text-xs font-bold text-slate-700">
-                      <span>{s.name}</span>
-                      <span className="text-purple-700">
-                        {currentVal} / {s.maxPoints} pts
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max={s.maxPoints}
-                      value={currentVal}
-                      onChange={(e) => handleScoreSliderChange(s.id, e.target.value)}
-                      className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-200 accent-purple-600"
-                    />
-                  </div>
-                )
-              })}
-
-              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                <p className="font-semibold text-slate-800">Evaluation summary</p>
-                <p className="mt-1">
-                  Raw total: <strong>{evaluationSummary.actualTotal}</strong> /{' '}
-                  <strong>{evaluationSummary.maxTotal}</strong> pts
-                </p>
-                <p className="mt-1 text-sm font-bold text-purple-800">
-                  Final score: {formatScorePercent(evaluationSummary.percent)}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <DialogCancelButton disabled={mutatingScore} className="w-full sm:w-auto" />
-            <Button
-              onClick={submitScores}
-              disabled={mutatingScore || enabledScales.length === 0}
-              variant="brand"
-              className="w-full sm:w-auto"
-            >
-              {mutatingScore ? 'Saving…' : 'Record Scores'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        employee={scoringEmployee}
+        criteria={activeCriteria}
+        onSuccess={() => {
+          void fetchRoster()
+        }}
+      />
 
       <ConfirmDialog
-        open={Boolean(deleteTargetScale)}
+        open={Boolean(removeTarget)}
         onOpenChange={(open) => {
-          if (!open) setDeleteTargetScale(null)
+          if (!open) setRemoveTarget(null)
         }}
-        title="Delete scoring scale?"
-        description="Delete this scoring scale? Related scores are removed and ratings recalculate from remaining factors."
-        confirmLabel="Delete"
-        onConfirm={confirmDeleteScale}
-        loading={loadingScales}
+        title="Remove criterion from draft?"
+        description="This removes the criterion from the next saved scale version. Past evaluations keep their snapshots. Click Save Scale to publish."
+        confirmLabel="Remove"
+        onConfirm={confirmRemoveCriterion}
       />
     </div>
   )

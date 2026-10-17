@@ -73,11 +73,15 @@ export function PrintBarcodeDialog({
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
         ) : null}
 
-        <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-border bg-slate-50">
+        <div className="flex min-h-36 items-center justify-center rounded-xl border border-dashed border-border bg-slate-50 p-5">
           {loading ? (
             <div className="h-16 w-40 animate-pulse rounded bg-slate-200" />
           ) : url ? (
-            <img src={url} alt="Barcode" className="max-h-40 max-w-full" />
+            <img
+              src={url}
+              alt="Barcode"
+              className="max-h-40 max-w-full object-contain"
+            />
           ) : (
             <p className="text-sm text-slate-400">No barcode preview</p>
           )}

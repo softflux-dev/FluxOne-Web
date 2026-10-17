@@ -2,7 +2,12 @@ import { jsPDF } from 'jspdf'
 import { exportRowsToCsv } from '@/lib/csvExport'
 import { formatAmount, normalizeCurrency } from '@/lib/currency'
 import { formatDateTimeInline } from '@/lib/formatDateTime'
-import { finalPriceFromCost } from '@/lib/pricing'
+import {
+  actualMarginAmount,
+  actualMarginPercent,
+  finalPriceFromSelling,
+} from '@/lib/pricing'
+import { FINAL_PRICE_FORMULA, MARGIN_FORMULA } from '@/lib/pricingFormulaCopy'
 
 function categoryLabel(row = {}) {
   const cat = row.category || 'Uncategorized'
@@ -18,19 +23,26 @@ function productLabel(row = {}) {
 
 function buildRows(items = []) {
   return items.map((p) => {
+    const sellingPrice = Number(p.sellingPrice ?? 0)
+    const discountPercent = Number(p.discountPercent ?? 0)
+    const taxPct = Number(p.taxPct ?? 0)
+    const baseCost = Number(p.baseCost ?? 0)
     const finalPrice =
-      p.finalPrice ??
-      finalPriceFromCost(p.baseCost, p.profitPct, p.taxPct)
+      p.finalPrice ?? finalPriceFromSelling(sellingPrice, discountPercent, taxPct)
+    const marginAmount = p.marginAmount ?? actualMarginAmount(baseCost, sellingPrice)
+    const marginPercent = p.marginPercent ?? actualMarginPercent(baseCost, sellingPrice)
     return {
       sku: p.itemCode || p.id || '',
       product: productLabel(p),
       barcode: p.barcode || '',
       category: categoryLabel(p),
-      purchaseCost: formatAmount(p.baseCost),
+      purchaseCost: formatAmount(baseCost),
       profitPct: `${Number(p.profitPct || 0)}%`,
-      taxPct: `${Number(p.taxPct || 0)}%`,
+      taxPct: `${taxPct}%`,
+      sellingPrice: formatAmount(sellingPrice),
+      margin: formatAmount(marginAmount),
+      marginPct: `${marginPercent}%`,
       finalPrice: formatAmount(finalPrice),
-      margin: formatAmount(Number(finalPrice) - Number(p.baseCost || 0)),
     }
   })
 }
@@ -46,11 +58,13 @@ export function exportTaxProfitCsv({ items = [], currency = 'PKR' } = {}) {
     'Product',
     'Barcode',
     'Category',
-    `Purchase Cost (${code})`,
+    `Purchase (${code})`,
     'Profit %',
     'Tax %',
-    `Final Price (${code})`,
+    `Selling (${code})`,
     `Margin (${code})`,
+    'Margin %',
+    `Final incl. tax (${code})`,
   ]
 
   exportRowsToCsv({
@@ -64,8 +78,10 @@ export function exportTaxProfitCsv({ items = [], currency = 'PKR' } = {}) {
       r.purchaseCost,
       r.profitPct,
       r.taxPct,
-      r.finalPrice,
+      r.sellingPrice,
       r.margin,
+      r.marginPct,
+      r.finalPrice,
     ]),
   })
 }
@@ -77,7 +93,7 @@ export function exportTaxProfitPdf({ items = [], currency = 'PKR' } = {}) {
   if (!rows.length) throw new Error('No rows to export')
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
-  const margin = 12
+  const margin = 10
   const pageW = doc.internal.pageSize.getWidth()
   let y = 14
 
@@ -86,29 +102,32 @@ export function exportTaxProfitPdf({ items = [], currency = 'PKR' } = {}) {
   doc.text('Catalog Pricing & Profit Margins', margin, y)
   y += 6
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
+  doc.setFontSize(8)
   doc.text(`Currency: ${code}  ·  Generated: ${formatDateTimeInline(new Date())}`, margin, y)
   y += 4
-  doc.text('Final Price = (Purchase Cost + Profit) + Tax on Subtotal', margin, y)
+  doc.text(FINAL_PRICE_FORMULA, margin, y)
+  y += 3.5
+  doc.text(MARGIN_FORMULA, margin, y)
   y += 6
 
   const cols = [
-    { label: 'SKU', w: 32 },
-    { label: 'Product', w: 48 },
-    { label: 'Barcode', w: 28 },
-    { label: 'Category', w: 36 },
-    { label: 'Cost', w: 22 },
-    { label: 'Profit%', w: 18 },
-    { label: 'Tax%', w: 16 },
-    { label: 'Final', w: 22 },
-    { label: 'Margin', w: 22 },
+    { label: 'SKU', w: 28 },
+    { label: 'Product', w: 40 },
+    { label: 'Barcode', w: 24 },
+    { label: 'Category', w: 30 },
+    { label: 'Purchase', w: 20 },
+    { label: 'Profit%', w: 16 },
+    { label: 'Tax%', w: 14 },
+    { label: 'Selling', w: 20 },
+    { label: 'Margin', w: 18 },
+    { label: 'Final', w: 20 },
   ]
   const startX = margin
   const rowH = 6
 
   function drawHeader() {
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
+    doc.setFontSize(7.5)
     let x = startX
     for (const col of cols) {
       doc.text(col.label, x, y)
@@ -137,15 +156,16 @@ export function exportTaxProfitPdf({ items = [], currency = 'PKR' } = {}) {
       r.purchaseCost,
       r.profitPct,
       r.taxPct,
+      r.sellingPrice,
+      `${r.margin} (${r.marginPct})`,
       r.finalPrice,
-      r.margin,
     ]
     let x = startX
-    doc.setFontSize(7.5)
+    doc.setFontSize(7)
     let maxLines = 1
     for (let i = 0; i < cols.length; i += 1) {
       const text = String(cells[i] ?? '')
-      const lines = text.split('\n').map((line) => (line.length > 28 ? `${line.slice(0, 27)}…` : line))
+      const lines = text.split('\n').map((line) => (line.length > 26 ? `${line.slice(0, 25)}…` : line))
       maxLines = Math.max(maxLines, lines.length)
       lines.forEach((line, lineIndex) => {
         doc.text(line, x, y + lineIndex * 3.2)

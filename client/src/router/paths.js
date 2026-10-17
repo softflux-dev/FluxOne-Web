@@ -27,6 +27,7 @@ export const PATHS = {
     holidays: '/branch/holidays',
     leaves: '/branch/leaves',
     performance: '/branch/performance',
+    performanceEmployee: (staffId) => `/branch/performance/employees/${staffId}`,
     sales: '/branch/sales',
     customer: '/branch/customer',
     inventory: '/branch/inventory',

@@ -60,6 +60,8 @@ export function TaxProfitPage() {
     baseCost: true,
     profitPct: true,
     taxPct: true,
+    sellingPrice: true,
+    margin: true,
     finalPrice: true,
   })
   const [colMenuOpen, setColMenuOpen] = useState(false)
