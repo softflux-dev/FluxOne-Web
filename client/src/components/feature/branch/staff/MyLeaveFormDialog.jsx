@@ -8,6 +8,7 @@ import { toastError, toastSuccess } from '@/lib/toast'
 import { validateLeaveFormFields } from '@/lib/validation/branchForms'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
+import { useFormBaseline } from '@/hooks/useFormBaseline'
 import { apiClient } from '@/api/api'
 
 const FIELD_IDS = {
@@ -24,6 +25,7 @@ export function MyLeaveFormDialog({ open, onOpenChange, onSuccess }) {
   const [reason, setReason] = useState('')
   const [mutating, setMutating] = useState(false)
   const { fieldErrors, formError, resetErrors, clearField, applyErrors } = useFieldErrors()
+  const { captureBaseline, isDirty } = useFormBaseline(open)
 
   const resetForm = () => {
     setStartDate('')
@@ -37,9 +39,11 @@ export function MyLeaveFormDialog({ open, onOpenChange, onSuccess }) {
       return
     }
     resetErrors()
-  }, [open, resetErrors])
+    resetForm()
+    captureBaseline({ startDate: '', endDate: '', reason: '' })
+  }, [open, resetErrors, captureBaseline])
 
-  const dirty = Boolean(startDate || endDate || reason)
+  const dirty = isDirty({ startDate, endDate, reason })
 
   const handleSubmit = async (event) => {
     event.preventDefault()

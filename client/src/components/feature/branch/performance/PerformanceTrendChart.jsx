@@ -52,6 +52,26 @@ function ChartTooltip({ active, payload }) {
   )
 }
 
+// Clickable activeDot so hover + click bind the same evaluationId
+function ActiveDot({ cx, cy, payload, onPointClick }) {
+  if (cx == null || cy == null || !payload) return null
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={7}
+      fill="#4c1d95"
+      stroke="#fff"
+      strokeWidth={2}
+      style={{ cursor: 'pointer' }}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (payload.evaluationId) onPointClick?.(payload.evaluationId)
+      }}
+    />
+  )
+}
+
 export function PerformanceTrendChart({
   chart,
   range,
@@ -60,15 +80,24 @@ export function PerformanceTrendChart({
   onChartTypeChange,
   onPointClick,
 }) {
+  // Unique X key per evaluation so same-day scores do not collide in Recharts
   const data = useMemo(() => {
     return (chart?.points || []).map((p, index) => ({
       ...p,
       index,
+      pointKey: p.evaluationId || `pt-${index}-${p.scoredAt}`,
       label: formatDateLine(p.scoredAt),
     }))
   }, [chart?.points])
 
   const markers = chart?.scaleMarkers || []
+
+  const markerXKeys = useMemo(() => {
+    return markers.map((m) => {
+      const match = data.find((d) => new Date(d.scoredAt) >= new Date(m.effectiveFrom))
+      return { ...m, xKey: match?.pointKey }
+    })
+  }, [markers, data])
 
   return (
     <div className="rounded-2xl border border-border bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
@@ -131,27 +160,34 @@ export function PerformanceTrendChart({
                     ifOverflow="extendDomain"
                   />
                 ))}
-                {markers.map((m) => (
-                  <ReferenceLine
-                    key={m.versionId}
-                    x={data.find((d) => new Date(d.scoredAt) >= new Date(m.effectiveFrom))?.label}
-                    stroke="#94a3b8"
-                    strokeDasharray="4 4"
-                    label={{
-                      value: m.label,
-                      position: 'insideTopRight',
-                      fill: '#64748b',
-                      fontSize: 10,
-                    }}
-                  />
-                ))}
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                {markerXKeys.map((m) =>
+                  m.xKey ? (
+                    <ReferenceLine
+                      key={m.versionId}
+                      x={m.xKey}
+                      stroke="#94a3b8"
+                      strokeDasharray="4 4"
+                      label={{
+                        value: m.label,
+                        position: 'insideTopRight',
+                        fill: '#64748b',
+                        fontSize: 10,
+                      }}
+                    />
+                  ) : null,
+                )}
+                <XAxis
+                  dataKey="pointKey"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(_, i) => data[i]?.label || ''}
+                  interval="preserveStartEnd"
+                />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                 <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="totalScore" radius={[4, 4, 0, 0]}>
                   {data.map((entry) => (
                     <Cell
-                      key={entry.evaluationId}
+                      key={entry.pointKey}
                       fill={bandColor(entry.totalScore)}
                       stroke={entry.isLatest ? '#4c1d95' : 'transparent'}
                       strokeWidth={entry.isLatest ? 2 : 0}
@@ -178,7 +214,12 @@ export function PerformanceTrendChart({
                     ifOverflow="extendDomain"
                   />
                 ))}
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <XAxis
+                  dataKey="pointKey"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(_, i) => data[i]?.label || ''}
+                  interval="preserveStartEnd"
+                />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                 <Tooltip content={<ChartTooltip />} />
                 <Line
@@ -188,11 +229,14 @@ export function PerformanceTrendChart({
                   strokeWidth={2}
                   dot={(props) => {
                     const { cx, cy, payload } = props
-                    if (cx == null || cy == null) return null
+                    if (cx == null || cy == null || !payload) return null
                     return (
                       <g
-                        key={payload.evaluationId}
-                        onClick={() => onPointClick?.(payload.evaluationId)}
+                        key={payload.pointKey}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPointClick?.(payload.evaluationId)
+                        }}
                         style={{ cursor: 'pointer' }}
                       >
                         <circle
@@ -215,7 +259,9 @@ export function PerformanceTrendChart({
                       </g>
                     )
                   }}
-                  activeDot={{ r: 7 }}
+                  activeDot={(props) => (
+                    <ActiveDot {...props} onPointClick={onPointClick} />
+                  )}
                 />
               </LineChart>
             )}

@@ -39,7 +39,8 @@ import { formatDateLine } from '@/lib/formatDateTime'
 import { BRAND } from '@/lib/constants'
 import { displayStaffRef, matchesDisplayRef } from '@/lib/formatDisplayId'
 import { PATHS } from '@/router/paths'
-import { toastError, toastSuccess } from '@/lib/toast'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
+import { toastError, toastInfo, toastSuccess } from '@/lib/toast'
 
 function isBranchManagerDesignation(name) {
   return /branch\s*manager/i.test(String(name || ''))
@@ -185,6 +186,7 @@ export function StaffPerformanceTab({
     })
   }
 
+  // Remove from draft only — must Save Scale (sum === 100) to persist a new version
   const confirmRemoveCriterion = () => {
     if (!removeTarget) return
     const key = removeTarget.id || removeTarget._localKey
@@ -192,10 +194,17 @@ export function StaffPerformanceTab({
       prev.filter((c) => c.id !== key && c._localKey !== key),
     )
     setRemoveTarget(null)
+    toastInfo(
+      `“${removeTarget.name}” removed from draft. Adjust remaining max points to ${SCALE_SUM_TARGET}, then click Save Scale to publish.`,
+    )
   }
 
   const handleSaveScaleVersion = async () => {
     if (!canSaveScale) {
+      document.getElementById('scoring-scale-total')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
       return toastError(`Criteria maximums must total exactly ${SCALE_SUM_TARGET}`)
     }
     setSavingScale(true)
@@ -297,7 +306,7 @@ export function StaffPerformanceTab({
           </div>
 
           {loadingRoster ? (
-            <p className="py-8 text-center text-sm text-slate-400">Loading...</p>
+            <TableRowsSkeleton rows={6} />
           ) : filteredRoster.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">No records found</p>
           ) : (
@@ -473,19 +482,32 @@ export function StaffPerformanceTab({
           }
         >
           <div
+            id="scoring-scale-total"
             className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
               canSaveScale
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                 : 'border-amber-200 bg-amber-50 text-amber-800'
             }`}
           >
-            Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Save is enabled only
-            when the total is exactly {SCALE_SUM_TARGET}. Saving creates a new scale version;
-            past evaluations keep their snapshots.
+            {canSaveScale ? (
+              <>
+                Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Click{' '}
+                <strong>Save Scale</strong> to publish a new version. Past evaluations keep their
+                snapshots. Deletions only persist after a successful save — refresh before saving
+                will restore the last published scale.
+              </>
+            ) : (
+              <>
+                Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Edit remaining
+                criteria so the total equals exactly {SCALE_SUM_TARGET}, then click{' '}
+                <strong>Save Scale</strong>. Until you save, removed criteria can reappear after
+                refresh.
+              </>
+            )}
           </div>
 
           {loadingScales ? (
-            <p className="py-8 text-center text-sm text-slate-400">Loading...</p>
+            <TableRowsSkeleton rows={4} />
           ) : criteriaDraft.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">
               No criteria yet. Add criteria until the total is {SCALE_SUM_TARGET}.

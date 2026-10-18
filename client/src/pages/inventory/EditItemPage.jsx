@@ -36,6 +36,7 @@ import { BRAND } from '@/lib/constants'
 import { PATHS } from '@/router/paths'
 import { resolveApplyDefaultTaxFromProduct } from '@/lib/imTaxProfitPolicy'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
+import { focusFieldById } from '@/lib/validation/fieldErrors'
 import { cn } from '@/lib/utils'
 
 function newId(prefix) {
@@ -79,6 +80,11 @@ export function EditItemPage() {
   const [tab, setTab] = useState('basic')
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState(null)
+
+  // Scroll validation banner into view (long multi-tab form)
+  useEffect(() => {
+    if (error) focusFieldById('edit-item-form-error')
+  }, [error])
   const [saving, setSaving] = useState(false)
   const [variantsLoading, setVariantsLoading] = useState(true)
   const [hydrated, setHydrated] = useState(false)
@@ -523,7 +529,11 @@ export function EditItemPage() {
       </MotionReveal>
 
       {error ? (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100">
+        <p
+          id="edit-item-form-error"
+          tabIndex={-1}
+          className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100 outline-none"
+        >
           {error}
         </p>
       ) : null}

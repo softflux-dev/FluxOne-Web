@@ -12,6 +12,7 @@ import {
 } from '@/lib/performanceScales'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
+import { useFormBaseline } from '@/hooks/useFormBaseline'
 
 const EMPTY = { name: '', maxPoints: '' }
 
@@ -35,6 +36,7 @@ export function ScaleFormDialog({
   const [form, setForm] = useState(EMPTY)
   const [touchedPoints, setTouchedPoints] = useState(false)
   const { fieldErrors, formError, resetErrors, clearField, applyErrors } = useFieldErrors()
+  const { captureBaseline, isDirty } = useFormBaseline(open)
 
   const excludeId = isEdit ? initialScale?.id : null
   const otherUsed = useMemo(() => sumScalePoints(scales, excludeId), [scales, excludeId])
@@ -47,15 +49,16 @@ export function ScaleFormDialog({
     }
     resetErrors()
     setTouchedPoints(false)
-    if (isEdit && initialScale) {
-      setForm({
-        name: initialScale.name || '',
-        maxPoints: String(initialScale.maxPoints ?? ''),
-      })
-    } else {
-      setForm({ name: '', maxPoints: '' })
-    }
-  }, [open, isEdit, initialScale, resetErrors])
+    const next =
+      isEdit && initialScale
+        ? {
+            name: initialScale.name || '',
+            maxPoints: String(initialScale.maxPoints ?? ''),
+          }
+        : { name: '', maxPoints: '' }
+    setForm(next)
+    captureBaseline(next)
+  }, [open, isEdit, initialScale, resetErrors, captureBaseline])
 
   const parsed = parseScaleMaxPoints(form.maxPoints)
   const pointsValue = parsed.ok ? parsed.value : null
@@ -70,12 +73,6 @@ export function ScaleFormDialog({
   const projectedTotal = pointsValue == null ? otherUsed : otherUsed + pointsValue
   const overBudget = projectedTotal > SCALE_SUM_TARGET
   const canSubmit = Boolean(form.name.trim()) && parsed.ok && !overBudget
-
-  const dirty =
-    isEdit && initialScale
-      ? form.name !== (initialScale.name || '') ||
-        String(form.maxPoints) !== String(initialScale.maxPoints ?? '')
-      : Boolean(form.name || form.maxPoints)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -110,7 +107,7 @@ export function ScaleFormDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      dirty={dirty}
+      dirty={isDirty(form)}
       title={isEdit ? 'Edit Criterion' : 'Add Criterion'}
       description={`Maximums across all criteria must total exactly ${SCALE_SUM_TARGET}.`}
       contentClassName="sm:max-w-md"

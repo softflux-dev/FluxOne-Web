@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/select'
+import { useFormBaseline } from '@/hooks/useFormBaseline'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { apiClient } from '@/api/api'
 
@@ -54,27 +55,46 @@ export function HolidayScheduleFormDialog({
   const [staffSearch, setStaffSearch] = useState('')
   const [staffDesignation, setStaffDesignation] = useState('')
   const [mutating, setMutating] = useState(false)
+  const { captureBaseline, isDirty } = useFormBaseline(open)
 
+  // Snapshot on open — edit close without edits must not show discard prompt
   useEffect(() => {
     if (!open) return
-    if (isEdit && initial) {
-      setName(initial.name || '')
-      setStartDate(toInputDate(initial.startDate || initial.holidayDate))
-      setEndDate(toInputDate(initial.endDate || initial.startDate || initial.holidayDate))
-      setIsAllEmployees(initial.isAllEmployees !== false)
-      setEmployeeIds(initial.employeeIds || [])
-      setStatus(initial.status || 'active')
-    } else {
-      setName('')
-      setStartDate('')
-      setEndDate('')
-      setIsAllEmployees(true)
-      setEmployeeIds([])
-      setStatus('active')
+    const hydratedIds =
+      isEdit && initial ? [...(initial.employeeIds || [])] : []
+    const next = {
+      name: isEdit && initial ? initial.name || '' : '',
+      startDate:
+        isEdit && initial
+          ? toInputDate(initial.startDate || initial.holidayDate)
+          : '',
+      endDate:
+        isEdit && initial
+          ? toInputDate(initial.endDate || initial.startDate || initial.holidayDate)
+          : '',
+      isAllEmployees: isEdit && initial ? initial.isAllEmployees !== false : true,
+      employeeIds: hydratedIds.map(String).sort(),
+      status: isEdit && initial ? initial.status || 'active' : 'active',
     }
+    setName(next.name)
+    setStartDate(next.startDate)
+    setEndDate(next.endDate)
+    setIsAllEmployees(next.isAllEmployees)
+    setEmployeeIds(hydratedIds)
+    setStatus(next.status)
     setStaffSearch('')
     setStaffDesignation('')
-  }, [open, isEdit, initial])
+    captureBaseline(next)
+  }, [open, isEdit, initial, captureBaseline])
+
+  const formSnapshot = {
+    name,
+    startDate,
+    endDate,
+    isAllEmployees,
+    employeeIds: [...employeeIds].map(String).sort(),
+    status,
+  }
 
   const dateError =
     startDate && endDate && new Date(startDate) > new Date(endDate)
@@ -159,11 +179,7 @@ export function HolidayScheduleFormDialog({
     startDate && endDate && !dateError ? calculateCalendarDays(startDate, endDate) : 0
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      dirty={Boolean(name || startDate || endDate || employeeIds.length)}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange} dirty={isDirty(formSnapshot)}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-slate-900">
@@ -386,9 +402,7 @@ export function HolidayScheduleFormDialog({
           </div>
 
           <DialogFooter className="pt-2">
-            <DialogCancelButton onClick={() => onOpenChange?.(false)} disabled={mutating}>
-              Cancel
-            </DialogCancelButton>
+            <DialogCancelButton disabled={mutating}>Cancel</DialogCancelButton>
             <Button type="submit" disabled={mutating} variant="brand">
               {mutating ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Holiday'}
             </Button>

@@ -10,6 +10,7 @@ import { toastError, toastSuccess } from '@/lib/toast'
 import { validateHolidayFormFields } from '@/lib/validation/branchForms'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
+import { useFormBaseline } from '@/hooks/useFormBaseline'
 import { apiClient } from '@/api/api'
 
 const FIELD_IDS = {
@@ -37,6 +38,7 @@ export function HolidayFormDialog({
   const [filterDesignation, setFilterDesignation] = useState('')
   const [mutating, setMutating] = useState(false)
   const { fieldErrors, formError, resetErrors, clearField, applyErrors } = useFieldErrors()
+  const { captureBaseline, isDirty } = useFormBaseline(open)
 
   const resetForm = () => {
     setStep(1)
@@ -53,9 +55,21 @@ export function HolidayFormDialog({
       return
     }
     resetErrors()
-  }, [open, resetErrors])
+    resetForm()
+    captureBaseline({
+      name: '',
+      startDate: '',
+      endDate: '',
+      selectedEmployees: [],
+    })
+  }, [open, resetErrors, captureBaseline])
 
-  const dirty = Boolean(name || startDate || endDate || selectedEmployees.length)
+  const dirty = isDirty({
+    name,
+    startDate,
+    endDate,
+    selectedEmployees: [...selectedEmployees].map(String).sort(),
+  })
 
   const handleNextStep = () => {
     const errors = validateHolidayFormFields({ name, startDate, endDate })

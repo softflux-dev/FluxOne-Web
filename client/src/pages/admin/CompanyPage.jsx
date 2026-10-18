@@ -411,23 +411,6 @@ export function CompanyPage() {
           eyebrow="Corporate Identity & Governance"
           title="Company Details & Policies"
           description="Manage corporate entity profiles, social presence, tax registrations, and store policy handbooks"
-          actions={
-            <Button
-              type="button"
-              onClick={() => {
-                setActiveTab('policies')
-                handleOpenAddPolicy()
-              }}
-              disabled={policiesLoading}
-              className="text-white font-semibold cursor-pointer shadow-xs"
-              style={{
-                background: `linear-gradient(90deg, ${BRAND.purple}, ${BRAND.deep})`,
-              }}
-            >
-              <Plus className="mr-1.5 size-4" />
-              Add New Policy
-            </Button>
-          }
         />
       </MotionHeader>
 
@@ -678,8 +661,9 @@ export function CompanyPage() {
           {slowPolicies ? <SlowLoadingBanner show className="mb-3" /> : null}
 
           <div className="space-y-5">
-            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-2xs">
-              <div className="relative w-full">
+            {/* Policy actions live only on Policies & Governance sub-tab */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-2xs sm:flex-row sm:items-center">
+              <div className="relative w-full flex-1">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
@@ -689,6 +673,18 @@ export function CompanyPage() {
                   className="w-full rounded-xl border border-border bg-muted/70 py-2 pl-9 pr-4 text-xs sm:text-sm text-foreground outline-none focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary"
                 />
               </div>
+              <Button
+                type="button"
+                onClick={handleOpenAddPolicy}
+                disabled={policiesLoading}
+                className="w-full shrink-0 text-white font-semibold cursor-pointer shadow-xs sm:w-auto"
+                style={{
+                  background: `linear-gradient(90deg, ${BRAND.purple}, ${BRAND.deep})`,
+                }}
+              >
+                <Plus className="mr-1.5 size-4" />
+                Add New Policy
+              </Button>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-card border border-border shadow-2xs">

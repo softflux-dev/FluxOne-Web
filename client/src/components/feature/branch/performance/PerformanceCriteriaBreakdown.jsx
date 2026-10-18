@@ -3,6 +3,12 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { trendDisplay } from '@/lib/performanceRatings'
 
+function formatPct(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '0%'
+  return `${Math.round(n * 10) / 10}%`
+}
+
 export function PerformanceCriteriaBreakdown({ items = [], previousItems = [] }) {
   const [compare, setCompare] = useState(true)
 
@@ -38,25 +44,36 @@ export function PerformanceCriteriaBreakdown({ items = [], previousItems = [] })
         {items.map((row) => {
           const pct = Number(row.percentOfMax || 0)
           const prevPct = Number(row.previousPercentOfMax || 0)
-          const deltaTrend = row.isNew
-            ? null
-            : trendDisplay(
-                row.deltaPercentOfMax > 0
-                  ? 'up'
-                  : row.deltaPercentOfMax < 0
-                    ? 'down'
-                    : 'flat',
-                row.deltaPercentOfMax,
-              )
+          // deltaPercentOfMax is already % of criterion max — display as pp
+          const deltaTrend =
+            !compare || row.isNew
+              ? null
+              : trendDisplay(
+                  row.deltaPercentOfMax > 0
+                    ? 'up'
+                    : row.deltaPercentOfMax < 0
+                      ? 'down'
+                      : 'flat',
+                  row.deltaPercentOfMax,
+                  'pp',
+                )
+
+          const rawDelta =
+            !row.isNew &&
+            row.previousPoints != null &&
+            Number.isFinite(Number(row.points)) &&
+            Number.isFinite(Number(row.previousPoints))
+              ? Number(row.points) - Number(row.previousPoints)
+              : null
 
           return (
-            <div key={row.criterionId} className="space-y-1.5">
+            <div
+              key={row.criterionId}
+              className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50/40 p-3"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className="font-semibold text-slate-800">{row.criterionName}</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-600">
-                    {row.points} / {row.maxScore}
-                  </span>
                   {row.isNew ? (
                     <Badge className="bg-violet-50 text-violet-800 hover:bg-violet-50">New</Badge>
                   ) : deltaTrend ? (
@@ -64,6 +81,23 @@ export function PerformanceCriteriaBreakdown({ items = [], previousItems = [] })
                   ) : null}
                 </div>
               </div>
+
+              {compare && !row.isNew && row.previousPoints != null ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>
+                    Previous: {row.previousPoints}/{row.previousMaxScore ?? row.maxScore} (
+                    {formatPct(prevPct)})
+                  </span>
+                  <span>
+                    Current: {row.points}/{row.maxScore} ({formatPct(pct)})
+                  </span>
+                </div>
+              ) : (
+                <div className="text-[11px] font-mono text-slate-600">
+                  {row.points} / {row.maxScore} ({formatPct(pct)})
+                </div>
+              )}
+
               <div className="relative h-3 overflow-hidden rounded-full bg-slate-100">
                 {compare && !row.isNew && previousItems.length ? (
                   <div
@@ -76,6 +110,15 @@ export function PerformanceCriteriaBreakdown({ items = [], previousItems = [] })
                   style={{ width: `${Math.min(100, pct)}%` }}
                 />
               </div>
+
+              {compare && !row.isNew && rawDelta != null && deltaTrend && Number(row.deltaPercentOfMax) !== 0 ? (
+                <p className="text-[11px] text-slate-500">
+                  {rawDelta > 0 ? 'Increased' : 'Decreased'} by {Math.abs(rawDelta)} point
+                  {Math.abs(rawDelta) === 1 ? '' : 's'}, equivalent to{' '}
+                  {Math.abs(Number(row.deltaPercentOfMax))} percentage points of the criterion
+                  maximum.
+                </p>
+              ) : null}
             </div>
           )
         })}

@@ -10,6 +10,7 @@ import { toastError, toastSuccess } from '@/lib/toast'
 import { validateLeaveFormFields } from '@/lib/validation/branchForms'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
+import { useFormBaseline } from '@/hooks/useFormBaseline'
 import { apiClient } from '@/api/api'
 
 const FIELD_IDS = {
@@ -36,6 +37,7 @@ export function LeaveFormDialog({
   const [filterDesignation, setFilterDesignation] = useState('')
   const [mutating, setMutating] = useState(false)
   const { fieldErrors, formError, resetErrors, clearField, applyErrors } = useFieldErrors()
+  const { captureBaseline, isDirty } = useFormBaseline(open)
 
   const resetForm = () => {
     setStep(1)
@@ -52,9 +54,22 @@ export function LeaveFormDialog({
       return
     }
     resetErrors()
-  }, [open, resetErrors])
+    resetForm()
+    // Empty create baseline — confirm only after user types/selects
+    captureBaseline({
+      startDate: '',
+      endDate: '',
+      reason: '',
+      selectedEmployees: [],
+    })
+  }, [open, resetErrors, captureBaseline])
 
-  const dirty = Boolean(startDate || endDate || reason || selectedEmployees.length)
+  const dirty = isDirty({
+    startDate,
+    endDate,
+    reason,
+    selectedEmployees: [...selectedEmployees].map(String).sort(),
+  })
 
   const handleNextStep = () => {
     const errors = validateLeaveFormFields({ reason, startDate, endDate })

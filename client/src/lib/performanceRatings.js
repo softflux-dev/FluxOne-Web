@@ -33,7 +33,9 @@ export function ratingBadgeClass(labelOrScore) {
   return 'bg-rose-50 text-rose-800 border-none font-bold rounded-lg px-2.5 py-1 text-sm'
 }
 
-export function trendDisplay(direction, delta) {
+// unit: '' | 'pts' | 'pp' — criteria compare uses pp (% of max), totals use pts
+export function trendDisplay(direction, delta, unit = '') {
+  const suffix = unit ? ` ${unit}` : ''
   if (direction === 'none' || delta == null) {
     return { text: '—', className: 'text-slate-400' }
   }
@@ -41,14 +43,14 @@ export function trendDisplay(direction, delta) {
     return { text: '— First', className: 'text-slate-400' }
   }
   if (direction === 'flat' || Number(delta) === 0) {
-    return { text: '— 0', className: 'text-slate-400' }
+    return { text: `— 0${suffix}`, className: 'text-slate-400' }
   }
   if (direction === 'up' || Number(delta) > 0) {
     const n = Math.abs(Number(delta))
-    return { text: `▲ +${n}`, className: 'font-semibold text-emerald-600' }
+    return { text: `▲ +${n}${suffix}`, className: 'font-semibold text-emerald-600' }
   }
   const n = Math.abs(Number(delta))
-  return { text: `▼ −${n}`, className: 'font-semibold text-rose-600' }
+  return { text: `▼ −${n}${suffix}`, className: 'font-semibold text-rose-600' }
 }
 
 export function formatRelativeScored(value) {

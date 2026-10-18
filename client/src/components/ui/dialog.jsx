@@ -75,15 +75,16 @@ function useForceDialogClose() {
   return forceClose
 }
 
-function DialogCancelButton({ children = 'Cancel', className, ...props }) {
+function DialogCancelButton({ children = 'Cancel', className, onClick: _ignoredOnClick, ...props }) {
   const { requestClose } = useDialogContext()
   return (
     <Button
       type="button"
       variant="outline"
       className={cn('h-11 w-full sm:h-10 sm:w-auto', className)}
-      onClick={requestClose}
       {...props}
+      // Guaranteed dirty-aware close (caller onClick cannot bypass)
+      onClick={requestClose}
     >
       {children}
     </Button>
@@ -139,7 +140,7 @@ function DiscardChangesPrompt({ onStay, onDiscard }) {
           id="discard-dialog-title"
           className="text-center text-sm font-semibold sm:text-base"
         >
-          Discard changes?
+          Discard unsaved changes?
         </h3>
         <p
           id="discard-dialog-description"
@@ -155,7 +156,7 @@ function DiscardChangesPrompt({ onStay, onDiscard }) {
             className="h-11 w-full sm:h-10 sm:w-auto"
             onClick={onStay}
           >
-            Stay
+            Keep Editing
           </Button>
           <Button
             type="button"
@@ -163,7 +164,7 @@ function DiscardChangesPrompt({ onStay, onDiscard }) {
             className="h-11 w-full sm:h-10 sm:w-auto"
             onClick={onDiscard}
           >
-            Discard
+            Discard Changes
           </Button>
         </div>
       </div>

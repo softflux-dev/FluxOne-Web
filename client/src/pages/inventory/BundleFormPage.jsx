@@ -42,7 +42,17 @@ import { ApplyDefaultTaxField } from '@/components/feature/products/ApplyDefault
 import { PATHS } from '@/router/paths'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
+import { useFieldErrors } from '@/hooks/useFieldErrors'
 import { cn } from '@/lib/utils'
+
+const BUNDLE_FIELD_IDS = {
+  name: 'bundle-name',
+  items: 'bundle-items',
+  sellingPrice: 'bundle-price',
+  quantity: 'bundle-stock',
+}
+
+const BUNDLE_FIELD_ORDER = ['name', 'items', 'sellingPrice', 'quantity']
 
 function catalogName(catalog, id) {
   if (!id) return '—'
@@ -111,7 +121,14 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
   const [bundlePrice, setBundlePrice] = useState('')
   // Create: finished qty to assemble. Edit: additional top-up qty.
   const [bundleStock, setBundleStock] = useState('')
-  const [error, setError] = useState('')
+  const {
+    fieldErrors,
+    formError,
+    setFormError,
+    resetErrors,
+    clearField,
+    applyErrors,
+  } = useFieldErrors()
   const [saved, setSaved] = useState(null)
   const priceTouched = useRef(false)
   const stockTouched = useRef(false)
@@ -352,33 +369,51 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
 
   function addItem() {
     if (!productId) {
-      setError('Select a product before adding it to the bundle.')
+      applyErrors(
+        { items: 'Select a product before adding it to the bundle.' },
+        BUNDLE_FIELD_IDS,
+        BUNDLE_FIELD_ORDER,
+      )
       return
     }
     if (isVariantParent) {
       if (!variantSkuId) {
-        setError('Select the exact variant combination before adding.')
+        applyErrors(
+          { items: 'Select the exact variant combination before adding.' },
+          BUNDLE_FIELD_IDS,
+          BUNDLE_FIELD_ORDER,
+        )
         return
       }
       if (selectedIds.has(variantSkuId)) {
-        setError('This item is already in the bundle. Increase its quantity instead.')
+        applyErrors(
+          { items: 'This item is already in the bundle. Increase its quantity instead.' },
+          BUNDLE_FIELD_IDS,
+          BUNDLE_FIELD_ORDER,
+        )
         return
       }
       const sku = variantSkus.find((v) => v.id === variantSkuId) || itemCache[variantSkuId]
       if (sku) setItemCache((prev) => ({ ...prev, [sku.id]: sku }))
-      setError('')
+      resetErrors()
+      clearField('items')
       setLines((prev) => [...prev, { itemId: variantSkuId, quantity: 1 }])
       resetPicker()
       return
     }
 
     if (selectedIds.has(productId)) {
-      setError('This item is already in the bundle. Increase its quantity instead.')
+      applyErrors(
+        { items: 'This item is already in the bundle. Increase its quantity instead.' },
+        BUNDLE_FIELD_IDS,
+        BUNDLE_FIELD_ORDER,
+      )
       return
     }
     const item = selectedParent
     if (item) setItemCache((prev) => ({ ...prev, [item.id]: item }))
-    setError('')
+    resetErrors()
+    clearField('items')
     setLines((prev) => [...prev, { itemId: productId, quantity: 1 }])
     resetPicker()
   }
@@ -393,42 +428,40 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
   function removeLine(itemId) {
     if (isEdit) return
     setLines((prev) => prev.filter((row) => row.itemId !== itemId))
+    clearField('items')
   }
 
   async function handleSubmit(event) {
     event.preventDefault()
-    setError('')
+    resetErrors()
 
-    if (!name.trim()) {
-      setError('Bundle name is required.')
-      return
-    }
+    // Collect field errors then scroll/focus the first invalid control
+    const errors = {}
+    if (!name.trim()) errors.name = 'Bundle name is required.'
     if (!isEdit && lineDetails.length < 2) {
-      setError('A bundle must contain at least 2 different items.')
-      return
+      errors.items = 'A bundle must contain at least 2 different items.'
     }
     if (isEdit && lines.length < 2) {
-      setError('This bundle is missing recipe items.')
-      return
+      errors.items = 'This bundle is missing recipe items.'
     }
     const price = Number(bundlePrice)
     if (!bundlePrice || Number.isNaN(price) || price <= 0) {
-      setError('Bundle price is required and cannot be zero.')
-      return
+      errors.sellingPrice = 'Bundle price is required and cannot be zero.'
     }
 
     if (!isEdit) {
       const stock = Number(bundleStock)
       if (!bundleStock || Number.isNaN(stock) || stock <= 0) {
-        setError('Bundle stock quantity is required.')
-        return
-      }
-      if (stockFieldError) {
-        setError(stockFieldError)
-        return
+        errors.quantity = 'Bundle stock quantity is required.'
+      } else if (stockFieldError) {
+        errors.quantity = stockFieldError
       }
     } else if (bundleStock && stockFieldError) {
-      setError(stockFieldError)
+      errors.quantity = stockFieldError
+    }
+
+    if (Object.keys(errors).length) {
+      applyErrors(errors, BUNDLE_FIELD_IDS, BUNDLE_FIELD_ORDER)
       return
     }
 
@@ -455,7 +488,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
       })
       if (!result.success) {
         const message = result.error || 'Could not update the bundle'
-        setError(message)
+        setFormError(message)
         toastError(message)
         return
       }
@@ -488,7 +521,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
 
     if (!result.success) {
       const message = result.error || 'Could not save the bundle'
-      setError(message)
+      setFormError(message)
       toastError(message)
       return
     }
@@ -588,9 +621,12 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
         />
       </MotionHeader>
 
-      {error ? (
-        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100">
-          {error}
+      {formError ? (
+        <p
+          id="bundle-form-error"
+          className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100"
+        >
+          {formError}
         </p>
       ) : null}
 
@@ -601,10 +637,16 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
             <Input
               id="bundle-name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value)
+                clearField('name')
+              }}
               placeholder="Name shown on the invoice and catalog"
+              aria-invalid={Boolean(fieldErrors.name)}
+              className={fieldErrorClass(fieldErrors.name)}
               required
             />
+            <FieldError message={fieldErrors.name} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -687,6 +729,10 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
             : 'Category → Sub → Product → Variant combination (if needed). At least 2 different items.'
         }
       >
+        {/* Focus target for items validation (scroll-to-error) */}
+        <div id="bundle-items" tabIndex={-1} className="outline-none">
+          <FieldError message={fieldErrors.items} />
+        </div>
         {!isEdit ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="space-y-1.5">
@@ -892,9 +938,13 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
               onChange={(event) => {
                 priceTouched.current = true
                 setBundlePrice(event.target.value)
+                clearField('sellingPrice')
               }}
+              aria-invalid={Boolean(fieldErrors.sellingPrice)}
+              className={fieldErrorClass(fieldErrors.sellingPrice)}
               required
             />
+            <FieldError message={fieldErrors.sellingPrice} />
           </div>
           <div className="space-y-1.5">
             <Label>Final bundle price</Label>
@@ -944,14 +994,14 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
             value={bundleStock}
             onChange={(event) => {
               stockTouched.current = true
-              setError('')
+              clearField('quantity')
               setBundleStock(event.target.value)
             }}
-            aria-invalid={Boolean(stockFieldError)}
-            className={fieldErrorClass(stockFieldError)}
+            aria-invalid={Boolean(stockFieldError || fieldErrors.quantity)}
+            className={fieldErrorClass(stockFieldError || fieldErrors.quantity)}
             required={!isEdit}
           />
-          <FieldError message={stockFieldError} />
+          <FieldError message={fieldErrors.quantity || stockFieldError} />
           <p className="text-[11px] text-slate-400">
             {isEdit
               ? 'Leave 0 to keep current stock. Top-up deducts from component items.'

@@ -1,8 +1,10 @@
 import { cn } from '@/lib/utils'
 
 // Base pulse block for loading placeholders.
-export function Skeleton({ className }) {
-  return <div className={cn('skeleton-block rounded-xl', className)} aria-hidden />
+export function Skeleton({ className, style }) {
+  return (
+    <div className={cn('skeleton-block rounded-xl', className)} style={style} aria-hidden />
+  )
 }
 
 // Card-style rows for tables/lists while data loads.
@@ -35,12 +37,19 @@ export function TableRowsSkeleton({ rows = 6, className }) {
 export function KpiCardsSkeleton({ count = 3, className }) {
   return (
     <div
-      className={cn('grid grid-cols-1 gap-4 sm:grid-cols-3', className)}
+      className={cn(
+        'grid grid-cols-1 gap-4',
+        count >= 4 ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3',
+        className,
+      )}
       role="status"
       aria-label="Loading KPIs"
     >
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-2xl border border-border bg-white px-6 py-8 shadow-sm">
+        <div
+          key={i}
+          className="rounded-2xl border border-border bg-card px-6 py-8 shadow-sm"
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-3">
               <Skeleton className="h-3 w-24" />
@@ -57,17 +66,29 @@ export function KpiCardsSkeleton({ count = 3, className }) {
 export function ChartSkeleton({ className }) {
   return (
     <div
-      className={cn('flex h-[280px] flex-col items-center justify-center gap-4', className)}
+      className={cn(
+        'flex h-[280px] flex-col justify-end gap-3 rounded-xl border border-border/50 bg-muted/20 p-4',
+        className,
+      )}
       role="status"
       aria-label="Loading chart"
     >
-      <Skeleton className="size-40 rounded-full" />
-      <div className="w-full max-w-xs space-y-2 px-4">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="mx-auto h-3 w-48 max-w-full" />
-        <Skeleton className="mx-auto h-3 w-32 max-w-full" />
+      {/* Shimmer bars that approximate a line/bar chart area */}
+      <div className="flex flex-1 items-end gap-2 px-2">
+        {[40, 55, 35, 70, 48, 82, 60, 45].map((h, i) => (
+          <Skeleton
+            key={i}
+            className="w-full rounded-t-md"
+            style={{ height: `${h}%` }}
+          />
+        ))}
       </div>
-      <p className="text-xs text-slate-400">Loading chart…</p>
+      <div className="flex justify-between gap-2 px-1">
+        <Skeleton className="h-2.5 w-10" />
+        <Skeleton className="h-2.5 w-10" />
+        <Skeleton className="h-2.5 w-10" />
+        <Skeleton className="h-2.5 w-10" />
+      </div>
     </div>
   )
 }
