@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Ban, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
@@ -41,6 +42,7 @@ export function StaffPage() {
   } = useBranchStaff()
 
   const { localQ, onSearchChange } = useDebouncedSearch(updateFilters)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [formOpen, setFormOpen] = useState(false)
   const [formMode, setFormMode] = useState('create')
@@ -49,7 +51,12 @@ export function StaffPage() {
   const [statusTarget, setStatusTarget] = useState(null)
   const [statusUpdatingId, setStatusUpdatingId] = useState(null)
   const [designations, setDesignations] = useState([])
-  const [activeTab, setActiveTab] = useState('list')
+
+  // URL ?tab=performance restores Performance after View Details back
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(
+    tabFromUrl === 'performance' ? 'performance' : 'list',
+  )
 
   // Tab-specific create modals (header CTA opens these)
   const [holidayCreateOpen, setHolidayCreateOpen] = useState(false)
@@ -57,6 +64,25 @@ export function StaffPage() {
   const [scaleCreateOpen, setScaleCreateOpen] = useState(false)
   const [performanceSubTab, setPerformanceSubTab] = useState('roster')
   const [leaveSubTab, setLeaveSubTab] = useState('mine') // 'mine' | 'staff'
+  // Scoring Scale: disable Add Criterion when draft total >= 100
+  const [scaleFull, setScaleFull] = useState(false)
+
+  const handleScaleStateChange = useCallback((state) => {
+    setScaleFull(Boolean(state?.scaleFull))
+  }, [])
+
+  const selectTab = (tabId) => {
+    setActiveTab(tabId)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (tabId === 'performance') next.set('tab', 'performance')
+        else next.delete('tab')
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   async function loadDesignations() {
     const res = await apiClient.get(endpoints.branch.designations.list, {
@@ -71,6 +97,13 @@ export function StaffPage() {
   useEffect(() => {
     void loadDesignations()
   }, [])
+
+  // Sync tab when landing with ?tab=performance (e.g. Back to roster)
+  useEffect(() => {
+    if (tabFromUrl === 'performance' && activeTab !== 'performance') {
+      setActiveTab('performance')
+    }
+  }, [tabFromUrl, activeTab])
 
   // Close create dialogs when leaving their tab
   useEffect(() => {
@@ -220,6 +253,12 @@ export function StaffPage() {
         <Button
           type="button"
           variant="brand"
+          disabled={scaleFull}
+          title={
+            scaleFull
+              ? 'Total is 100. Edit or remove a criterion before adding another.'
+              : 'Add Criterion'
+          }
           onClick={() => setScaleCreateOpen(true)}
           className="w-full sm:w-auto"
         >
@@ -263,7 +302,7 @@ export function StaffPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={cn(
                 'cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-200 active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-sm',
                 active
@@ -350,6 +389,7 @@ export function StaffPage() {
             createOpen={scaleCreateOpen}
             onCreateOpenChange={setScaleCreateOpen}
             onSubTabChange={setPerformanceSubTab}
+            onScaleStateChange={handleScaleStateChange}
           />
         </MotionReveal>
       )}

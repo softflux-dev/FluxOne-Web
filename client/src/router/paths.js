@@ -22,12 +22,12 @@ export const PATHS = {
   branch: {
     root: '/branch',
     dashboard: '/branch',
+    // Source of truth for performance roster + scoring scale
     staff: '/branch/staff',
+    staffEmployee: (staffId) => `/branch/staff/employees/${staffId}`,
     attendance: '/branch/attendance',
     holidays: '/branch/holidays',
     leaves: '/branch/leaves',
-    performance: '/branch/performance',
-    performanceEmployee: (staffId) => `/branch/performance/employees/${staffId}`,
     sales: '/branch/sales',
     customer: '/branch/customer',
     inventory: '/branch/inventory',

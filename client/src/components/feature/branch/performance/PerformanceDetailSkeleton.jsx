@@ -1,10 +1,8 @@
-import { Link } from 'react-router-dom'
 import { Skeleton, KpiCardsSkeleton, ChartSkeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 
-// Layout-matched skeleton for Employee Performance Details (tc-bm-performance-02a)
+// Layout-matched skeleton for Employee Performance Details
 export function PerformanceDetailSkeleton({
-  backHref,
   slow = false,
   onRetry,
 }) {
@@ -16,18 +14,6 @@ export function PerformanceDetailSkeleton({
       aria-label="Loading employee performance"
     >
       <div className="space-y-3">
-        <nav className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          <Link to={backHref} className="hover:text-purple-700 hover:underline">
-            Performance
-          </Link>
-          <span>›</span>
-          <Link to={backHref} className="hover:text-purple-700 hover:underline">
-            Performance Roster
-          </Link>
-          <span>›</span>
-          <Skeleton className="h-3 w-28" />
-        </nav>
-
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Skeleton className="size-14 shrink-0 rounded-xl" />
@@ -53,10 +39,7 @@ export function PerformanceDetailSkeleton({
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-3 w-44" />
           </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-8 w-24 rounded-lg" />
-            <Skeleton className="h-8 w-36 rounded-lg" />
-          </div>
+          <Skeleton className="h-8 w-36 rounded-lg" />
         </div>
         <ChartSkeleton className="h-72" />
       </div>

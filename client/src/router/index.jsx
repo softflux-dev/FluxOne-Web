@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider, useParams } from 'react-router-dom'
 import {
   PATHS,
   INVENTORY_ROLES,
@@ -29,9 +29,14 @@ import { StaffPage } from '@/pages/branch/StaffPage'
 import { AttendancePage } from '@/pages/branch/AttendancePage'
 import { HolidaysPage } from '@/pages/branch/HolidaysPage'
 import { LeavesPage } from '@/pages/branch/LeavesPage'
-import { PerformancePage } from '@/pages/branch/PerformancePage'
 import { PerformanceEmployeePage } from '@/pages/branch/PerformanceEmployeePage'
 import { SalesPage } from '@/pages/branch/SalesPage'
+
+// Legacy /branch/performance/employees/:id → staff detail URL
+function RedirectLegacyPerformanceEmployee() {
+  const { staffId } = useParams()
+  return <Navigate to={PATHS.branch.staffEmployee(staffId)} replace />
+}
 // Phase 2 placeholders live under pages/phase2/ — restore imports when modules ship
 // import { CustomerPage } from '@/pages/phase2/CustomerPage'
 // import { ReportsPage } from '@/pages/phase2/BranchReportsPage'
@@ -130,14 +135,23 @@ const router = createBrowserRouter([
             children: [
               { index: true, element: <BranchDashboardPage /> },
               { path: 'staff', element: <StaffPage /> },
+              // Performance detail — Staff Management is source of truth
+              {
+                path: 'staff/employees/:staffId',
+                element: <PerformanceEmployeePage />,
+              },
+              // Old /branch/performance URLs → Staff Performance tab
+              {
+                path: 'performance',
+                element: <Navigate to={`${PATHS.branch.staff}?tab=performance`} replace />,
+              },
+              {
+                path: 'performance/employees/:staffId',
+                element: <RedirectLegacyPerformanceEmployee />,
+              },
               { path: 'attendance', element: <AttendancePage /> },
               { path: 'holidays', element: <HolidaysPage /> },
               { path: 'leaves', element: <LeavesPage /> },
-              { path: 'performance', element: <PerformancePage /> },
-              {
-                path: 'performance/employees/:staffId',
-                element: <PerformanceEmployeePage />,
-              },
               { path: 'sales', element: <SalesPage /> },
               // TODO(phase2): customer + branch reports — see pages/phase2/
               // { path: 'customer', element: <CustomerPage /> },

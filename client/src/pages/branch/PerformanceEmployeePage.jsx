@@ -24,20 +24,20 @@ export function PerformanceEmployeePage() {
   const [error, setError] = useState(null)
   const [slow, setSlow] = useState(false)
   const [range, setRange] = useState('12M')
-  const [chartType, setChartType] = useState('line')
   const [timelinePage, setTimelinePage] = useState(1)
   const [expandedId, setExpandedId] = useState(null)
   const [highlightId, setHighlightId] = useState(null)
   const [scoreOpen, setScoreOpen] = useState(false)
 
+  // Back to Staff → Performance roster (keep search/filter)
   const backHref = useMemo(() => {
     const params = new URLSearchParams()
+    params.set('tab', 'performance')
     const q = searchParams.get('q')
     const designation = searchParams.get('designation')
     if (q) params.set('q', q)
     if (designation) params.set('designation', designation)
-    const qs = params.toString()
-    return qs ? `${PATHS.branch.performance}?${qs}` : PATHS.branch.performance
+    return `${PATHS.branch.staff}?${params.toString()}`
   }, [searchParams])
 
   const loadDetail = useCallback(async () => {
@@ -97,7 +97,6 @@ export function PerformanceEmployeePage() {
   if (loading && !detail) {
     return (
       <PerformanceDetailSkeleton
-        backHref={backHref}
         slow={slow}
         onRetry={() => void loadDetail()}
       />
@@ -165,8 +164,6 @@ export function PerformanceEmployeePage() {
                 setRange(next)
                 setTimelinePage(1)
               }}
-              chartType={chartType}
-              onChartTypeChange={setChartType}
               onPointClick={handlePointClick}
             />
           </MotionReveal>

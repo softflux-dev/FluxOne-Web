@@ -5,6 +5,7 @@ import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
+import { UserAvatar } from '@/components/shared/UserAvatar'
 import { ScaleFormDialog } from '@/components/feature/branch/staff/ScaleFormDialog'
 import { ScoreEmployeeDialog } from '@/components/feature/branch/performance/ScoreEmployeeDialog'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,7 @@ import { apiClient } from '@/api/api'
 import { useAuth } from '@/context/AuthContext'
 import { useClientPagination } from '@/hooks/useClientPagination'
 import {
-  formatScorePercent,
+  isScaleDraftDirty,
   isScaleSumValid,
   SCALE_SUM_TARGET,
   sumScalePoints,
@@ -51,7 +52,7 @@ function detailHref(staffId, searchQuery, filterDesignation) {
   if (searchQuery) params.set('q', searchQuery)
   if (filterDesignation) params.set('designation', filterDesignation)
   const qs = params.toString()
-  const base = PATHS.branch.performanceEmployee(staffId)
+  const base = PATHS.branch.staffEmployee(staffId)
   return qs ? `${base}?${qs}` : base
 }
 
@@ -60,6 +61,7 @@ export function StaffPerformanceTab({
   createOpen = false,
   onCreateOpenChange,
   onSubTabChange,
+  onScaleStateChange,
 }) {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
@@ -152,7 +154,21 @@ export function StaffPerformanceTab({
   const rosterPaging = useClientPagination(filteredRoster)
   const scalesPaging = useClientPagination(criteriaDraft)
   const pointsUsed = sumScalePoints(criteriaDraft)
-  const canSaveScale = isScaleSumValid(criteriaDraft)
+  const sumValid = isScaleSumValid(criteriaDraft)
+  // Save only when total is 100 and draft differs from last published scale
+  const isDirty = isScaleDraftDirty(criteriaDraft, activeCriteria)
+  const canSaveScale = sumValid && isDirty
+  const scaleFull = pointsUsed >= SCALE_SUM_TARGET
+
+  // Parent header: Add Criterion disabled when total already 100
+  useEffect(() => {
+    onScaleStateChange?.({
+      pointsUsed,
+      scaleFull,
+      isDirty,
+      canSaveScale,
+    })
+  }, [pointsUsed, scaleFull, isDirty, canSaveScale, onScaleStateChange])
 
   const openScoringModal = (employee) => setScoringEmployee(employee)
 
@@ -200,12 +216,15 @@ export function StaffPerformanceTab({
   }
 
   const handleSaveScaleVersion = async () => {
-    if (!canSaveScale) {
+    if (!sumValid) {
       document.getElementById('scoring-scale-total')?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       })
       return toastError(`Criteria maximums must total exactly ${SCALE_SUM_TARGET}`)
+    }
+    if (!isDirty) {
+      return toastInfo('No changes to save — scoring scale already matches the published version.')
     }
     setSavingScale(true)
     const res = await apiClient.put('/branch/performance/scales', {
@@ -253,6 +272,22 @@ export function StaffPerformanceTab({
       </span>
     )
   }
+
+  const renderNameCell = (emp) => (
+    <div className="flex min-w-0 items-center gap-3">
+      <UserAvatar
+        name={emp.fullName}
+        imageUrl={emp.imageUrl}
+        className="size-9 shrink-0"
+      />
+      <Link
+        to={detailHref(emp.staffId, searchQuery, filterDesignation)}
+        className="truncate font-semibold text-purple-700 hover:underline"
+      >
+        {emp.fullName}
+      </Link>
+    </div>
+  )
 
   return (
     <div className="space-y-4">
@@ -314,23 +349,30 @@ export function StaffPerformanceTab({
               mobile={rosterPaging.slice.map((emp) => (
                 <DataCard key={emp.staffId}>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <Link
-                        to={detailHref(emp.staffId, searchQuery, filterDesignation)}
-                        className="truncate text-sm font-semibold text-purple-700 hover:underline"
-                      >
-                        {emp.fullName}
-                      </Link>
-                      <p
-                        title={emp.staffId || undefined}
-                        className="mt-0.5 font-mono text-[11px] font-bold text-purple-800"
-                      >
-                        {displayStaffRef(emp)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">{emp.designation || '—'}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Trend: {renderTrend(emp)} · {renderLastScored(emp)}
-                      </p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <UserAvatar
+                        name={emp.fullName}
+                        imageUrl={emp.imageUrl}
+                        className="size-10 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <Link
+                          to={detailHref(emp.staffId, searchQuery, filterDesignation)}
+                          className="truncate text-sm font-semibold text-purple-700 hover:underline"
+                        >
+                          {emp.fullName}
+                        </Link>
+                        <p
+                          title={emp.staffId || undefined}
+                          className="mt-0.5 font-mono text-[11px] font-bold text-purple-800"
+                        >
+                          {displayStaffRef(emp)}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">{emp.designation || '—'}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Trend: {renderTrend(emp)} · {renderLastScored(emp)}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className="text-sm font-bold text-slate-800">
@@ -371,7 +413,7 @@ export function StaffPerformanceTab({
                 <Table>
                   <TableHeader>
                     <TableRow className="text-xs text-slate-500 uppercase">
-                      <TableHead>Employee</TableHead>
+                      <TableHead>Name</TableHead>
                       <TableHead>Staff ID</TableHead>
                       <TableHead>Designation</TableHead>
                       <TableHead>Score</TableHead>
@@ -394,14 +436,7 @@ export function StaffPerformanceTab({
                   <TableBody>
                     {rosterPaging.slice.map((emp) => (
                       <TableRow key={emp.staffId}>
-                        <TableCell>
-                          <Link
-                            to={detailHref(emp.staffId, searchQuery, filterDesignation)}
-                            className="font-semibold text-purple-700 hover:underline"
-                          >
-                            {emp.fullName}
-                          </Link>
-                        </TableCell>
+                        <TableCell>{renderNameCell(emp)}</TableCell>
                         <TableCell>
                           <span
                             title={emp.staffId || undefined}
@@ -475,6 +510,13 @@ export function StaffPerformanceTab({
               size="sm"
               variant="brand"
               disabled={!canSaveScale || savingScale}
+              title={
+                !sumValid
+                  ? `Total must equal ${SCALE_SUM_TARGET}`
+                  : !isDirty
+                    ? 'No unpublished changes'
+                    : 'Save Scale'
+              }
               onClick={handleSaveScaleVersion}
             >
               {savingScale ? 'Saving…' : 'Save Scale'}
@@ -484,12 +526,21 @@ export function StaffPerformanceTab({
           <div
             id="scoring-scale-total"
             className={`mb-4 rounded-lg border px-3 py-2 text-xs ${
-              canSaveScale
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              sumValid
+                ? isDirty
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-slate-50 text-slate-600'
                 : 'border-amber-200 bg-amber-50 text-amber-800'
             }`}
           >
-            {canSaveScale ? (
+            {!sumValid ? (
+              <>
+                Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Edit remaining
+                criteria so the total equals exactly {SCALE_SUM_TARGET}, then click{' '}
+                <strong>Save Scale</strong>. Until you save, removed criteria can reappear after
+                refresh.
+              </>
+            ) : isDirty ? (
               <>
                 Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Click{' '}
                 <strong>Save Scale</strong> to publish a new version. Past evaluations keep their
@@ -498,10 +549,9 @@ export function StaffPerformanceTab({
               </>
             ) : (
               <>
-                Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Edit remaining
-                criteria so the total equals exactly {SCALE_SUM_TARGET}, then click{' '}
-                <strong>Save Scale</strong>. Until you save, removed criteria can reappear after
-                refresh.
+                Running total: <strong>{pointsUsed}</strong> / {SCALE_SUM_TARGET}. Scale is up to
+                date — edit or remove a criterion to enable <strong>Save Scale</strong>. Add
+                Criterion stays visible but disabled while the total is full.
               </>
             )}
           </div>

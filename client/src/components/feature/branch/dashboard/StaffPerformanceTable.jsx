@@ -98,7 +98,7 @@ export function StaffPerformanceTable({ staff = [], className }) {
               <Table className="min-w-[32rem] text-left text-sm">
                 <TableHeader>
                   <TableRow className="text-xs tracking-wide text-slate-500 uppercase">
-                    <TableHead className="px-2 py-2.5 font-medium">Employee</TableHead>
+                    <TableHead className="px-2 py-2.5 font-medium">Name</TableHead>
                     <TableHead className="px-2 py-2.5 font-medium">Staff ID</TableHead>
                     <TableHead className="px-2 py-2.5 font-medium">Status</TableHead>
                     <TableHead className="px-2 py-2.5 font-medium">Score</TableHead>

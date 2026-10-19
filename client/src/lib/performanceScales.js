@@ -49,6 +49,21 @@ export function isScaleSumValid(criteria = []) {
   return sumScalePoints(criteria) === SCALE_SUM_TARGET
 }
 
+// Stable compare for draft vs published criteria (order-independent)
+export function criteriaSignature(criteria = []) {
+  return [...criteria]
+    .map((c) => {
+      const key = c.id || c._localKey || ''
+      return `${key}:${String(c.name || '').trim()}:${Number(c.maxPoints) || 0}`
+    })
+    .sort()
+    .join('|')
+}
+
+export function isScaleDraftDirty(draft = [], published = []) {
+  return criteriaSignature(draft) !== criteriaSignature(published)
+}
+
 // Back-compat aliases used by older imports
 export function isScaleActive() {
   return true
