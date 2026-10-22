@@ -80,7 +80,7 @@ export function SplashPage() {
         {/* Text Line - Maintains proportional spacing on all devices */}
         <div className="animate-splash-text splash-text-container text-center">
           <p className="splash-text">
-            POINT OF SALE CASHIER SYSTEM
+            FluxOne Web-Panel
           </p>
         </div>
       </div>

@@ -214,8 +214,12 @@ export const endpoints = {
     detail: (id) => `/inventory/purchase-orders/${id}`,
     history: (id) => `/inventory/purchase-orders/${id}/history`,
     print: (id) => `/inventory/purchase-orders/${id}/print`,
+    update: (id) => `/inventory/purchase-orders/${id}`,
     approve: (id) => `/inventory/purchase-orders/${id}/approve`,
+    reject: (id) => `/inventory/purchase-orders/${id}/reject`,
     sendSms: (id) => `/inventory/purchase-orders/${id}/send-sms`,
     cancel: (id) => `/inventory/purchase-orders/${id}/cancel`,
+    receivals: (id) => `/inventory/purchase-orders/${id}/receivals`,
+    complete: (id) => `/inventory/purchase-orders/${id}/complete`,
   },
 }

@@ -1,6 +1,5 @@
 import {
   Bell,
-  ClipboardList,
   Download,
   Plus,
   Upload,
@@ -9,26 +8,13 @@ import { Button } from '@/components/ui/button'
 import { BRAND } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
-// Primary header CTAs — By Order Demand + Add Stock In (Figma header row)
+// Primary header CTA — Add Stock In (Order Demand → Orders → Record Receival)
 export function ControlPrimaryAction({
   onAddStockIn,
-  onOrderDemand,
   className,
 }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      {onOrderDemand ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="cursor-pointer"
-          style={{ color: BRAND.deep }}
-          onClick={() => onOrderDemand?.()}
-        >
-          <ClipboardList className="size-4" />
-          By Order Demand
-        </Button>
-      ) : null}
       <Button
         type="button"
         variant="brand"

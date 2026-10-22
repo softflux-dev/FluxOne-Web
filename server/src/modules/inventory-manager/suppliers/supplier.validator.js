@@ -10,26 +10,30 @@ export const listSuppliersSchema = z.object({
   }),
 })
 
+// TL §2.1 required fields (supplier = company)
+const supplierBody = z.object({
+  companyName: z.string().min(1, 'Company name is required'),
+  companyPhone: z.string().min(1, 'Company contact number is required'),
+  representativeName: z.string().min(1, 'Representative name is required'),
+  representativePhone: z.string().min(1, 'Representative contact number is required'),
+  representativeEmail: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().email('Valid representative email is required'),
+  ),
+  location: z.string().min(1, 'Company location is required'),
+  taxPaid: optionalBool,
+  registrationNumber: z.string().min(1, 'Registration number is required'),
+  bankAccountNumber: z.string().optional(),
+})
+
 export const createSupplierSchema = z.object({
-  body: z.object({
-    companyName: z.string().min(1),
-    companyPhone: z.string().optional(),
-    representativeName: z.string().optional(),
-    representativePhone: z.string().optional(),
-    representativeEmail: z.preprocess((value) => (value === '' ? undefined : value), z.string().email().optional()),
-    location: z.string().optional(),
-    taxPaid: optionalBool,
-    registrationNumber: z.string().optional(),
-    bankAccountNumber: z.string().optional(),
-  }),
+  body: supplierBody,
   query: empty,
   params: empty,
 })
 
 export const updateSupplierSchema = z.object({
-  body: createSupplierSchema.shape.body.partial().extend({
-    isActive: optionalBool,
-  }),
+  body: supplierBody.partial(),
   query: empty,
   params: idParams,
 })

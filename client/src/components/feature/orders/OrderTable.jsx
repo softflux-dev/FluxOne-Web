@@ -1,4 +1,4 @@
-import { ClipboardList, Eye, History, Printer } from 'lucide-react'
+import { CheckCircle2, ClipboardList, Eye, History, PackageCheck, Printer } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { Button } from '@/components/ui/button'
@@ -14,24 +14,29 @@ import {
   TablePagination,
 } from '@/components/ui/table'
 import { TableRowsSkeleton } from '@/components/ui/skeleton'
+import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { displayOrderRef } from '@/lib/formatDisplayId'
+import { OrderStatusBadge } from '@/lib/orderStatus'
 import { cn } from '@/lib/utils'
 
-// Map API status → UI label (approved = Accepted per IM flow)
-function statusLabel(status) {
-  if (status === 'approved') return 'Accepted'
-  return status || '—'
+function canRecordReceival(status) {
+  return status === 'approved' || status === 'partially_received'
 }
 
-function statusClass(status) {
-  if (status === 'approved') return 'bg-emerald-50 text-emerald-700'
-  if (status === 'received') return 'bg-sky-50 text-sky-700'
-  if (status === 'cancelled') return 'bg-slate-100 text-slate-500'
-  return 'bg-amber-50 text-amber-800'
+function canMarkComplete(status) {
+  return status === 'partially_received'
 }
 
-// Icon-only row actions (Details / History / PDF)
-function OrderActions({ row, onView, onHistory, onPrint }) {
+// Icon-only row actions (Details / Receival / Complete / History / PDF)
+function OrderActions({
+  row,
+  mutating,
+  onView,
+  onHistory,
+  onPrint,
+  onRecordReceival,
+  onMarkComplete,
+}) {
   return (
     <div className="flex items-center justify-start gap-0.5">
       <Button
@@ -45,6 +50,34 @@ function OrderActions({ row, onView, onHistory, onPrint }) {
       >
         <Eye className="size-4 transition-transform duration-200" />
       </Button>
+      {canRecordReceival(row.status) && onRecordReceival ? (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          disabled={mutating}
+          className="size-8 cursor-pointer text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 hover:scale-110 active:scale-95"
+          title="Record Receival"
+          aria-label="Record Receival"
+          onClick={() => onRecordReceival?.(row)}
+        >
+          <PackageCheck className="size-4 transition-transform duration-200" />
+        </Button>
+      ) : null}
+      {canMarkComplete(row.status) && onMarkComplete ? (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          disabled={mutating}
+          className="size-8 cursor-pointer text-sky-700 hover:bg-sky-50 hover:text-sky-900 hover:scale-110 active:scale-95"
+          title="Mark Complete"
+          aria-label="Mark Complete"
+          onClick={() => onMarkComplete?.(row)}
+        >
+          <CheckCircle2 className="size-4 transition-transform duration-200" />
+        </Button>
+      ) : null}
       <Button
         type="button"
         size="icon"
@@ -75,12 +108,16 @@ function OrderActions({ row, onView, onHistory, onPrint }) {
 export function OrderTable({
   items = [],
   loading = false,
+  mutating = false,
+  highlightId = '',
   pagination,
   onPageChange,
   onPageSizeChange,
   onView,
   onHistory,
   onPrint,
+  onRecordReceival,
+  onMarkComplete,
   className,
 }) {
   const list = Array.isArray(items) ? items : []
@@ -93,8 +130,8 @@ export function OrderTable({
   return (
     <SurfaceCard
       className={className}
-      title="Purchase orders"
-      description="Orders placed with suppliers"
+      title="Orders"
+      description="Your order requests — Pending until BM approval, then Record Receival"
     >
       {loading ? (
         <TableRowsSkeleton rows={5} />
@@ -110,39 +147,34 @@ export function OrderTable({
             {list.map((row) => (
               <article
                 key={row.id}
-                className="rounded-xl border border-border bg-slate-50/60 px-3 py-3"
+                className={cn(
+                  'rounded-xl border border-border bg-slate-50/60 px-3 py-3',
+                  highlightId === row.id && 'ring-2 ring-purple-300',
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-mono text-xs font-semibold text-slate-700">
                       {displayOrderRef(row)}
                     </p>
-                    <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
-                      {row.companyName}
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      <DateTimeLines value={row.createdAt} />
                     </p>
-                    {row.representativeName ? (
-                      <p className="mt-0.5 truncate text-xs text-slate-400">
-                        {row.representativeName}
-                        {row.representativePhone ? ` · ${row.representativePhone}` : ''}
-                      </p>
-                    ) : null}
                   </div>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize',
-                      statusClass(row.status),
-                    )}
-                  >
-                    {statusLabel(row.status)}
-                  </span>
+                  <OrderStatusBadge status={row.status} />
                 </div>
-                <p className="mt-2 text-xs text-slate-500">{row.itemsNumber} items</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {row.companiesNumber ?? 0} companies · {row.itemsNumber ?? 0} items
+                </p>
                 <div className="mt-3">
                   <OrderActions
                     row={row}
+                    mutating={mutating}
                     onView={onView}
                     onHistory={onHistory}
                     onPrint={onPrint}
+                    onRecordReceival={onRecordReceival}
+                    onMarkComplete={onMarkComplete}
                   />
                 </div>
               </article>
@@ -154,7 +186,8 @@ export function OrderTable({
               <TableHeader>
                 <TableRow className="text-xs uppercase tracking-wide text-slate-400">
                   <TableHead className="px-2 py-3 font-semibold">Order ID</TableHead>
-                  <TableHead className="px-2 py-3 font-semibold">Company</TableHead>
+                  <TableHead className="px-2 py-3 font-semibold">Timestamp</TableHead>
+                  <TableHead className="px-2 py-3 font-semibold">Companies</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Items</TableHead>
                   <TableHead className="px-2 py-3 font-semibold">Status</TableHead>
                   <TableActionsHead className="px-2 py-3 font-semibold" />
@@ -162,36 +195,37 @@ export function OrderTable({
               </TableHeader>
               <TableBody>
                 {list.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-slate-50/80">
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      'hover:bg-slate-50/80',
+                      highlightId === row.id && 'bg-purple-50/60',
+                    )}
+                  >
                     <TableCell className="px-2 py-3 font-mono text-xs text-slate-700">
                       {displayOrderRef(row)}
                     </TableCell>
                     <TableCell className="px-2 py-3">
-                      <span className="font-medium text-slate-800">{row.companyName}</span>
-                      {row.representativeName ? (
-                        <span className="mt-0.5 block text-xs text-slate-400">
-                          {row.representativeName}
-                          {row.representativePhone ? ` · ${row.representativePhone}` : ''}
-                        </span>
-                      ) : null}
+                      <DateTimeLines value={row.createdAt} />
                     </TableCell>
-                    <TableCell className="px-2 py-3 text-slate-600">{row.itemsNumber}</TableCell>
+                    <TableCell className="px-2 py-3 text-slate-600">
+                      {row.companiesNumber ?? 0}
+                    </TableCell>
+                    <TableCell className="px-2 py-3 text-slate-600">
+                      {row.itemsNumber ?? 0}
+                    </TableCell>
                     <TableCell className="px-2 py-3">
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-xs font-medium capitalize',
-                          statusClass(row.status),
-                        )}
-                      >
-                        {statusLabel(row.status)}
-                      </span>
+                      <OrderStatusBadge status={row.status} />
                     </TableCell>
                     <TableActionsCell className="px-2 py-3">
                       <OrderActions
                         row={row}
+                        mutating={mutating}
                         onView={onView}
                         onHistory={onHistory}
                         onPrint={onPrint}
+                        onRecordReceival={onRecordReceival}
+                        onMarkComplete={onMarkComplete}
                       />
                     </TableActionsCell>
                   </TableRow>

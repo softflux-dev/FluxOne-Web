@@ -1,10 +1,11 @@
-import { ClipboardList, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { MovementHistoryTable } from '@/components/feature/control/MovementHistoryTable'
 import { MovementRowMenu } from '@/components/feature/control/MovementRowMenu'
 import { Button } from '@/components/ui/button'
 import { controlColumnsForTab } from '@/lib/controlTableColumns'
 import { MOVEMENT_TYPES } from '@/lib/mapStockMovement'
 
+// Order Demand full-PO receive moved to Orders → Record Receival (TL §6.1)
 export function StockInTable({
   items,
   loading,
@@ -12,24 +13,15 @@ export function StockInTable({
   onPageChange,
   onPageSizeChange,
   onAddStock,
-  onOrderDemand,
   onUpdateStock,
   onViewDetails,
   className,
 }) {
   const headerActions = (
-    <>
-      {onOrderDemand ? (
-        <Button type="button" variant="outline" className="cursor-pointer" onClick={onOrderDemand}>
-          <ClipboardList className="size-4" />
-          By Order Demand
-        </Button>
-      ) : null}
-      <Button type="button" variant="brand" onClick={onAddStock}>
-        <Plus className="size-4" />
-        Add Stock
-      </Button>
-    </>
+    <Button type="button" variant="brand" onClick={onAddStock}>
+      <Plus className="size-4" />
+      Add Stock
+    </Button>
   )
 
   return (
@@ -52,7 +44,7 @@ export function StockInTable({
         />
       )}
       emptyTitle="No stock-in records"
-      emptyHint="Add stock manually or receive an approved purchase order."
+      emptyHint="Add stock manually, or use Orders → Record Receival for approved purchase orders."
       className={className}
     />
   )

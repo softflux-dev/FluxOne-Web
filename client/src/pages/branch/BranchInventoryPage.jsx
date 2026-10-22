@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Send, Settings2 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
@@ -24,6 +25,8 @@ import { TruncatedText } from '@/components/shared/TruncatedText'
 import { CATEGORY_ACTIVE_QUERY } from '@/lib/productCatalogCache'
 import { filterActiveCategories } from '@/lib/mapProduct'
 import { getShelfStockStatus } from '@/lib/shelfStockStatus'
+import { BRAND } from '@/lib/constants'
+import { cn } from '@/lib/utils'
 import { StockControlPriceDialog } from '@/components/feature/branch/inventory/StockControlPriceDialog'
 import { StockRequestDialog } from '@/components/feature/branch/inventory/StockRequestDialog'
 import { BranchVariantStockDialog } from '@/components/feature/branch/inventory/BranchVariantStockDialog'
@@ -31,8 +34,17 @@ import {
   isVariantParent,
   ShelfStockCell,
 } from '@/components/feature/branch/inventory/ShelfStockCell'
+import { DemandRequestsPanel } from '@/components/feature/branch/demand-requests/DemandRequestsPanel'
+
+const INVENTORY_TABS = [
+  { id: 'stock', label: 'Stock Overview' },
+  { id: 'demand', label: 'Demand Requests' },
+]
 
 export function BranchInventoryPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabFromUrl = searchParams.get('tab') === 'demand' ? 'demand' : 'stock'
+  const [activeTab, setActiveTab] = useState(tabFromUrl)
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(false)
@@ -104,6 +116,22 @@ export function BranchInventoryPage() {
     void fetchCategories()
   }, [])
 
+  // Notification deep-link: ?tab=demand&highlight=…
+  useEffect(() => {
+    if (tabFromUrl !== activeTab) setActiveTab(tabFromUrl)
+  }, [tabFromUrl, activeTab])
+
+  function selectTab(id) {
+    setActiveTab(id)
+    const next = new URLSearchParams(searchParams)
+    if (id === 'demand') next.set('tab', 'demand')
+    else {
+      next.delete('tab')
+      next.delete('highlight')
+    }
+    setSearchParams(next, { replace: true })
+  }
+
   useEffect(() => {
     setPage(1)
   }, [
@@ -148,16 +176,48 @@ export function BranchInventoryPage() {
         <PageHeader
           eyebrow="Roster Inventory"
           title="Inventory Monitoring"
-          description="Monitor real-time shelf stock levels and manage price settings for new stock."
+          description={
+            activeTab === 'demand'
+              ? 'Review Inventory Manager order requests — edit, approve, or reject.'
+              : 'Monitor real-time shelf stock levels and manage price settings for new stock.'
+          }
           actions={
-            <Button type="button" variant="outline" onClick={() => setPriceRuleOpen(true)}>
-              <Settings2 className="size-4" />
-              Stock Control Price
-            </Button>
+            activeTab === 'stock' ? (
+              <Button type="button" variant="outline" onClick={() => setPriceRuleOpen(true)}>
+                <Settings2 className="size-4" />
+                Stock Control Price
+              </Button>
+            ) : null
           }
         />
       </MotionHeader>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {INVENTORY_TABS.map((tab) => {
+          const active = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => selectTab(tab.id)}
+              className={cn(
+                'cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-200 active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-sm',
+                active
+                  ? 'border-transparent text-white shadow-sm'
+                  : 'border-border bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+              )}
+              style={active ? { background: BRAND.purple } : undefined}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeTab === 'demand' ? <DemandRequestsPanel /> : null}
+
+      {activeTab === 'stock' ? (
+        <>
       <StockControlPriceDialog open={priceRuleOpen} onOpenChange={setPriceRuleOpen} />
 
       <MotionReveal delay={0.02}>
@@ -408,6 +468,8 @@ export function BranchInventoryPage() {
           if (!open) setRequestTarget(null)
         }}
       />
+        </>
+      ) : null}
     </div>
   )
 }

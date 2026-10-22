@@ -15,25 +15,75 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table'
-import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
+import { DateTimeLines } from '@/components/shared/DateTimeLines'
+import { OrderTimeline } from '@/components/feature/orders/OrderTimeline'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { money } from '@/lib/mapProduct'
-import { cn } from '@/lib/utils'
+import { OrderStatusBadge } from '@/lib/orderStatus'
 
-// Status chip for detail header (approved → Accepted)
-function statusLabel(status) {
-  if (status === 'approved') return 'Accepted'
-  return status || '—'
+function lineReceivedLabel(line) {
+  const ordered = Number(line.quantity) || 0
+  const received = Number(line.receivedQuantity) || 0
+  if (received <= 0) return 'Not received'
+  if (received >= ordered) return 'Received'
+  return 'Partial'
 }
 
-function statusClass(status) {
-  if (status === 'approved') return 'bg-emerald-50 text-emerald-700'
-  if (status === 'received') return 'bg-sky-50 text-sky-700'
-  if (status === 'cancelled') return 'bg-slate-100 text-slate-500'
-  return 'bg-amber-50 text-amber-800'
+function lineReceivedClass(line) {
+  const ordered = Number(line.quantity) || 0
+  const received = Number(line.receivedQuantity) || 0
+  if (received <= 0) return 'bg-slate-100 text-slate-600'
+  if (received >= ordered) return 'bg-emerald-50 text-emerald-700'
+  return 'bg-orange-50 text-orange-800'
 }
 
-// View order lines — read-only (no approve / cancel; generate auto-accepts)
+function CompanyLinesTable({ lines = [] }) {
+  if (!lines.length) {
+    return <p className="text-sm text-slate-500">No items in this company block.</p>
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-white">
+      <Table className="min-w-[560px] text-left text-sm">
+        <TableHeader>
+          <TableRow className="bg-slate-50 text-xs uppercase text-slate-400">
+            <TableHead className="px-3 py-2">Item</TableHead>
+            <TableHead className="px-3 py-2">Ordered</TableHead>
+            <TableHead className="px-3 py-2">Received</TableHead>
+            <TableHead className="px-3 py-2">Prev. price</TableHead>
+            <TableHead className="px-3 py-2">Line status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lines.map((line) => (
+            <TableRow key={line.id || line.productId}>
+              <TableCell className="px-3 py-2">
+                <span className="font-medium">{line.name}</span>
+                <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
+                  {displayItemCode(line)}
+                </span>
+              </TableCell>
+              <TableCell className="px-3 py-2">{line.quantity}</TableCell>
+              <TableCell className="px-3 py-2">{line.receivedQuantity ?? 0}</TableCell>
+              <TableCell className="px-3 py-2 text-slate-500">
+                {money(line.lastPurchasePrice)}
+              </TableCell>
+              <TableCell className="px-3 py-2">
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${lineReceivedClass(line)}`}
+                >
+                  {lineReceivedLabel(line)}
+                </span>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+// Shared IM/BM read-only order detail + TL §8 timeline
 export function OrderDetailPanel({
   open,
   onOpenChange,
@@ -43,97 +93,116 @@ export function OrderDetailPanel({
 }) {
   if (!order) return null
 
+  const companies = Array.isArray(order.companies) ? order.companies : []
   const lines = order.lines || []
+  const events = order.events || []
+  const companyBlocks =
+    companies.length > 0
+      ? companies
+      : order.supplierId
+        ? [
+            {
+              supplierId: order.supplierId,
+              companyName: order.companyName || 'Supplier',
+              imageUrl: null,
+              lines,
+            },
+          ]
+        : [{ companyName: 'Items', lines }]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-2">
             <span>Order {order.orderNumber}</span>
-            <span
-              className={cn(
-                'rounded-full px-2 py-0.5 text-xs font-medium capitalize',
-                statusClass(order.status),
-              )}
-            >
-              {statusLabel(order.status)}
-            </span>
+            <OrderStatusBadge status={order.status} />
           </DialogTitle>
           <DialogDescription>
-            {order.companyName}
-            {order.representativeName
-              ? ` · ${order.representativeName}`
-              : ''}
-            {order.representativePhone ? ` · ${order.representativePhone}` : ''}
+            Submitted by {order.createdByName || 'Inventory Manager'}
+            {order.createdAt ? (
+              <>
+                {' · '}
+                <DateTimeLines value={order.createdAt} className="inline-flex" />
+              </>
+            ) : null}
           </DialogDescription>
         </DialogHeader>
 
-        <ResponsiveDataShell
-          mobile={lines.map((line) => (
-            <DataCard key={line.id || line.productId}>
-              <p className="text-sm font-medium text-slate-900">{line.name}</p>
-              <p className="font-mono text-[11px] text-slate-400">{displayItemCode(line)}</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                <div>
-                  <span className="text-slate-400">Scale</span>
-                  <p className="capitalize font-medium text-slate-800">{line.scale}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400">Qty</span>
-                  <p className="font-medium text-slate-800">{line.quantity}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400">Price</span>
-                  <p className="font-medium text-slate-800">{money(line.unitCost)}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400">Last purchase</span>
-                  <p className="font-medium text-slate-800">{money(line.lastPurchasePrice)}</p>
-                </div>
+        <div className="grid gap-2 rounded-xl border border-border bg-slate-50/60 px-3 py-2 text-xs text-slate-600 sm:grid-cols-2">
+          <span>
+            Companies:{' '}
+            <strong className="text-slate-900">{order.companiesNumber ?? companyBlocks.length}</strong>
+          </span>
+          <span>
+            Items: <strong className="text-slate-900">{order.itemsNumber ?? lines.length}</strong>
+          </span>
+          {order.approvedByName ? (
+            <span>
+              Reviewed by: <strong className="text-slate-900">{order.approvedByName}</strong>
+              {order.approvedAt ? (
+                <>
+                  {' · '}
+                  <DateTimeLines value={order.approvedAt} className="inline-flex" />
+                </>
+              ) : null}
+            </span>
+          ) : null}
+          {order.rejectedByName ? (
+            <span>
+              Rejected by: <strong className="text-slate-900">{order.rejectedByName}</strong>
+              {order.rejectedAt ? (
+                <>
+                  {' · '}
+                  <DateTimeLines value={order.rejectedAt} className="inline-flex" />
+                </>
+              ) : null}
+            </span>
+          ) : null}
+          {order.receivedAt ? (
+            <span>
+              Received at:{' '}
+              <DateTimeLines value={order.receivedAt} className="inline-flex font-medium text-slate-900" />
+            </span>
+          ) : null}
+        </div>
+
+        {order.rejectionNotes ? (
+          <p className="rounded-lg border border-rose-100 bg-rose-50/80 px-3 py-2 text-sm text-rose-800">
+            <span className="font-medium">Rejection notes:</span> {order.rejectionNotes}
+          </p>
+        ) : null}
+
+        <div className="space-y-4">
+          {companyBlocks.map((company, idx) => (
+            <section
+              key={company.supplierId || company.id || idx}
+              className="rounded-xl border border-border bg-slate-50/40 p-3"
+            >
+              <div className="mb-2 flex items-center gap-2">
+                {company.imageUrl ? (
+                  <img
+                    src={company.imageUrl}
+                    alt=""
+                    className="size-8 rounded-lg object-cover"
+                  />
+                ) : null}
+                <h3 className="text-sm font-semibold text-slate-900">
+                  {company.companyName || 'Supplier company'}
+                </h3>
               </div>
-            </DataCard>
+              <CompanyLinesTable lines={company.lines || []} />
+            </section>
           ))}
-          desktop={
-            <div className="rounded-xl border border-border">
-              <Table className="min-w-[520px] text-left text-sm">
-                <TableHeader>
-                  <TableRow className="bg-slate-50 text-xs uppercase text-slate-400">
-                    <TableHead className="px-3 py-2">Name</TableHead>
-                    <TableHead className="px-3 py-2">Scale</TableHead>
-                    <TableHead className="px-3 py-2">Qty</TableHead>
-                    <TableHead className="px-3 py-2">Price</TableHead>
-                    <TableHead className="px-3 py-2">Last purchase</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((line) => (
-                    <TableRow key={line.id || line.productId}>
-                      <TableCell className="px-3 py-2">
-                        <span className="font-medium">{line.name}</span>
-                        <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
-                          {displayItemCode(line)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2 capitalize">{line.scale}</TableCell>
-                      <TableCell className="px-3 py-2">{line.quantity}</TableCell>
-                      <TableCell className="px-3 py-2">{money(line.unitCost)}</TableCell>
-                      <TableCell className="px-3 py-2 text-slate-500">
-                        {money(line.lastPurchasePrice)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          }
-        />
+        </div>
 
         {order.explanation ? (
           <p className="text-sm text-slate-600">
             <span className="font-medium text-slate-800">Explanation:</span> {order.explanation}
           </p>
         ) : null}
+
+        <OrderTimeline events={events} />
 
         <DialogFooter className="flex-wrap gap-2">
           <Button
@@ -144,17 +213,21 @@ export function OrderDetailPanel({
           >
             Close
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full cursor-pointer sm:w-auto"
-            disabled={loading}
-            onClick={() => onPrint?.(order)}
-          >
-            Download PDF
-          </Button>
+          {onPrint ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full cursor-pointer sm:w-auto"
+              disabled={loading}
+              onClick={() => onPrint?.(order)}
+            >
+              Download PDF
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
+
+export default OrderDetailPanel

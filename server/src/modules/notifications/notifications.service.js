@@ -3,6 +3,7 @@ import {
   listTenantAdminUserIds,
   listUserIdsByRole,
   listBranchUserIds,
+  listBranchManagerIdsForBranch,
   createNotification,
 } from './notifications.model.js'
 import { ROLES } from '../../config/constants.js'
@@ -183,6 +184,147 @@ export async function notifyBranchUsersOfHoliday(
       managerName: manager,
       startDate: holiday.startDate,
       endDate: holiday.endDate || holiday.startDate,
+    },
+  })
+}
+
+// IM submitted order request → notify Branch Managers (Demand Requests)
+export async function notifyBranchManagersOfOrderRequest(
+  tenantId,
+  order,
+  { inventoryManagerName, itemCount, companyCount } = {},
+) {
+  const branchId = order?.branchId || null
+  const bmIds = await listBranchManagerIdsForBranch(tenantId, branchId)
+  if (!bmIds.length) return []
+
+  const imName = inventoryManagerName || 'Inventory Manager'
+  const orderRef = order?.orderNumber || order?.id || '—'
+  const items = Number(itemCount) || 0
+  const companies = Number(companyCount) || 0
+
+  return createNotificationsForUsers(tenantId, bmIds, {
+    type: 'order_request_submitted',
+    title: 'New Order Request',
+    body: `${imName} has submitted a new order request (Order #${orderRef}) containing ${items} items from ${companies} supplier(s). Please review in Inventory Monitoring → Demand Requests.`,
+    linkPath: `/branch/inventory?tab=demand&highlight=${order.id}`,
+    entityType: 'purchase_order',
+    entityId: order.id,
+    meta: {
+      purchaseOrderId: order.id,
+      orderNumber: orderRef,
+      inventoryManagerName: imName,
+      itemCount: items,
+      companyCount: companies,
+      branchId,
+    },
+  })
+}
+
+// BM approved order → notify submitting Inventory Manager
+export async function notifyInventoryManagerOfOrderApproved(
+  tenantId,
+  order,
+  { branchManagerName } = {},
+) {
+  if (!order?.createdBy) return null
+  const bmName = branchManagerName || 'Branch Manager'
+  const orderRef = order?.orderNumber || order?.id || '—'
+
+  return createNotification(tenantId, {
+    recipientUserId: order.createdBy,
+    type: 'order_request_approved',
+    title: 'Order Request Approved',
+    body: `Your order request (Order #${orderRef}) has been approved by ${bmName}. You can now proceed with receiving the items.`,
+    linkPath: `/inventory/orders?highlight=${order.id}`,
+    entityType: 'purchase_order',
+    entityId: order.id,
+    meta: {
+      purchaseOrderId: order.id,
+      orderNumber: orderRef,
+      branchManagerName: bmName,
+      status: 'approved',
+    },
+  })
+}
+
+// BM rejected order → notify submitting Inventory Manager
+export async function notifyInventoryManagerOfOrderRejected(
+  tenantId,
+  order,
+  { branchManagerName, rejectionNotes } = {},
+) {
+  if (!order?.createdBy) return null
+  const bmName = branchManagerName || 'Branch Manager'
+  const orderRef = order?.orderNumber || order?.id || '—'
+  const notes = rejectionNotes ? ` Notes: ${rejectionNotes}` : ''
+
+  return createNotification(tenantId, {
+    recipientUserId: order.createdBy,
+    type: 'order_request_rejected',
+    title: 'Order Request Rejected',
+    body: `Your order request (Order #${orderRef}) has been rejected by ${bmName}. Please create a new order request if needed.${notes}`,
+    linkPath: `/inventory/orders?highlight=${order.id}`,
+    entityType: 'purchase_order',
+    entityId: order.id,
+    meta: {
+      purchaseOrderId: order.id,
+      orderNumber: orderRef,
+      branchManagerName: bmName,
+      rejectionNotes: rejectionNotes || null,
+      status: 'rejected',
+    },
+  })
+}
+
+// IM recorded a receival round → notify Branch Managers (TL §6 / §7)
+export async function notifyBranchManagersOfItemsReceived(
+  tenantId,
+  order,
+  { inventoryManagerName, lineCount, totalUnits, completed = false } = {},
+) {
+  const branchId = order?.branchId || null
+  const bmIds = await listBranchManagerIdsForBranch(tenantId, branchId)
+  if (!bmIds.length) return []
+
+  const imName = inventoryManagerName || 'Inventory Manager'
+  const orderRef = order?.orderNumber || order?.id || '—'
+  const lines = Number(lineCount) || 0
+  const units = Number(totalUnits) || 0
+
+  if (completed) {
+    return createNotificationsForUsers(tenantId, bmIds, {
+      type: 'order_receival_completed',
+      title: 'Order Receival Completed',
+      body: `${imName} marked Order #${orderRef} as fully received. Stock is in the ledger.`,
+      linkPath: `/branch/inventory?tab=demand&highlight=${order.id}`,
+      entityType: 'purchase_order',
+      entityId: order.id,
+      meta: {
+        purchaseOrderId: order.id,
+        orderNumber: orderRef,
+        inventoryManagerName: imName,
+        status: 'received',
+        branchId,
+      },
+    })
+  }
+
+  return createNotificationsForUsers(tenantId, bmIds, {
+    type: 'order_items_received',
+    title: 'Order Items Received',
+    body: `${imName} recorded a receival on Order #${orderRef}: ${lines} line(s), ${units} unit(s) stocked in.`,
+    linkPath: `/branch/inventory?tab=demand&highlight=${order.id}`,
+    entityType: 'purchase_order',
+    entityId: order.id,
+    meta: {
+      purchaseOrderId: order.id,
+      orderNumber: orderRef,
+      inventoryManagerName: imName,
+      lineCount: lines,
+      totalUnits: units,
+      status: 'partially_received',
+      branchId,
     },
   })
 }

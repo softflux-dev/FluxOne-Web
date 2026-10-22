@@ -18,6 +18,13 @@ const supplierSelect = `
   branch_id AS "branchId"
 `
 
+function httpError(status, message) {
+  const error = new Error(message)
+  error.status = status
+  return error
+}
+
+
 function mapSupplierRow(row) {
   if (!row) return null
   return {
@@ -175,10 +182,49 @@ export async function setSupplierActive(tenantId, id, isActive, { branchId = nul
   return mapSupplierRow(rows[0] || null)
 }
 
-// Soft-deactivate supplier (replaces hard delete for client UX).
+// Hard delete — blocked when referenced by orders / ledger
 export async function deleteSupplier(tenantId, id, { branchId = null } = {}) {
-  const row = await setSupplierActive(tenantId, id, false, { branchId })
-  return Boolean(row)
+  const { rows: refs } = await tenantQuery(
+    tenantId,
+    `
+      SELECT
+        EXISTS (
+          SELECT 1 FROM purchase_orders
+          WHERE tenant_id = $1 AND supplier_id = $2
+        ) AS "hasPoHeader",
+        EXISTS (
+          SELECT 1 FROM purchase_order_suppliers
+          WHERE tenant_id = $1 AND supplier_id = $2
+        ) AS "hasPoSupplier",
+        EXISTS (
+          SELECT 1 FROM purchase_order_items
+          WHERE tenant_id = $1 AND supplier_id = $2
+        ) AS "hasPoItems",
+        EXISTS (
+          SELECT 1 FROM inventory_ledger
+          WHERE tenant_id = $1 AND supplier_id = $2
+        ) AS "hasLedger"
+    `,
+    [id],
+  )
+  const hit = refs[0]
+  if (hit?.hasPoHeader || hit?.hasPoSupplier || hit?.hasPoItems || hit?.hasLedger) {
+    throw httpError(
+      409,
+      'Cannot delete supplier — it is referenced by existing order or stock records. Block the supplier instead.',
+    )
+  }
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      DELETE FROM suppliers
+      WHERE tenant_id = $1 AND id = $2
+        ${branchClause(3)}
+      RETURNING id
+    `,
+    [id, branchId],
+  )
+  return Boolean(rows[0])
 }
 
 export async function assertSupplierActive(tenantId, id, { branchId = null } = {}) {

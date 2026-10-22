@@ -67,7 +67,7 @@ export function TaxProfitTable({
   return (
     <SurfaceCard
       title="Catalog Pricing & Profit Margins"
-      description={`${ADMIN_PRICING_LEGEND} · Currency: ${currency}`}
+      description={`Currency: ${currency}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {selectedIds.length > 0 && (
@@ -131,10 +131,28 @@ export function TaxProfitTable({
         />
       ) : (
         <>
-          <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
-            <span className="font-semibold text-slate-700">Formulas: </span>
-            {FINAL_PRICE_FORMULA}. {MARGIN_FORMULA}
-          </p>
+          <div className="mb-3">
+            <details className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] leading-relaxed text-slate-500 group">
+              <summary className="cursor-pointer select-none font-semibold text-slate-700 focus:outline-none flex items-center gap-1">
+                <span>
+                  {/** eye icon or chevron could be added here for clarity **/}
+                  {/** "View" and "Hide" label can be dynamic if you want, here's a basic toggle */}
+                  <span className="group-open:hidden">View details</span>
+                  <span className="hidden group-open:inline">Hide details</span>
+                </span>
+              </summary>
+              <div className="mt-2">
+                <span className="font-semibold text-slate-700">Formulas: </span> <br />
+                {FINAL_PRICE_FORMULA}. <br />
+                {MARGIN_FORMULA}. <br />
+                {PROFIT_PCT_FORMULA}. <br />
+                {TAX_PCT_FORMULA}. <br />
+                {SELLING_PRICE_FORMULA}. <br />
+                {PURCHASE_COST_FORMULA}.
+              </div>
+            </details>
+          </div>
+     
 
           <div className="space-y-3 md:hidden">
             {products.map((p) => {

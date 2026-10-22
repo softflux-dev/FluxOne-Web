@@ -81,6 +81,26 @@ export async function listTenantAdminUserIds(tenantId) {
   return listUserIdsByRole(tenantId, ROLES.B2B_ADMIN)
 }
 
+// Branch Managers scoped to a branch (fallback: all tenant BMs)
+export async function listBranchManagerIdsForBranch(tenantId, branchId) {
+  if (!branchId) return listUserIdsByRole(tenantId, ROLES.BRANCH_MANAGER)
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT id
+      FROM users
+      WHERE tenant_id = $1
+        AND role_id = $2
+        AND is_active = true
+        AND branch_id = $3
+    `,
+    [ROLE_IDS[ROLES.BRANCH_MANAGER], branchId],
+  )
+  const ids = rows.map((r) => r.id)
+  if (ids.length) return ids
+  return listUserIdsByRole(tenantId, ROLES.BRANCH_MANAGER)
+}
+
 // Active users linked to a branch (users.branch_id or staff row); optional excludes
 export async function listBranchUserIds(tenantId, branchId, { excludeUserIds = [] } = {}) {
   if (!branchId) return []

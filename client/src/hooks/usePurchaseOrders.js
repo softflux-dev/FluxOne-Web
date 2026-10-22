@@ -11,6 +11,11 @@ import {
   fetchOrderDetail,
   fetchOrderHistory,
   generateOrder as generateOrderThunk,
+  updatePendingOrder as updatePendingOrderThunk,
+  approveOrder as approveOrderThunk,
+  rejectOrder as rejectOrderThunk,
+  recordOrderReceival as recordOrderReceivalThunk,
+  completeOrderReceival as completeOrderReceivalThunk,
   printOrder as printOrderThunk,
 } from '@/rtk/features/orders/ordersSlice'
 
@@ -56,6 +61,24 @@ export function usePurchaseOrders(initialFilters = EMPTY_FILTERS) {
     [dispatch],
   )
 
+  const fetchDetail = useCallback(
+    (id) => asResult(dispatch(fetchOrderDetail(id)).unwrap()),
+    [dispatch],
+  )
+
+  const fetchHistory = useCallback(
+    (id) => asResult(dispatch(fetchOrderHistory(id)).unwrap()),
+    [dispatch],
+  )
+
+  const clearDetail = useCallback(() => {
+    dispatch(clearOrderDetail())
+  }, [dispatch])
+
+  const reload = useCallback(() => {
+    void dispatch(fetchOrders(filtersRef.current))
+  }, [dispatch])
+
   return {
     items,
     pagination,
@@ -70,11 +93,19 @@ export function usePurchaseOrders(initialFilters = EMPTY_FILTERS) {
     updateFilters,
     setPage: (page) => updateFilters({ page }),
     loadFormOptions: () => dispatch(loadOrderFormOptions()),
-    fetchDetail: (id) => asResult(dispatch(fetchOrderDetail(id)).unwrap()),
-    fetchHistory: (id) => asResult(dispatch(fetchOrderHistory(id)).unwrap()),
-    clearDetail: () => dispatch(clearOrderDetail()),
+    fetchDetail,
+    fetchHistory,
+    clearDetail,
     generateOrder: (payload) => asResult(dispatch(generateOrderThunk(payload)).unwrap()),
+    updatePendingOrder: (id, payload) =>
+      asResult(dispatch(updatePendingOrderThunk({ id, ...payload })).unwrap()),
+    approveOrder: (id) => asResult(dispatch(approveOrderThunk(id)).unwrap()),
+    rejectOrder: (id, rejectionNotes) =>
+      asResult(dispatch(rejectOrderThunk({ id, rejectionNotes })).unwrap()),
+    recordReceival: (id, payload) =>
+      asResult(dispatch(recordOrderReceivalThunk({ id, ...payload })).unwrap()),
+    completeReceival: (id) => asResult(dispatch(completeOrderReceivalThunk(id)).unwrap()),
     printOrder: (idOrOrder) => asResult(dispatch(printOrderThunk(idOrOrder)).unwrap()),
-    reload: () => dispatch(fetchOrders(filtersRef.current)),
+    reload,
   }
 }

@@ -24,6 +24,7 @@ import { EditItemPage } from '@/pages/inventory/EditItemPage'
 import { InventoryControlPage } from '@/pages/inventory/InventoryControlPage'
 import { SuppliersPage } from '@/pages/inventory/SuppliersPage'
 import { PurchaseOrdersPage } from '@/pages/inventory/PurchaseOrdersPage'
+import { GenerateOrderPage } from '@/pages/inventory/GenerateOrderPage'
 import { DashboardPage as BranchDashboardPage } from '@/pages/branch/DashboardPage'
 import { StaffPage } from '@/pages/branch/StaffPage'
 import { AttendancePage } from '@/pages/branch/AttendancePage'
@@ -31,6 +32,7 @@ import { HolidaysPage } from '@/pages/branch/HolidaysPage'
 import { LeavesPage } from '@/pages/branch/LeavesPage'
 import { PerformanceEmployeePage } from '@/pages/branch/PerformanceEmployeePage'
 import { SalesPage } from '@/pages/branch/SalesPage'
+import { SuppliersPage as BranchSuppliersPage } from '@/pages/branch/SuppliersPage'
 
 // Legacy /branch/performance/employees/:id → staff detail URL
 function RedirectLegacyPerformanceEmployee() {
@@ -41,6 +43,7 @@ function RedirectLegacyPerformanceEmployee() {
 // import { CustomerPage } from '@/pages/phase2/CustomerPage'
 // import { ReportsPage } from '@/pages/phase2/BranchReportsPage'
 import { BranchInventoryPage } from '@/pages/branch/BranchInventoryPage'
+import { EditDemandRequestPage } from '@/pages/branch/EditDemandRequestPage'
 import { ResourcesPage } from '@/pages/branch/ResourcesPage'
 import { DiscountsPage } from '@/pages/branch/DiscountsPage'
 import { ActivityLogsPage } from '@/pages/branch/ActivityLogsPage'
@@ -117,6 +120,7 @@ const router = createBrowserRouter([
               { path: 'control', element: <InventoryControlPage /> },
               { path: 'suppliers', element: <SuppliersPage /> },
               { path: 'orders', element: <PurchaseOrdersPage /> },
+              { path: 'orders/generate', element: <GenerateOrderPage /> },
               { path: 'categories', element: <CategoriesPage /> },
               { path: 'notifications', element: <NotificationsPage /> },
               { path: 'profile', element: <ProfilePage /> },
@@ -156,7 +160,12 @@ const router = createBrowserRouter([
               // TODO(phase2): customer + branch reports — see pages/phase2/
               // { path: 'customer', element: <CustomerPage /> },
               { path: 'inventory', element: <BranchInventoryPage /> },
+              {
+                path: 'inventory/demand-requests/:id/edit',
+                element: <EditDemandRequestPage />,
+              },
               // { path: 'reports', element: <ReportsPage /> },
+              { path: 'suppliers', element: <BranchSuppliersPage /> },
               { path: 'resources', element: <ResourcesPage /> },
               { path: 'discounts', element: <DiscountsPage /> },
               { path: 'logs', element: <ActivityLogsPage /> },

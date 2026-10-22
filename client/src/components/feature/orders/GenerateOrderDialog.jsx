@@ -28,7 +28,8 @@ const PO_FIELD_IDS = {
 
 const PO_FIELD_ORDER = ['supplierId', 'lines']
 
-// Generate PO: pick supplier, multi products with qty + unit cost (shows last purchase).
+// @deprecated Prefer full page PATHS.inventory.ordersGenerate (Phase 4).
+// Kept for reference / emergency fallback — Orders page no longer mounts this dialog.
 export function GenerateOrderDialog({
   open,
   onOpenChange,

@@ -1,12 +1,15 @@
 import { validateEmail, validatePhone } from './formValidators'
 import { firstValidationMessage } from './fieldErrors'
 
+// TL §2.1 — supplier company required fields
 const FIELD_ORDER = [
   'companyName',
   'companyPhone',
   'representativeName',
   'representativePhone',
   'representativeEmail',
+  'location',
+  'registrationNumber',
 ]
 
 // Returns { fieldKey: message } — empty object when valid
@@ -34,10 +37,18 @@ export function validateSupplierFormFields(form = {}) {
   if (repPhoneErr) errors.representativePhone = repPhoneErr
 
   const emailErr = validateEmail(form.representativeEmail, {
-    required: false,
+    required: true,
     fieldName: 'Representative email',
   })
   if (emailErr) errors.representativeEmail = emailErr
+
+  if (!String(form.location || '').trim()) {
+    errors.location = 'Company location is required'
+  }
+
+  if (!String(form.registrationNumber || '').trim()) {
+    errors.registrationNumber = 'Registration number is required'
+  }
 
   return errors
 }

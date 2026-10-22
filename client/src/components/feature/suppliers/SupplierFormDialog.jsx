@@ -44,6 +44,8 @@ const FIELD_IDS = {
   representativeName: 'sup-rep-name',
   representativePhone: 'sup-rep-phone',
   representativeEmail: 'sup-rep-email',
+  location: 'sup-location',
+  registrationNumber: 'sup-reg',
 }
 
 // Add / Edit supplier — fields align with tech lead + createSupplierSchema.
@@ -196,7 +198,7 @@ export function SupplierFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="sup-rep-email">Representative email (optional)</Label>
+              <Label htmlFor="sup-rep-email">Representative email</Label>
               <Input
                 id="sup-rep-email"
                 type="email"
@@ -210,13 +212,16 @@ export function SupplierFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="sup-location">Company location (optional)</Label>
+              <Label htmlFor="sup-location">Company location</Label>
               <Input
                 id="sup-location"
                 value={form.location}
                 onChange={(e) => patch('location', e.target.value)}
+                aria-invalid={Boolean(fieldErrors.location)}
+                className={fieldErrorClass(fieldErrors.location)}
                 disabled={busy}
               />
+              <FieldError message={fieldErrors.location} />
             </div>
 
             <div className="space-y-1.5">
@@ -233,13 +238,16 @@ export function SupplierFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="sup-reg">Registration number (optional)</Label>
+              <Label htmlFor="sup-reg">Registration number</Label>
               <Input
                 id="sup-reg"
                 value={form.registrationNumber}
                 onChange={(e) => patch('registrationNumber', e.target.value)}
+                aria-invalid={Boolean(fieldErrors.registrationNumber)}
+                className={fieldErrorClass(fieldErrors.registrationNumber)}
                 disabled={busy}
               />
+              <FieldError message={fieldErrors.registrationNumber} />
             </div>
 
             <div className="space-y-1.5">

@@ -120,16 +120,82 @@ export const fetchOrderHistory = createAsyncThunk(
 export const generateOrder = createAsyncThunk(
   'orders/generate',
   async (payload, { getState, dispatch, rejectWithValue }) => {
-    const result = await apiClient.post(endpoints.orders.create, {
-      supplierId: payload.supplierId,
-      explanation: payload.explanation || undefined,
-      sendSms: false,
-      lines: payload.lines,
-    })
+    // Supports legacy { supplierId, lines } and multi-company { companies }
+    const body = payload.companies?.length
+      ? {
+          companies: payload.companies,
+          explanation: payload.explanation || undefined,
+          sendSms: Boolean(payload.sendSms),
+        }
+      : {
+          supplierId: payload.supplierId,
+          explanation: payload.explanation || undefined,
+          sendSms: Boolean(payload.sendSms),
+          lines: payload.lines,
+        }
+    const result = await apiClient.post(endpoints.orders.create, body)
     if (!result.success) return rejectWithValue(result.error || 'Generate failed')
     const filters = { ...getState().orders.filters, page: 1 }
     dispatch(setOrderFilters(filters))
     void dispatch(fetchOrders(filters))
+    return { success: true, data: mapPurchaseOrder(result.data) }
+  },
+)
+
+export const updatePendingOrder = createAsyncThunk(
+  'orders/updatePending',
+  async ({ id, ...payload }, { getState, dispatch, rejectWithValue }) => {
+    const result = await apiClient.patch(endpoints.orders.update(id), payload)
+    if (!result.success) return rejectWithValue(result.error || 'Update failed')
+    void dispatch(fetchOrders(getState().orders.filters))
+    return { success: true, data: mapPurchaseOrder(result.data) }
+  },
+)
+
+export const approveOrder = createAsyncThunk(
+  'orders/approve',
+  async (id, { getState, dispatch, rejectWithValue }) => {
+    const result = await apiClient.post(endpoints.orders.approve(id), {})
+    if (!result.success) return rejectWithValue(result.error || 'Approve failed')
+    void dispatch(fetchOrders(getState().orders.filters))
+    return { success: true, data: mapPurchaseOrder(result.data) }
+  },
+)
+
+export const rejectOrder = createAsyncThunk(
+  'orders/reject',
+  async ({ id, rejectionNotes }, { getState, dispatch, rejectWithValue }) => {
+    const result = await apiClient.post(endpoints.orders.reject(id), {
+      rejectionNotes: rejectionNotes || undefined,
+    })
+    if (!result.success) return rejectWithValue(result.error || 'Reject failed')
+    void dispatch(fetchOrders(getState().orders.filters))
+    return { success: true, data: mapPurchaseOrder(result.data) }
+  },
+)
+
+export const recordOrderReceival = createAsyncThunk(
+  'orders/recordReceival',
+  async ({ id, lines, notes }, { getState, dispatch, rejectWithValue }) => {
+    const result = await apiClient.post(endpoints.orders.receivals(id), {
+      lines,
+      notes: notes || undefined,
+    })
+    if (!result.success) return rejectWithValue(result.error || 'Receival failed')
+    void dispatch(fetchOrders(getState().orders.filters))
+    const order = result.data?.order
+      ? mapPurchaseOrder(result.data.order)
+      : mapPurchaseOrder(result.data)
+    return { success: true, data: order, receival: result.data }
+  },
+)
+
+export const completeOrderReceival = createAsyncThunk(
+  'orders/completeReceival',
+  async (id, { getState, dispatch, rejectWithValue }) => {
+    const result = await apiClient.post(endpoints.orders.complete(id), {})
+    if (!result.success) return rejectWithValue(result.error || 'Mark complete failed')
+    void dispatch(fetchOrders(getState().orders.filters))
     return { success: true, data: mapPurchaseOrder(result.data) }
   },
 )
@@ -212,6 +278,61 @@ const ordersSlice = createSlice({
         state.mutating = false
       })
       .addCase(generateOrder.rejected, (state) => {
+        state.mutating = false
+      })
+      .addCase(updatePendingOrder.pending, (state) => {
+        state.mutating = true
+      })
+      .addCase(updatePendingOrder.fulfilled, (state, action) => {
+        state.mutating = false
+        state.selected = action.payload.data
+      })
+      .addCase(updatePendingOrder.rejected, (state) => {
+        state.mutating = false
+      })
+      .addCase(approveOrder.pending, (state) => {
+        state.mutating = true
+      })
+      .addCase(approveOrder.fulfilled, (state, action) => {
+        state.mutating = false
+        state.selected = action.payload.data
+      })
+      .addCase(approveOrder.rejected, (state) => {
+        state.mutating = false
+      })
+      .addCase(rejectOrder.pending, (state) => {
+        state.mutating = true
+      })
+      .addCase(rejectOrder.fulfilled, (state, action) => {
+        state.mutating = false
+        state.selected = action.payload.data
+      })
+      .addCase(rejectOrder.rejected, (state) => {
+        state.mutating = false
+      })
+      .addCase(recordOrderReceival.pending, (state) => {
+        state.mutating = true
+      })
+      .addCase(recordOrderReceival.fulfilled, (state, action) => {
+        state.mutating = false
+        state.selected = action.payload.data
+      })
+      .addCase(recordOrderReceival.rejected, (state) => {
+        state.mutating = false
+      })
+      .addCase(completeOrderReceival.pending, (state) => {
+        state.mutating = true
+      })
+      .addCase(completeOrderReceival.fulfilled, (state, action) => {
+        state.mutating = false
+        state.selected = action.payload.data
+        // Immediate list patch so UI shows Received before refetch settles
+        const next = action.payload.data
+        if (next?.id) {
+          state.items = state.items.map((row) => (row.id === next.id ? { ...row, ...next } : row))
+        }
+      })
+      .addCase(completeOrderReceival.rejected, (state) => {
         state.mutating = false
       })
   },

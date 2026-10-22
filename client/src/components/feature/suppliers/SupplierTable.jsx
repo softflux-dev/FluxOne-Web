@@ -32,7 +32,7 @@ function SupplierAvatar({ row }) {
   )
 }
 
-// clean and optimized code — CRUD icons; Status capsule is display-only
+// View / Edit always; Block when onDeactivate; Delete only if onDelete passed (B2B only — BM never deletes)
 function SupplierRowActions({
   row,
   onView,
@@ -45,16 +45,16 @@ function SupplierRowActions({
   const active = row.isActive !== false
   return (
     <RowActionButtons
-      onView={() => onView?.(row)}
-      onEdit={() => onEdit?.(row)}
-      onBlock={() => onDeactivate?.(row)}
-      onUnblock={() => onActivate?.(row)}
+      onView={onView ? () => onView(row) : undefined}
+      onEdit={onEdit ? () => onEdit(row) : undefined}
+      onBlock={onDeactivate ? () => onDeactivate(row) : undefined}
+      onUnblock={onActivate ? () => onActivate(row) : undefined}
       isActive={active}
-      onDelete={() => onDelete?.(row)}
+      onDelete={onDelete ? () => onDelete(row) : undefined}
       viewLabel={`View ${row.companyName || 'supplier'}`}
       editLabel={`Edit ${row.companyName || 'supplier'}`}
-      blockLabel={`Deactivate ${row.companyName || 'supplier'}`}
-      unblockLabel={`Activate ${row.companyName || 'supplier'}`}
+      blockLabel={`Block ${row.companyName || 'supplier'}`}
+      unblockLabel={`Unblock ${row.companyName || 'supplier'}`}
       deleteLabel={`Delete ${row.companyName || 'supplier'}`}
       disabled={statusLoading}
     />
@@ -75,6 +75,7 @@ export function SupplierTable({
   onDelete,
   statusUpdatingId = null,
   className,
+  // canModerate unused — actions gated by which handlers the page passes
 }) {
   const list = Array.isArray(items) ? items : []
   const isEmpty = !loading && list.length === 0

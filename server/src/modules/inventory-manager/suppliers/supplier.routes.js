@@ -28,12 +28,19 @@ router.patch(
   validate(updateSupplierSchema),
   asyncHandler(update),
 )
+// Block / Unblock — BM moderate only
 router.patch(
   '/:id/status',
-  requirePermission('suppliers:write'),
+  requirePermission('suppliers:moderate'),
   validate(setSupplierActiveSchema),
   asyncHandler(setActive),
 )
-router.delete('/:id', requirePermission('suppliers:write'), validate(supplierIdParamsSchema), asyncHandler(remove))
+// Hard delete — B2B Admin only (BM cannot delete; use Block instead)
+router.delete(
+  '/:id',
+  requirePermission('suppliers:delete'),
+  validate(supplierIdParamsSchema),
+  asyncHandler(remove),
+)
 
 export default router

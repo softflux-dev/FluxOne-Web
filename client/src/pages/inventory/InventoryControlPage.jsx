@@ -11,7 +11,6 @@ import { ControlLowStockBanner } from '@/components/feature/control/ControlLowSt
 import { ImportControlDialog } from '@/components/feature/control/ImportControlDialog'
 import { InventoryControlTabs } from '@/components/feature/control/InventoryControlTabs'
 import { MovementFilters } from '@/components/feature/control/MovementFilters'
-import { OrderDemandDialog } from '@/components/feature/control/OrderDemandDialog'
 import { StockAlertsDialog } from '@/components/feature/control/StockAlertsDialog'
 import { StockInTable } from '@/components/feature/control/StockInTable'
 import { StockOutTable } from '@/components/feature/control/StockOutTable'
@@ -64,7 +63,6 @@ export function InventoryControlPage() {
     setPage,
     createStockIn,
     createMovementForType,
-    stockInFromOrder,
     reloadSummary,
     reload,
     globalFilters,
@@ -81,7 +79,6 @@ export function InventoryControlPage() {
 
   const [addStockInOpen, setAddStockInOpen] = useState(false)
   const [updateStockRow, setUpdateStockRow] = useState(null)
-  const [orderOpen, setOrderOpen] = useState(false)
   const [adjustmentOpen, setAdjustmentOpen] = useState(false)
   const [thresholdTarget, setThresholdTarget] = useState(null)
   const [detailsTarget, setDetailsTarget] = useState(null)
@@ -96,7 +93,6 @@ export function InventoryControlPage() {
   function handleTabChange(nextTab) {
     if (nextTab === tab) return
     setAdjustmentOpen(false)
-    setOrderOpen(false)
     setUpdateStockRow(null)
     setThresholdTarget(null)
     setDetailsTarget(null)
@@ -168,13 +164,6 @@ export function InventoryControlPage() {
     } else {
       toastError(result.error || 'Save failed')
     }
-    return result
-  }
-
-  async function handleReceiveOrder(purchaseOrderId) {
-    const result = await stockInFromOrder(purchaseOrderId)
-    if (result.success) toastSuccess('Purchase order received into stock')
-    else toastError(result.error || 'Receive failed')
     return result
   }
 
@@ -357,7 +346,6 @@ export function InventoryControlPage() {
             onPageChange={setPage}
             onPageSizeChange={(limit) => updateFilters({ limit })}
             onAddStock={() => setAddStockInOpen(true)}
-            onOrderDemand={() => setOrderOpen(true)}
             onUpdateStock={(row) => setUpdateStockRow(row)}
             onViewDetails={openDetails}
           />
@@ -409,13 +397,6 @@ export function InventoryControlPage() {
         catalog={catalog}
         loading={stockInMutating}
         onSubmit={handleUpdateStockFromRow}
-      />
-
-      <OrderDemandDialog
-        open={orderOpen}
-        onOpenChange={setOrderOpen}
-        loading={stockInMutating}
-        onReceive={handleReceiveOrder}
       />
 
       <AdjustmentDialog

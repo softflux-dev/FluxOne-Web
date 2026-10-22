@@ -81,13 +81,13 @@ export async function setActive(req, res) {
   }
 }
 
-// Soft-deactivate (Active → Inactive). Keeps purchase order history intact.
+// Hard delete (B2B only). Dependency check lives in the model. BM uses Block.
 export async function remove(req, res) {
   try {
     const { tenantId, branchId } = resolveInventoryScope(req)
-    const deactivated = await deleteSupplier(tenantId, req.validated.params.id, { branchId })
-    if (!deactivated) return fail(res, 'Supplier not found', 404)
-    return success(res, { id: req.validated.params.id, isActive: false, deactivated: true })
+    const deleted = await deleteSupplier(tenantId, req.validated.params.id, { branchId })
+    if (!deleted) return fail(res, 'Supplier not found', 404)
+    return success(res, { id: req.validated.params.id, deleted: true })
   } catch (err) {
     return failFromError(res, err)
   }

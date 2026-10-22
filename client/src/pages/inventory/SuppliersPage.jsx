@@ -8,10 +8,17 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
+import { usePermissions } from '@/hooks/usePermissions'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { toastError, toastSuccess } from '@/lib/toast'
 
 export function SuppliersPage() {
+  const { can } = usePermissions()
+  const canWrite = can('suppliers:write')
+  const canModerate = can('suppliers:moderate')
+  // BM: View / Edit / Block only — never hard-delete (no soft-delete either)
+  const canDelete = can('suppliers:delete')
+
   const {
     items,
     pagination,
@@ -60,26 +67,26 @@ export function SuppliersPage() {
     return result
   }
 
-  // clean and optimized code — soft status updates (deactivate / activate)
+  // Parent: page — Child: status / delete confirms (BM moderate only)
   async function applySupplierStatus(row, isActive) {
-    if (!row?.id) return
+    if (!row?.id || !canModerate) return
     setStatusUpdatingId(row.id)
     try {
       const result = await setSupplierActive(row.id, isActive)
       if (!result.success) toastError(result.error || 'Status update failed')
-      else toastSuccess(isActive ? 'Supplier activated' : 'Supplier deactivated')
+      else toastSuccess(isActive ? 'Supplier unblocked' : 'Supplier blocked')
     } finally {
       setStatusUpdatingId(null)
     }
   }
 
   function handleDeactivate(row) {
-    if (!row?.id || row.isActive === false) return
+    if (!canModerate || !row?.id || row.isActive === false) return
     setStatusTarget(row)
   }
 
   function handleActivate(row) {
-    if (!row?.id || row.isActive !== false) return
+    if (!canModerate || !row?.id || row.isActive !== false) return
     void applySupplierStatus(row, true)
   }
 
@@ -89,12 +96,11 @@ export function SuppliersPage() {
     setStatusTarget(null)
   }
 
-  // Delete uses soft-remove API (keeps purchase history); same outcome as deactivate
   async function handleConfirmDelete() {
-    if (!deleteTarget?.id) return
+    if (!deleteTarget?.id || !canDelete) return
     const result = await deleteSupplier(deleteTarget.id)
     setDeleteTarget(null)
-    if (result.success) toastSuccess('Supplier removed from active directory')
+    if (result.success) toastSuccess('Supplier deleted')
     else toastError(result.error || 'Delete failed')
   }
 
@@ -103,12 +109,18 @@ export function SuppliersPage() {
       <MotionHeader>
         <PageHeader
           title="Supplier Management"
-          description="Vendor directory — deactivate instead of delete so purchase history stays intact"
+          description={
+            canModerate
+              ? 'Vendor directory — block inactive companies so they cannot be used on new orders'
+              : 'Vendor directory — add and edit supplier companies'
+          }
           actions={
-            <Button type="button" variant="brand" onClick={openCreate}>
-              <Plus className="size-4" />
-              Add supplier
-            </Button>
+            canWrite ? (
+              <Button type="button" variant="brand" onClick={openCreate}>
+                <Plus className="size-4" />
+                Add supplier
+              </Button>
+            ) : null
           }
         />
       </MotionHeader>
@@ -136,22 +148,24 @@ export function SuppliersPage() {
           onPageChange={setPage}
           onPageSizeChange={(limit) => updateFilters({ limit })}
           onView={setViewTarget}
-          onEdit={openEdit}
-          onDeactivate={handleDeactivate}
-          onActivate={handleActivate}
-          onDelete={setDeleteTarget}
+          onEdit={canWrite ? openEdit : undefined}
+          onDeactivate={canModerate ? handleDeactivate : undefined}
+          onActivate={canModerate ? handleActivate : undefined}
+          onDelete={canDelete ? setDeleteTarget : undefined}
           statusUpdatingId={statusUpdatingId}
         />
       </MotionReveal>
 
-      <SupplierFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        mode={formMode}
-        initialSupplier={editing}
-        loading={mutating}
-        onSubmit={handleSubmit}
-      />
+      {canWrite ? (
+        <SupplierFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          mode={formMode}
+          initialSupplier={editing}
+          loading={mutating}
+          onSubmit={handleSubmit}
+        />
+      ) : null}
 
       <SupplierDetailDialog
         open={Boolean(viewTarget)}
@@ -161,42 +175,46 @@ export function SuppliersPage() {
         supplier={viewTarget}
       />
 
-      <ConfirmDialog
-        open={Boolean(statusTarget)}
-        onOpenChange={(open) => {
-          if (!open) setStatusTarget(null)
-        }}
-        title="Deactivate supplier?"
-        description={
-          statusTarget
-            ? `${statusTarget.companyName || 'This supplier'} will be hidden from new orders. Purchase history is kept.`
-            : undefined
-        }
-        confirmLabel="Deactivate"
-        icon={Ban}
-        variant="destructive"
-        loading={mutating}
-        onConfirm={handleConfirmDeactivate}
-      />
+      {canModerate ? (
+        <ConfirmDialog
+          open={Boolean(statusTarget)}
+          onOpenChange={(open) => {
+            if (!open) setStatusTarget(null)
+          }}
+          title="Block supplier company?"
+          description={
+            statusTarget
+              ? `${statusTarget.companyName || 'This company'} will be blocked and cannot be selected for new order requests. Existing orders are not affected.`
+              : undefined
+          }
+          confirmLabel="Block"
+          icon={Ban}
+          variant="destructive"
+          loading={mutating}
+          onConfirm={handleConfirmDeactivate}
+        />
+      ) : null}
 
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null)
-        }}
-        title="Remove supplier?"
-        description={
-          deleteTarget
-            ? `${deleteTarget.companyName || 'This supplier'} will be hidden from new orders. Purchase history stays intact — prefer Deactivate when you only need a temporary pause.`
-            : undefined
-        }
-        warning="Permanent wipe is not available for suppliers so purchase history stays intact."
-        confirmLabel="Remove"
-        icon={Trash2}
-        variant="destructive"
-        loading={mutating}
-        onConfirm={handleConfirmDelete}
-      />
+      {canDelete ? (
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          title="Delete supplier company?"
+          description={
+            deleteTarget
+              ? `${deleteTarget.companyName || 'This company'} will be permanently removed. If it is used on any order, delete will be blocked — use Block instead.`
+              : undefined
+          }
+          warning="This cannot be undone."
+          confirmLabel="Delete"
+          icon={Trash2}
+          variant="destructive"
+          loading={mutating}
+          onConfirm={handleConfirmDelete}
+        />
+      ) : null}
     </div>
   )
 }

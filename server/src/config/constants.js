@@ -69,10 +69,21 @@ export const ADJUSTMENT_LEDGER_TYPES = [
 
 export const PURCHASE_ORDER_STATUS = {
   PENDING: 'pending',
-  // Generate sets APPROVED immediately (UI label: Accepted)
   APPROVED: 'approved',
+  REJECTED: 'rejected',
+  PARTIALLY_RECEIVED: 'partially_received',
   RECEIVED: 'received',
   CANCELLED: 'cancelled',
+}
+
+// Append-only purchase_order_events.event_type values (migration 048)
+export const PURCHASE_ORDER_EVENT_TYPES = {
+  CREATED: 'created',
+  EDITED_BY_BM: 'edited_by_bm',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  RECEIVAL_RECORDED: 'receival_recorded',
+  COMPLETED: 'completed',
 }
 
 export const STOCK_REQUEST_KIND = {
@@ -139,10 +150,15 @@ export const PERMISSIONS = {
   'staff:lookup': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'stock-requests:write': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
   'suppliers:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
-  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
+  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
+  // Block / Unblock — BM + B2B (no soft-delete; is_active only)
+  'suppliers:moderate': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
+  // Hard delete — B2B only (BM cannot delete suppliers)
+  'suppliers:delete': [ROLES.B2B_ADMIN],
   'orders:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'orders:generate': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
-  'orders:approve': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
+  // BM reviews Demand Requests (edit / approve / reject); B2B retained for oversight
+  'orders:approve': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
   'reports:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
   'sync:push': [
     ROLES.CASHIER,

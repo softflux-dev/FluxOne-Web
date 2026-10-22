@@ -1,10 +1,14 @@
 import { SearchStatusFilters } from '@/components/shared/SearchStatusFilters'
 
-// Pending / cancelled removed — generate auto-accepts (approved)
+// TL order-request statuses (Demand Requests + IM Orders)
 const ORDER_STATUS_OPTIONS = [
   { value: '', label: 'All' },
-  { value: 'approved', label: 'Accepted' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'partially_received', label: 'Partially Received' },
   { value: 'received', label: 'Received' },
+  { value: 'cancelled', label: 'Cancelled' },
 ]
 
 // Reusable SearchStatusFilters — same layout as Supplier / Products

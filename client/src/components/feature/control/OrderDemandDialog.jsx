@@ -15,7 +15,8 @@ import {
 } from '@/hooks/useInventoryControl'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
-// List approved POs → confirm → POST stock-in/from-order.
+// Legacy full-PO receive — superseded by Orders → Record Receival (TL §6.1).
+// Control UI no longer surfaces this; API path kept for compatibility.
 
 export function OrderDemandDialog({ open, onOpenChange, loading = false, onReceive }) {
   const [orders, setOrders] = useState([])

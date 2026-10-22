@@ -1,0 +1,1 @@
+export { SuppliersPage, SuppliersPage as default } from '@/pages/inventory/SuppliersPage'

@@ -47,6 +47,7 @@ const INVENTORY_SIDE_NAV = [
 const BRANCH_SIDE_NAV = [
   { to: PATHS.branch.profile, label: 'Profile', end: false },
   { to: PATHS.branch.notifications, label: 'Notifications', end: false },
+  { to: PATHS.branch.suppliers, label: 'Supplier Management', end: false },
   { to: PATHS.branch.discounts, label: 'Discounts', end: false },
   { to: PATHS.branch.resources, label: 'Resources', end: false },
   { to: PATHS.branch.logs, label: 'Logs', end: false },
