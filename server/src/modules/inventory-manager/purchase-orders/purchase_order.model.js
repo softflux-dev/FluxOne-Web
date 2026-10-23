@@ -6,6 +6,7 @@ import {
 } from '../../../config/constants.js'
 import { insertLedgerEventInTx } from '../control/control.model.js'
 import { buildPurchaseOrderSms, sendSms } from '../../../utils/sms.util.js'
+import { createInvoicesForApprovedOrder } from './purchase_order_invoice.model.js'
 
 function httpError(status, message) {
   const error = new Error(message)
@@ -315,6 +316,7 @@ export async function getPurchaseOrderById(tenantId, id, { branchId = null } = {
         po.rejection_notes AS "rejectionNotes",
         po.received_at AS "receivedAt",
         po.completed_by AS "completedBy",
+        completer.full_name AS "completedByName",
         s.company_name AS "companyName",
         s.representative_name AS "representativeName",
         s.representative_phone AS "representativePhone",
@@ -324,6 +326,7 @@ export async function getPurchaseOrderById(tenantId, id, { branchId = null } = {
       LEFT JOIN users creator ON creator.id = po.created_by AND creator.tenant_id = po.tenant_id
       LEFT JOIN users approver ON approver.id = po.approved_by AND approver.tenant_id = po.tenant_id
       LEFT JOIN users rejector ON rejector.id = po.rejected_by AND rejector.tenant_id = po.tenant_id
+      LEFT JOIN users completer ON completer.id = po.completed_by AND completer.tenant_id = po.tenant_id
       WHERE po.tenant_id = $1 AND po.id = $2
         AND ($3::uuid IS NULL OR po.branch_id = $3)
       LIMIT 1
@@ -945,7 +948,7 @@ export async function approvePurchaseOrder(tenantId, id, userId, { branchId = nu
   }
 
   await withTransaction(async (client) => {
-    await tenantClientQuery(
+    const { rows: updatedRows } = await tenantClientQuery(
       client,
       tenantId,
       `
@@ -954,6 +957,7 @@ export async function approvePurchaseOrder(tenantId, id, userId, { branchId = nu
             rejected_by = NULL, rejected_at = NULL, rejection_notes = NULL
         WHERE tenant_id = $1 AND id = $2 AND status = $5
           AND ($6::uuid IS NULL OR branch_id = $6)
+        RETURNING approved_at AS "approvedAt"
       `,
       [
         id,
@@ -963,12 +967,23 @@ export async function approvePurchaseOrder(tenantId, id, userId, { branchId = nu
         branchId || null,
       ],
     )
+    if (!updatedRows[0]) {
+      throw httpError(409, 'Could not approve order — status may have changed')
+    }
+
+    // TL §10 — one invoice per supplier company (locked to approved quantities)
+    const invoices = await createInvoicesForApprovedOrder(client, tenantId, id, {
+      invoiceDate: updatedRows[0].approvedAt,
+    })
 
     await insertOrderEvent(client, tenantId, {
       purchaseOrderId: id,
       eventType: PURCHASE_ORDER_EVENT_TYPES.APPROVED,
       actorId: userId,
-      payload: {},
+      payload: {
+        invoicesCreated: invoices.filter((row) => !row.skipped).length,
+        invoiceNumbers: invoices.map((row) => row.invoiceNumber),
+      },
     })
   })
 

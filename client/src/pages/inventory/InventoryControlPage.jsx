@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AddStockInDialog } from '@/components/feature/control/AddStockInDialog'
 import { AdjustmentDialog } from '@/components/feature/control/AdjustmentDialog'
 import { AdjustmentTable } from '@/components/feature/control/AdjustmentTable'
@@ -8,7 +9,6 @@ import { ControlPriceRuleBanner } from '@/components/feature/control/ControlPric
 import { ControlSecondaryActions } from '@/components/feature/control/ControlTopActions'
 import { DailyPriceReviewDialog } from '@/components/feature/control/DailyPriceReviewDialog'
 import { ControlLowStockBanner } from '@/components/feature/control/ControlLowStock'
-import { ImportControlDialog } from '@/components/feature/control/ImportControlDialog'
 import { InventoryControlTabs } from '@/components/feature/control/InventoryControlTabs'
 import { MovementFilters } from '@/components/feature/control/MovementFilters'
 import { StockAlertsDialog } from '@/components/feature/control/StockAlertsDialog'
@@ -43,10 +43,9 @@ function asProductRow(row) {
   }
 }
 
-const TABS_WITH_IMPORT = new Set([MOVEMENT_TYPES.IN, MOVEMENT_TYPES.ADJUSTMENT])
-
 export function InventoryControlPage() {
   const [tab, setTab] = useState(MOVEMENT_TYPES.IN)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const {
     items,
@@ -85,9 +84,16 @@ export function InventoryControlPage() {
   const [detailsTab, setDetailsTab] = useState(tab)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [dailyPriceOpen, setDailyPriceOpen] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
+
+  // Deep-link: /inventory/control?alerts=1 → open Stock Alerts
+  useEffect(() => {
+    if (searchParams.get('alerts') !== '1') return
+    setAlertsOpen(true)
+    const next = new URLSearchParams(searchParams)
+    next.delete('alerts')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
   const [exportLoading, setExportLoading] = useState(false)
-  const [importLoading, setImportLoading] = useState(false)
   const [productActionLoading, setProductActionLoading] = useState(false)
 
   function handleTabChange(nextTab) {
@@ -219,32 +225,6 @@ export function InventoryControlPage() {
     }
   }
 
-  // async function handleImport(rows) {
-  //   if (!TABS_WITH_IMPORT.has(tab)) {
-  //     return { success: false, error: 'Import is not available for this tab' }
-  //   }
-  //   setImportLoading(true)
-  //   try {
-  //     const result = await apiClient.post(endpoints.control.import, {
-  //       movementType: tab,
-  //       rows,
-  //     })
-  //     if (!result.success) {
-  //       return { success: false, error: result.error || 'Import failed' }
-  //     }
-  //     const data = result.data || {}
-  //     const imported = Number(data.imported) || 0
-  //     if (imported > 0) {
-  //       toastSuccess(`Imported ${imported} row(s)`)
-  //       void reloadSummary?.()
-  //       void reload?.()
-  //     }
-  //     return { success: imported > 0, error: imported ? null : 'No rows imported' }
-  //   } finally {
-  //     setImportLoading(false)
-  //   }
-  // }
-
   function openDetails(row) {
     setDetailsTab(row?.movementType || tab)
     setDetailsTarget(row)
@@ -265,13 +245,6 @@ export function InventoryControlPage() {
             actions={
               <ControlSecondaryActions
                 onExport={handleExport}
-                onImport={() => {
-                  if (!TABS_WITH_IMPORT.has(tab)) {
-                    toastInfo('Import is available on Stock In and Adjustment tabs')
-                    return
-                  }
-                  setImportOpen(true)
-                }}
                 exportLoading={exportLoading}
               />
             }
@@ -438,14 +411,6 @@ export function InventoryControlPage() {
         onOpenChange={setDailyPriceOpen}
         onChanged={() => void reloadSummary?.()}
       />
-
-      {/* <ImportControlDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        movementType={tab}
-        loading={importLoading}
-        onSubmit={handleImport}
-      /> */}
     </div>
   )
 }

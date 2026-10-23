@@ -1,6 +1,10 @@
 import nodemailer from 'nodemailer'
 import { buildLoginCredentialsEmail } from './templates/login.email.js'
 import { buildLeaveDecisionEmail } from './templates/leave-decision.email.js'
+import {
+  buildPurchaseOrderInvoiceEmail,
+  buildPurchaseOrderInvoiceSentBmEmail,
+} from './templates/purchase-order-invoice.email.js'
 
 let transporter = null
 
@@ -28,17 +32,28 @@ function getTransporter() {
   return transporter
 }
 
-async function sendMail({ to, subject, text, html }) {
+async function sendMail({ to, subject, text, html, attachments = [] }) {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@fluxone.local'
 
   if (!smtpConfigured()) {
-    console.info('[mail] SMTP not configured — stubbing email', { to, subject })
+    console.info('[mail] SMTP not configured — stubbing email', {
+      to,
+      subject,
+      attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
+    })
     return { sent: false, stubbed: true }
   }
 
   try {
     const tx = getTransporter()
-    await tx.sendMail({ from, to, subject, text, html })
+    await tx.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html,
+      attachments: Array.isArray(attachments) ? attachments : [],
+    })
     console.info('[mail] Email sent', { to, subject })
     return { sent: true, stubbed: false }
   } catch (err) {
@@ -71,5 +86,43 @@ export async function sendLoginCredentialsEmail(payload) {
 // Notify BM by email when Admin approves/rejects their leave (non-blocking).
 export async function sendLeaveDecisionEmail(payload) {
   const { subject, text, html } = buildLeaveDecisionEmail(payload)
+  return sendMail({ to: payload.toEmail, subject, text, html })
+}
+
+// TL §10.3 — send invoice PDF to supplier representative (non-blocking / SMTP stub)
+export async function sendPurchaseOrderInvoiceEmail(payload) {
+  const { subject, text, html } = buildPurchaseOrderInvoiceEmail(payload)
+  const filename = payload.filename || `${payload.invoiceNumber || 'invoice'}.pdf`
+  const attachments = payload.pdfBuffer
+    ? [
+        {
+          filename,
+          content: payload.pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ]
+    : []
+
+  const result = await sendMail({
+    to: payload.toEmail,
+    subject,
+    text,
+    html,
+    attachments,
+  })
+  if (!result.sent && result.stubbed) {
+    console.info('[mail] Stub PO invoice email', {
+      to: payload.toEmail,
+      invoiceNumber: payload.invoiceNumber,
+      orderNumber: payload.orderNumber,
+      filename,
+    })
+  }
+  return result
+}
+
+// Confirm to BM that supplier invoice email was attempted / sent
+export async function sendPurchaseOrderInvoiceSentBmEmail(payload) {
+  const { subject, text, html } = buildPurchaseOrderInvoiceSentBmEmail(payload)
   return sendMail({ to: payload.toEmail, subject, text, html })
 }

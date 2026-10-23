@@ -74,7 +74,8 @@ export async function downloadBarcodePdf({ product, pngUrl }) {
   return { filename }
 }
 
-// Download purchase order as PDF from structured order detail.
+// Legacy single-dump PO PDF — prefer TL §10 per-supplier invoices via purchaseOrderInvoiceExport.
+// Kept as fallback when no formal invoices exist yet (e.g. pre-migration approved orders).
 export function downloadPurchaseOrderPdf(order) {
   if (!order) throw new Error('Order is missing')
 
@@ -118,18 +119,32 @@ export function downloadPurchaseOrderPdf(order) {
   y += 6
 
   doc.setFont('helvetica', 'normal')
-  const lines = Array.isArray(order.lines) ? order.lines : []
-  for (const line of lines) {
+  // Prefer company blocks when present (multi-supplier orders)
+  const companies = Array.isArray(order.companies) ? order.companies : []
+  const flatLines =
+    companies.length > 0
+      ? companies.flatMap((c) =>
+          (c.lines || []).map((line) => ({
+            ...line,
+            name: line.name || line.itemName,
+            _company: c.companyName,
+          })),
+        )
+      : Array.isArray(order.lines)
+        ? order.lines
+        : []
+
+  for (const line of flatLines) {
     if (y > 275) {
       doc.addPage()
       y = 18
     }
-    const title = `${line.name || 'Item'}${line.itemCode ? ` (${line.itemCode})` : ''}`
+    const title = `${line._company ? `[${line._company}] ` : ''}${line.name || 'Item'}${line.itemCode ? ` (${line.itemCode})` : ''}`
     const titleLines = doc.splitTextToSize(title, 78)
     doc.text(titleLines, cols[0].x, y)
     doc.text(String(line.scale || '—'), cols[1].x, y)
     doc.text(String(line.quantity ?? '—'), cols[2].x, y)
-    doc.text(String(line.unitCost ?? '—'), cols[3].x, y)
+    doc.text(String(line.unitCost ?? line.lastPurchasePrice ?? '—'), cols[3].x, y)
     y += Math.max(titleLines.length * 5, 7)
   }
 

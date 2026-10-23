@@ -81,9 +81,9 @@ export async function listTenantAdminUserIds(tenantId) {
   return listUserIdsByRole(tenantId, ROLES.B2B_ADMIN)
 }
 
-// Branch Managers scoped to a branch (fallback: all tenant BMs)
+// Branch Managers for one branch only — never broadcast to other branches
 export async function listBranchManagerIdsForBranch(tenantId, branchId) {
-  if (!branchId) return listUserIdsByRole(tenantId, ROLES.BRANCH_MANAGER)
+  if (!branchId) return []
   const { rows } = await tenantQuery(
     tenantId,
     `
@@ -96,9 +96,25 @@ export async function listBranchManagerIdsForBranch(tenantId, branchId) {
     `,
     [ROLE_IDS[ROLES.BRANCH_MANAGER], branchId],
   )
-  const ids = rows.map((r) => r.id)
-  if (ids.length) return ids
-  return listUserIdsByRole(tenantId, ROLES.BRANCH_MANAGER)
+  return rows.map((r) => r.id)
+}
+
+// Inventory Managers for one branch only — stock requests must not cross branches
+export async function listInventoryManagerIdsForBranch(tenantId, branchId) {
+  if (!branchId) return []
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT id
+      FROM users
+      WHERE tenant_id = $1
+        AND role_id = $2
+        AND is_active = true
+        AND branch_id = $3
+    `,
+    [ROLE_IDS[ROLES.INVENTORY_MANAGER], branchId],
+  )
+  return rows.map((r) => r.id)
 }
 
 // Active users linked to a branch (users.branch_id or staff row); optional excludes

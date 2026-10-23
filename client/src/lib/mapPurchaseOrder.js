@@ -80,6 +80,8 @@ export function mapPurchaseOrder(row = {}) {
     rejectedAt: row.rejectedAt || row.rejected_at || null,
     rejectionNotes: row.rejectionNotes || row.rejection_notes || '',
     receivedAt: row.receivedAt || row.received_at || null,
+    completedBy: row.completedBy ?? row.completed_by ?? null,
+    completedByName: row.completedByName || row.completed_by_name || '',
     companiesNumber: Number(
       row.companiesNumber ?? row.companies_number ?? companies.length ?? 0,
     ),

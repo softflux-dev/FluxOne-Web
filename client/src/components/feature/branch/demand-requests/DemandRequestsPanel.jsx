@@ -136,8 +136,16 @@ export function DemandRequestsPanel() {
 
   async function handlePrint(order) {
     const result = await printOrder(order)
-    if (!result.success) toastError(result.error || 'PDF download failed')
-    else toastSuccess('Order PDF downloaded')
+    if (!result.success) {
+      toastError(result.error || 'PDF download failed')
+      return
+    }
+    const count = result.data?.count
+    if (result.data?.mode === 'invoices' && count) {
+      toastSuccess(`Downloaded ${count} supplier invoice PDF${count === 1 ? '' : 's'}`)
+    } else {
+      toastSuccess('Order PDF downloaded')
+    }
   }
 
   return (

@@ -1,7 +1,8 @@
-// Normalize notification display — short header + full gray detail body
+// Normalize notification display — short header + full gray detail body + branch capsule
 export function displayNotification(n = {}) {
   const type = String(n.type || '')
   const meta = n.meta && typeof n.meta === 'object' ? n.meta : {}
+  const branchName = meta.branchName || null
 
   if (type === 'leave_request') {
     const employeeName =
@@ -13,19 +14,20 @@ export function displayNotification(n = {}) {
     return {
       title: `New Leave Request From ${employeeName}`,
       body: detail,
+      branchName: meta.branchName || null,
     }
   }
 
   if (type === 'stock_request') {
     const product = meta.productName || 'product'
     const qty = meta.requiredQuantity
-    const branch = meta.branchName || 'branch'
     return {
       title: n.title || 'Stock request',
       body:
         n.body && n.body !== n.title
           ? n.body
-          : `${branch}: ${qty != null ? `${qty} unit(s) of ` : ''}${product}`,
+          : `${qty != null ? `${qty} unit(s) of ` : ''}${product}`,
+      branchName,
     }
   }
 
@@ -33,6 +35,7 @@ export function displayNotification(n = {}) {
     return {
       title: n.title || 'Holiday Announced',
       body: n.body && n.body !== n.title ? n.body : n.body || '',
+      branchName,
     }
   }
 
@@ -40,11 +43,13 @@ export function displayNotification(n = {}) {
     return {
       title: n.title || 'New Custom Variant Added to Catalog',
       body: n.body && n.body !== n.title ? n.body : n.body || '',
+      branchName,
     }
   }
 
   return {
     title: n.title || 'Notification',
     body: n.body && n.body !== n.title ? n.body : n.body || '',
+    branchName,
   }
 }

@@ -1,12 +1,11 @@
 import {
   createNotificationsForUsers,
   listTenantAdminUserIds,
-  listUserIdsByRole,
   listBranchUserIds,
   listBranchManagerIdsForBranch,
+  listInventoryManagerIdsForBranch,
   createNotification,
 } from './notifications.model.js'
-import { ROLES } from '../../config/constants.js'
 
 // BM submitted personal leave → notify all tenant admins
 export async function notifyAdminsOfLeaveRequest(tenantId, leave, { managerName, branchName }) {
@@ -68,17 +67,23 @@ export async function notifyBmOfLeaveDecision(tenantId, leave, { status, decisio
   })
 }
 
-// BM replenishment / low-stock request → notify Inventory Managers
+// BM replenishment / low-stock request → notify IMs on the SAME branch only
 export async function notifyInventoryManagersOfStockRequest(
   tenantId,
   request,
   { managerName, branchName } = {},
 ) {
-  const imIds = await listUserIdsByRole(tenantId, ROLES.INVENTORY_MANAGER)
+  const branchId = request?.branchId || null
+  if (!branchId) {
+    console.warn('[notifications] stock_request missing branchId — skipping IM notify')
+    return []
+  }
+
+  const imIds = await listInventoryManagerIdsForBranch(tenantId, branchId)
   if (!imIds.length) return []
 
   const name = managerName || 'Branch Manager'
-  const branch = branchName || 'a branch'
+  const branch = branchName || request.branchName || 'a branch'
   const product = request.productName || 'a product'
   const qty = Number(request.remainingQuantity)
   const qtyLabel = Number.isFinite(qty) ? String(Math.floor(qty)) : '—'
@@ -87,20 +92,22 @@ export async function notifyInventoryManagersOfStockRequest(
     ? 'Low Stock Alert From Branch'
     : 'New Replenishment Request'
   const body = isAlert
-    ? `${name} (${branch}) flagged low stock for ${product}. Required quantity: ${qtyLabel}.`
-    : `${name} (${branch}) requested ${qtyLabel} unit(s) of ${product}. Open Stock Alerts to process.`
+    ? `${name} flagged low stock for ${product}. Required quantity: ${qtyLabel}. Open Inventory Overview → Stock Alerts, then add stock via Control → Stock In or Generate Order.`
+    : `${name} requested ${qtyLabel} unit(s) of ${product}. Open Inventory Overview → Stock Alerts, then add stock via Control → Stock In or Generate Order.`
 
+  // Deep-link: IM Dashboard → Stock Alerts & Requests (highlight row)
   return createNotificationsForUsers(tenantId, imIds, {
     type: 'stock_request',
     title,
     body,
-    linkPath: `/inventory`,
+    linkPath: `/inventory?focus=alerts&requestId=${request.id}`,
     entityType: 'stock_request',
     entityId: request.id,
     meta: {
       stockRequestId: request.id,
       productId: request.productId || null,
       productName: product,
+      branchId,
       branchName: branch,
       managerName: name,
       kind: request.kind,
@@ -217,6 +224,7 @@ export async function notifyBranchManagersOfOrderRequest(
       itemCount: items,
       companyCount: companies,
       branchId,
+      branchName: order?.branchName || null,
     },
   })
 }
@@ -329,10 +337,47 @@ export async function notifyBranchManagersOfItemsReceived(
   })
 }
 
-// IM added custom variant type/value → upserted into catalog; notify BMs to review
+// TL §10.3 — supplier invoice emailed → notify Branch Managers (in-app)
+export async function notifyBranchManagersOfInvoiceEmailed(
+  tenantId,
+  order,
+  { invoiceNumber, supplierName, sentTo, stubbed = false, actorName } = {},
+) {
+  const branchId = order?.branchId || null
+  const bmIds = await listBranchManagerIdsForBranch(tenantId, branchId)
+  if (!bmIds.length) return []
+
+  const orderRef = order?.orderNumber || order?.id || '—'
+  const inv = invoiceNumber || '—'
+  const who = actorName || 'A team member'
+  const title = stubbed ? 'Invoice email stubbed (SMTP off)' : 'Invoice emailed to supplier'
+  const body = stubbed
+    ? `${who} prepared invoice ${inv} for order #${orderRef} (${supplierName || 'supplier'}) to ${sentTo || '—'}, but SMTP is not configured.`
+    : `${who} emailed invoice ${inv} for order #${orderRef} to ${sentTo || 'the supplier'} (${supplierName || 'supplier'}).`
+
+  return createNotificationsForUsers(tenantId, bmIds, {
+    type: 'order_invoice_emailed',
+    title,
+    body,
+    linkPath: `/branch/inventory?tab=demand&highlight=${order.id}`,
+    entityType: 'purchase_order',
+    entityId: order.id,
+    meta: {
+      purchaseOrderId: order.id,
+      orderNumber: orderRef,
+      invoiceNumber: inv,
+      supplierName: supplierName || null,
+      sentTo: sentTo || null,
+      stubbed: Boolean(stubbed),
+      actorName: who,
+    },
+  })
+}
+
+// IM added custom variant → notify BMs on the SAME branch only
 export async function notifyBranchManagersOfCustomVariants(
   tenantId,
-  { productId, productName, creatorName, additions } = {},
+  { productId, productName, creatorName, additions, branchId = null } = {},
 ) {
   const rows = Array.isArray(additions) ? additions : []
   const actionable = rows.filter(
@@ -342,7 +387,7 @@ export async function notifyBranchManagersOfCustomVariants(
   )
   if (!actionable.length) return []
 
-  const bmIds = await listUserIdsByRole(tenantId, ROLES.BRANCH_MANAGER)
+  const bmIds = await listBranchManagerIdsForBranch(tenantId, branchId)
   if (!bmIds.length) return []
 
   const product = productName || 'a product'
@@ -374,6 +419,7 @@ export async function notifyBranchManagersOfCustomVariants(
       productId: productId || null,
       productName: product,
       creatorName: creator,
+      branchId: branchId || null,
       additions: actionable,
     },
   })

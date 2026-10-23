@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { BranchCapsule } from '@/components/shared/BranchRoleCapsules'
 import { displayNotification } from '@/lib/notificationDisplay'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { cn } from '@/lib/utils'
@@ -109,7 +110,7 @@ export function NotificationsPage() {
           ) : (
             <ul className="divide-y divide-border">
               {items.map((n) => {
-                const { title, body } = displayNotification(n)
+                const { title, body, branchName } = displayNotification(n)
                 return (
                   <li
                     key={n.id}
@@ -131,6 +132,11 @@ export function NotificationsPage() {
                         )}
                         <p className="text-sm font-semibold text-slate-900">{title}</p>
                       </div>
+                      {branchName ? (
+                        <div className="mt-1 pl-4">
+                          <BranchCapsule branchName={branchName} />
+                        </div>
+                      ) : null}
                       {body ? (
                         <p className="mt-0.5 pl-4 whitespace-normal break-words text-xs leading-relaxed text-slate-600">
                           {body}

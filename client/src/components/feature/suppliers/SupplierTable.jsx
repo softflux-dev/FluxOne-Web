@@ -1,7 +1,6 @@
 import { Building2 } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
-import { ProductStatusToggle } from '@/components/feature/products/ProductStatusToggle'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import {
   Table,
@@ -118,10 +117,15 @@ export function SupplierTable({
                           {displaySupplierRef(row)}
                         </p>
                       </div>
-                      <ProductStatusToggle
-                        status={row.isActive === false ? 'inactive' : 'active'}
-                        loading={statusUpdatingId === row.id}
-                      />
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          row.isActive === false
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {row.isActive === false ? 'Blocked' : 'Active'}
+                      </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-600">{row.companyPhone || '—'}</p>
                     <p className="mt-0.5 text-xs text-slate-500">
@@ -216,10 +220,15 @@ export function SupplierTable({
                       <span className="block font-mono">{row.bankAccountNumber || '—'}</span>
                     </TableCell>
                     <TableCell className="px-2 py-3">
-                      <ProductStatusToggle
-                        status={row.isActive === false ? 'inactive' : 'active'}
-                        loading={statusUpdatingId === row.id}
-                      />
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          row.isActive === false
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {row.isActive === false ? 'Blocked' : 'Active'}
+                      </span>
                     </TableCell>
                     <TableActionsCell sticky>
                       <SupplierRowActions

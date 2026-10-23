@@ -110,9 +110,13 @@ export function SuppliersPage() {
         <PageHeader
           title="Supplier Management"
           description={
-            canModerate
-              ? 'Vendor directory — block inactive companies so they cannot be used on new orders'
-              : 'Vendor directory — add and edit supplier companies'
+            canWrite && canModerate
+              ? 'Vendor directory — add, edit, or block supplier companies'
+              : canModerate
+                ? 'Vendor directory — view and block companies (cannot be used on new orders)'
+                : canWrite
+                  ? 'Vendor directory — add and edit supplier companies (block is Branch Manager only)'
+                  : 'Vendor directory — view supplier companies'
           }
           actions={
             canWrite ? (

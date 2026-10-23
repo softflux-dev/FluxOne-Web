@@ -6,10 +6,13 @@ import {
   detail,
   generate,
   history,
+  invoiceDetail,
   list,
+  listInvoices,
   print,
   recordReceival,
   reject,
+  sendInvoice,
   sendSmsToSupplier,
   updatePending,
 } from './purchase_order.controller.js'
@@ -20,8 +23,10 @@ import {
   generateOrderSchema,
   listOrdersSchema,
   orderIdParamsSchema,
+  orderInvoiceParamsSchema,
   recordReceivalSchema,
   rejectOrderSchema,
+  sendOrderInvoiceSchema,
   updatePendingOrderSchema,
 } from './purchase_order.validator.js'
 
@@ -32,6 +37,26 @@ router.post('/', requirePermission('orders:generate'), validate(generateOrderSch
 router.get('/:id', requirePermission('orders:read'), validate(orderIdParamsSchema), asyncHandler(detail))
 router.get('/:id/history', requirePermission('orders:read'), validate(orderIdParamsSchema), asyncHandler(history))
 router.get('/:id/print', requirePermission('orders:read'), validate(orderIdParamsSchema), asyncHandler(print))
+
+// TL §10 — purchase order invoices (IM + BM)
+router.get(
+  '/:id/invoices',
+  requirePermission('orders:read'),
+  validate(orderIdParamsSchema),
+  asyncHandler(listInvoices),
+)
+router.get(
+  '/:id/invoices/:invoiceId',
+  requirePermission('orders:read'),
+  validate(orderInvoiceParamsSchema),
+  asyncHandler(invoiceDetail),
+)
+router.post(
+  '/:id/invoices/:invoiceId/send',
+  requirePermission('orders:read'),
+  validate(sendOrderInvoiceSchema),
+  asyncHandler(sendInvoice),
+)
 
 // BM only (orders:approve) — IM has no post-submit edit; Pending-only enforced in model
 router.patch(

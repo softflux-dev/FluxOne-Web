@@ -45,6 +45,7 @@ function StockAlertsTableComponent({
   pagination,
   onPageChange,
   onPageSizeChange,
+  highlightId = '',
   className,
 }) {
   const list = Array.isArray(items) ? items : []
@@ -56,12 +57,14 @@ function StockAlertsTableComponent({
 
   return (
     <SurfaceCard
+      id="stock-alerts-panel"
       className={cn(
         'cursor-pointer transition-shadow duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(65,34,131,0.1)]',
+        highlightId && 'ring-2 ring-purple-300',
         className,
       )}
       title="Stock Alerts & Requests"
-      description="Alert or Request from branch manager"
+      description="Alert or Request from branch manager — add stock via Control → Stock In, or Generate Order"
     >
       {loading ? (
         <TableRowsSkeleton rows={5} />
@@ -79,7 +82,10 @@ function StockAlertsTableComponent({
             {list.map((row) => (
               <article
                 key={row.id}
-                className="cursor-pointer rounded-xl border border-border bg-slate-50/60 px-3 py-3 transition-colors hover:bg-white hover:shadow-sm"
+                className={cn(
+                  'cursor-pointer rounded-xl border border-border bg-slate-50/60 px-3 py-3 transition-colors hover:bg-white hover:shadow-sm',
+                  highlightId === row.id && 'ring-2 ring-purple-300 bg-purple-50/50',
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -115,7 +121,13 @@ function StockAlertsTableComponent({
               </TableHeader>
               <TableBody>
                 {list.map((row) => (
-                  <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/80">
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      'cursor-pointer hover:bg-slate-50/80',
+                      highlightId === row.id && 'bg-purple-50/70',
+                    )}
+                  >
                     <TableCell
                       className="truncate px-2 py-3 font-mono text-xs text-slate-500"
                       title={displayAlertId(row)}

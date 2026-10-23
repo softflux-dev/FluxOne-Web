@@ -86,6 +86,13 @@ export const PURCHASE_ORDER_EVENT_TYPES = {
   COMPLETED: 'completed',
 }
 
+// TL §10.3 — PDF / Send / Excel allowed once order left Pending review
+export const PURCHASE_ORDER_INVOICE_DOWNLOAD_STATUSES = [
+  PURCHASE_ORDER_STATUS.APPROVED,
+  PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED,
+  PURCHASE_ORDER_STATUS.RECEIVED,
+]
+
 export const STOCK_REQUEST_KIND = {
   ALERT: 'alert',
   REQUEST: 'request',
@@ -149,11 +156,12 @@ export const PERMISSIONS = {
   'stock:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'staff:lookup': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'stock-requests:write': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
+  // §2.3 locked: IM Add/Edit/View · BM View/Block · Delete = B2B only
   'suppliers:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
-  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
-  // Block / Unblock — BM + B2B (no soft-delete; is_active only)
+  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
+  // Block / Unblock — BM + B2B (BM cannot hard-delete)
   'suppliers:moderate': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
-  // Hard delete — B2B only (BM cannot delete suppliers)
+  // Hard delete — B2B only
   'suppliers:delete': [ROLES.B2B_ADMIN],
   'orders:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'orders:generate': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],

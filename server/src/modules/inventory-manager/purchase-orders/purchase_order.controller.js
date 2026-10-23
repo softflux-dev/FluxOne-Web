@@ -12,15 +12,27 @@ import {
   sendPurchaseOrderSms,
   updatePendingPurchaseOrder,
 } from './purchase_order.model.js'
+import {
+  canDownloadOrderInvoices,
+  getInvoiceById,
+  listBranchManagerContactsForOrder,
+  listInvoicesForOrder,
+  markInvoiceSent,
+} from './purchase_order_invoice.model.js'
 import { resolveInventoryCreateScope, resolveInventoryScope } from '../shared.access.js'
 import { fail, failFromError, success } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 import {
+  notifyBranchManagersOfInvoiceEmailed,
   notifyBranchManagersOfItemsReceived,
   notifyBranchManagersOfOrderRequest,
   notifyInventoryManagerOfOrderApproved,
   notifyInventoryManagerOfOrderRejected,
 } from '../../notifications/notifications.service.js'
+import {
+  sendPurchaseOrderInvoiceEmail,
+  sendPurchaseOrderInvoiceSentBmEmail,
+} from '../../../mail/mail.service.js'
 
 export async function list(req, res) {
   try {
@@ -123,10 +135,19 @@ export async function cancel(req, res) {
 export async function approve(req, res) {
   try {
     const { tenantId, branchId } = resolveInventoryScope(req)
-    const order = await approvePurchaseOrder(tenantId, req.validated.params.id, req.user.id, {
+    const orderId = req.validated.params.id
+    const order = await approvePurchaseOrder(tenantId, orderId, req.user.id, {
       branchId,
     })
     if (!order) return fail(res, 'Purchase order not found', 404)
+
+    // Attach generated invoices for BM/IM clients (TL §10)
+    let invoices = null
+    try {
+      invoices = await listInvoicesForOrder(tenantId, orderId, { branchId })
+    } catch (invoiceErr) {
+      console.error('Order approve invoice list failed:', invoiceErr.message)
+    }
 
     try {
       await notifyInventoryManagerOfOrderApproved(tenantId, order, {
@@ -136,7 +157,141 @@ export async function approve(req, res) {
       console.error('Order approve notification failed:', notifyErr.message)
     }
 
-    return success(res, order)
+    return success(res, { ...order, invoices })
+  } catch (err) {
+    return failFromError(res, err)
+  }
+}
+
+// TL §10 — list invoices for an order (IM + BM via orders:read)
+export async function listInvoices(req, res) {
+  try {
+    const { tenantId, branchId } = resolveInventoryScope(req)
+    const data = await listInvoicesForOrder(tenantId, req.validated.params.id, { branchId })
+    if (!data) return fail(res, 'Purchase order not found', 404)
+    return success(res, data)
+  } catch (err) {
+    return failFromError(res, err)
+  }
+}
+
+// TL §10 — invoice detail + locked line items (PDF/Excel/send consume this)
+export async function invoiceDetail(req, res) {
+  try {
+    const { tenantId, branchId } = resolveInventoryScope(req)
+    const orderId = req.validated.params.id
+    const invoiceId = req.validated.params.invoiceId
+
+    const order = await getPurchaseOrderById(tenantId, orderId, { branchId })
+    if (!order) return fail(res, 'Purchase order not found', 404)
+
+    const invoice = await getInvoiceById(tenantId, invoiceId, { branchId })
+    if (!invoice || invoice.purchaseOrderId !== orderId) {
+      return fail(res, 'Invoice not found for this order', 404)
+    }
+
+    return success(res, invoice)
+  } catch (err) {
+    return failFromError(res, err)
+  }
+}
+
+// TL §10.3 — email invoice PDF to supplier; confirm to BM (in-app + email)
+export async function sendInvoice(req, res) {
+  try {
+    const { tenantId, branchId } = resolveInventoryScope(req)
+    const orderId = req.validated.params.id
+    const invoiceId = req.validated.params.invoiceId
+    const { pdfBase64, filename } = req.validated.body
+
+    const order = await getPurchaseOrderById(tenantId, orderId, { branchId })
+    if (!order) return fail(res, 'Purchase order not found', 404)
+    if (!canDownloadOrderInvoices(order.status)) {
+      return fail(res, 'Invoices can only be sent after the order is approved', 400)
+    }
+
+    const invoice = await getInvoiceById(tenantId, invoiceId, { branchId })
+    if (!invoice || invoice.purchaseOrderId !== orderId) {
+      return fail(res, 'Invoice not found for this order', 404)
+    }
+
+    const toEmail = String(invoice.supplier?.representativeEmail || '').trim()
+    if (!toEmail) {
+      return fail(res, 'Supplier representative email is missing', 422)
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = Buffer.from(pdfBase64, 'base64')
+    } catch {
+      return fail(res, 'Invalid PDF attachment', 422)
+    }
+    if (!pdfBuffer?.length) return fail(res, 'PDF attachment is empty', 422)
+
+    const safeFilename =
+      filename && String(filename).toLowerCase().endsWith('.pdf')
+        ? String(filename)
+        : `${invoice.invoiceNumber || 'invoice'}.pdf`
+
+    const mailResult = await sendPurchaseOrderInvoiceEmail({
+      toEmail,
+      supplierName: invoice.supplier?.companyName,
+      representativeName: invoice.supplier?.representativeName,
+      invoiceNumber: invoice.invoiceNumber,
+      orderNumber: invoice.orderNumber || order.orderNumber,
+      branchName: invoice.branch?.name || order.branchName,
+      companyName: 'FluxOne Inventory',
+      pdfBuffer,
+      filename: safeFilename,
+    })
+
+    // Persist send attempt even when SMTP stubbed (audit trail)
+    const sentMeta = await markInvoiceSent(null, tenantId, invoiceId, {
+      sentTo: toEmail,
+      sentAt: new Date(),
+    })
+
+    const actorName = req.user?.fullName || req.user?.name || 'Team member'
+    try {
+      await notifyBranchManagersOfInvoiceEmailed(tenantId, order, {
+        invoiceNumber: invoice.invoiceNumber,
+        supplierName: invoice.supplier?.companyName,
+        sentTo: toEmail,
+        stubbed: Boolean(mailResult.stubbed),
+        actorName,
+      })
+    } catch (notifyErr) {
+      console.error('Invoice emailed BM notification failed:', notifyErr.message)
+    }
+
+    // Email confirmation to BM(s) — non-blocking
+    try {
+      const managers = await listBranchManagerContactsForOrder(tenantId, order.branchId)
+      for (const bm of managers) {
+        if (!bm.email) continue
+        await sendPurchaseOrderInvoiceSentBmEmail({
+          toEmail: bm.email,
+          recipientName: bm.fullName,
+          invoiceNumber: invoice.invoiceNumber,
+          orderNumber: invoice.orderNumber || order.orderNumber,
+          supplierName: invoice.supplier?.companyName,
+          sentTo: toEmail,
+          stubbed: Boolean(mailResult.stubbed),
+        })
+      }
+    } catch (bmMailErr) {
+      console.error('Invoice emailed BM email failed:', bmMailErr.message)
+    }
+
+    return success(res, {
+      invoiceId,
+      invoiceNumber: invoice.invoiceNumber,
+      sentTo: toEmail,
+      sent: Boolean(mailResult.sent),
+      stubbed: Boolean(mailResult.stubbed),
+      error: mailResult.error || null,
+      lastSentAt: sentMeta?.lastSentAt || null,
+    })
   } catch (err) {
     return failFromError(res, err)
   }

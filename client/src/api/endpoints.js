@@ -53,16 +53,13 @@ export const endpoints = {
   },
   notifications: {
     list: '/notifications',
-    unreadCount: '/notifications/unread-count',
     read: (id) => `/notifications/${id}/read`,
     readAll: '/notifications/read-all',
-    remove: (id) => `/notifications/${id}`,
   },
   dashboard: {
     overview: '/inventory/dashboard/overview',
     alerts: '/inventory/dashboard/alerts',
     stockGraph: '/inventory/dashboard/stock-graph',
-    summary: '/inventory/dashboard/overview',
   },
   branch: {
     dashboard: '/branch/dashboard',
@@ -143,18 +140,6 @@ export const endpoints = {
     taxProfitDefaults: '/inventory/products/tax-profit-defaults',
     offers: '/inventory/products/offers',
   },
-  // @deprecated prefer products.* — kept for older slices
-  categories: {
-    list: '/inventory/products/categories',
-    create: '/inventory/products/categories',
-    update: (id) => `/inventory/products/categories/${id}`,
-  },
-  items: {
-    list: '/inventory/products',
-    create: '/inventory/products',
-    update: (id) => `/inventory/products/${id}`,
-    import: '/inventory/products/import',
-  },
   control: {
     summary: '/inventory/control/summary',
     dailyPrices: '/inventory/control/daily-prices',
@@ -163,7 +148,6 @@ export const endpoints = {
     threshold: (id) => `/inventory/control/thresholds/${id}`,
     alerts: '/inventory/control/alerts',
     export: '/inventory/control/export',
-    import: '/inventory/control/import',
     priceRule: '/inventory/control/price-rule',
     stockIn: '/inventory/control/stock-in',
     stockInFromOrder: '/inventory/control/stock-in/from-order',
@@ -177,31 +161,12 @@ export const endpoints = {
     expiredItem: (id) => `/inventory/control/expired/${id}`,
     others: '/inventory/control/others',
     otherItem: (id) => `/inventory/control/others/${id}`,
-    transfers: '/inventory/control/transfers',
   },
   lookups: {
     employees: '/inventory/lookups/employees',
     branches: '/inventory/lookups/branches',
   },
-  stockIn: {
-    list: '/inventory/control/stock-in',
-    create: '/inventory/control/stock-in',
-  },
-  stockOut: {
-    list: '/inventory/control/stock-out',
-  },
-  adjustments: {
-    list: '/inventory/control/adjustments',
-    create: '/inventory/control/adjustments',
-  },
-  damaged: {
-    list: '/inventory/control/damaged',
-    create: '/inventory/control/damaged',
-  },
-  expired: {
-    list: '/inventory/control/expired',
-  },
-    suppliers: {
+  suppliers: {
     list: '/inventory/suppliers',
     create: '/inventory/suppliers',
     update: (id) => `/inventory/suppliers/${id}`,
@@ -213,13 +178,14 @@ export const endpoints = {
     create: '/inventory/purchase-orders',
     detail: (id) => `/inventory/purchase-orders/${id}`,
     history: (id) => `/inventory/purchase-orders/${id}/history`,
-    print: (id) => `/inventory/purchase-orders/${id}/print`,
     update: (id) => `/inventory/purchase-orders/${id}`,
     approve: (id) => `/inventory/purchase-orders/${id}/approve`,
     reject: (id) => `/inventory/purchase-orders/${id}/reject`,
-    sendSms: (id) => `/inventory/purchase-orders/${id}/send-sms`,
-    cancel: (id) => `/inventory/purchase-orders/${id}/cancel`,
     receivals: (id) => `/inventory/purchase-orders/${id}/receivals`,
     complete: (id) => `/inventory/purchase-orders/${id}/complete`,
+    // TL §10 — one invoice per supplier company
+    invoices: (id) => `/inventory/purchase-orders/${id}/invoices`,
+    invoiceDetail: (id, invoiceId) => `/inventory/purchase-orders/${id}/invoices/${invoiceId}`,
+    invoiceSend: (id, invoiceId) => `/inventory/purchase-orders/${id}/invoices/${invoiceId}/send`,
   },
 }

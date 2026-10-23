@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -17,9 +18,11 @@ import {
 } from '@/components/ui/table'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { OrderTimeline } from '@/components/feature/orders/OrderTimeline'
+import { OrderInvoicesSection } from '@/components/feature/orders/OrderInvoicesSection'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { money } from '@/lib/mapProduct'
 import { OrderStatusBadge } from '@/lib/orderStatus'
+import { canDownloadPurchaseOrderInvoices } from '@/lib/purchaseOrderInvoiceExport'
 
 function lineReceivedLabel(line) {
   const ordered = Number(line.quantity) || 0
@@ -83,7 +86,7 @@ function CompanyLinesTable({ lines = [] }) {
   )
 }
 
-// Shared IM/BM read-only order detail + TL §8 timeline
+// Shared IM/BM read-only order detail + TL §8 timeline + §10 invoices
 export function OrderDetailPanel({
   open,
   onOpenChange,
@@ -91,11 +94,14 @@ export function OrderDetailPanel({
   loading = false,
   onPrint,
 }) {
+  const [invoiceBusy, setInvoiceBusy] = useState(false)
+
   if (!order) return null
 
   const companies = Array.isArray(order.companies) ? order.companies : []
   const lines = order.lines || []
   const events = order.events || []
+  const hasFormalInvoices = canDownloadPurchaseOrderInvoices(order.status)
   const companyBlocks =
     companies.length > 0
       ? companies
@@ -165,6 +171,21 @@ export function OrderDetailPanel({
               <DateTimeLines value={order.receivedAt} className="inline-flex font-medium text-slate-900" />
             </span>
           ) : null}
+          {/* TL §8 — Mark Complete actor */}
+          {order.completedByName || order.status === 'received' ? (
+            <span>
+              Completed by:{' '}
+              <strong className="text-slate-900">
+                {order.completedByName || 'Inventory Manager'}
+              </strong>
+              {order.receivedAt ? (
+                <>
+                  {' · '}
+                  <DateTimeLines value={order.receivedAt} className="inline-flex" />
+                </>
+              ) : null}
+            </span>
+          ) : null}
         </div>
 
         {order.rejectionNotes ? (
@@ -202,6 +223,13 @@ export function OrderDetailPanel({
           </p>
         ) : null}
 
+        {/* TL §10 — hide while pending / rejected / cancelled */}
+        <OrderInvoicesSection
+          order={order}
+          busy={loading || invoiceBusy}
+          onBusyChange={setInvoiceBusy}
+        />
+
         <OrderTimeline events={events} />
 
         <DialogFooter className="flex-wrap gap-2">
@@ -213,12 +241,13 @@ export function OrderDetailPanel({
           >
             Close
           </Button>
-          {onPrint ? (
+          {/* Prefer per-supplier invoices section; keep legacy dump only when no formal invoices */}
+          {onPrint && !hasFormalInvoices ? (
             <Button
               type="button"
               variant="outline"
               className="w-full cursor-pointer sm:w-auto"
-              disabled={loading}
+              disabled={loading || invoiceBusy}
               onClick={() => onPrint?.(order)}
             >
               Download PDF

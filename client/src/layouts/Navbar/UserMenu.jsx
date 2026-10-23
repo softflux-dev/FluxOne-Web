@@ -7,6 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { BranchRoleCapsules } from '@/components/shared/BranchRoleCapsules'
 import { UserAvatar } from '@/components/shared/UserAvatar'
 import { useAuthSession } from '@/hooks/useAuthSession'
 import { useTheme } from '@/context/ThemeContext'
@@ -21,6 +22,7 @@ export function UserMenu({ className }) {
   const { theme, toggleTheme } = useTheme()
   const name = user?.name || 'User'
   const roleLabel = roleDisplayName(role)
+  const branchName = user?.branchName || null
   const userId = user?.email || user?.id || '—'
   const profilePath = profilePathForRole(role)
   const imageUrl = user?.imageUrl || null
@@ -41,9 +43,12 @@ export function UserMenu({ className }) {
               <p className="truncate text-sm leading-tight font-semibold text-slate-900 dark:text-slate-100">
                 {name}
               </p>
-              <p className="truncate text-xs leading-tight text-slate-500 dark:text-slate-400">
-                {roleLabel}
-              </p>
+              <BranchRoleCapsules
+                role={role}
+                roleLabel={roleLabel}
+                branchName={branchName}
+                className="mt-1"
+              />
             </div>
             <ChevronDown className="size-4 shrink-0 text-slate-400" strokeWidth={1.75} />
           </div>
@@ -51,7 +56,7 @@ export function UserMenu({ className }) {
 
         <DropdownMenuContent
           align="end"
-          className="mt-2 w-64 rounded-2xl border border-border bg-white p-0 shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:bg-card dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+          className="mt-2 w-72 rounded-2xl border border-border bg-white p-0 shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:bg-card dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
         >
           <div className="flex items-center gap-3 px-4 py-3">
             <UserAvatar
@@ -65,8 +70,13 @@ export function UserMenu({ className }) {
               <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                 {name}
               </p>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400">{roleLabel}</p>
-              <p className="mt-0.5 truncate text-xs font-medium text-[#412283] dark:text-[#c084c1]">
+              {/* <BranchRoleCapsules
+                role={role}
+                roleLabel={roleLabel}
+                branchName={branchName}
+                className="mt-1"
+              /> */}
+              <p className="mt-1 truncate text-xs font-medium text-[#412283] dark:text-[#c084c1]">
                 {userId}
               </p>
             </div>

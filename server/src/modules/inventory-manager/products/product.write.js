@@ -973,7 +973,10 @@ async function resolveCreatorName(tenantId, userId) {
   return rows[0]?.name || 'Inventory Manager'
 }
 
-async function notifyCustomVariantCatalog(tenantId, { productId, productName, createdBy, catalogAdditions }) {
+async function notifyCustomVariantCatalog(
+  tenantId,
+  { productId, productName, createdBy, catalogAdditions, branchId = null },
+) {
   if (!catalogAdditions?.length) return
   try {
     const creatorName = await resolveCreatorName(tenantId, createdBy)
@@ -982,6 +985,7 @@ async function notifyCustomVariantCatalog(tenantId, { productId, productName, cr
       productName,
       creatorName,
       additions: catalogAdditions,
+      branchId,
     })
   } catch (err) {
     console.error('[products] Failed to notify BMs of custom variants:', err?.message || err)
@@ -1262,6 +1266,7 @@ export async function createVariantProduct(tenantId, payload) {
       productName: created.name,
       createdBy: payload.createdBy,
       catalogAdditions: catalogAdditionsFromMap(catalogMap),
+      branchId: payload.branchId || created.branchId || null,
     })
 
     return created
@@ -2036,6 +2041,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         productName: updated.name,
         createdBy: payload.createdBy,
         catalogAdditions: catalogAdditionsFromMap(catalogMap),
+        branchId: payload.branchId || updated.branchId || null,
       })
     }
 

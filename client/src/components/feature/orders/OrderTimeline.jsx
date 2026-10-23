@@ -36,6 +36,12 @@ function eventSummary(event) {
       )
     }
   }
+  if (event.eventType === 'completed') {
+    parts.push('Order closed — no further receivals')
+  }
+  if (event.eventType === 'approved' && Array.isArray(payload.invoiceNumbers) && payload.invoiceNumbers.length) {
+    parts.push(`Invoices: ${payload.invoiceNumbers.join(', ')}`)
+  }
   return parts.filter(Boolean).join(' · ')
 }
 

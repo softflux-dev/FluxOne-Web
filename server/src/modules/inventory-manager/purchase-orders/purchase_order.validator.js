@@ -97,3 +97,26 @@ export const orderIdParamsSchema = z.object({
   query: empty,
   params: idParams,
 })
+
+// TL §10 — nested invoice under purchase order
+export const orderInvoiceParamsSchema = z.object({
+  body: empty,
+  query: empty,
+  params: z.object({
+    id: z.string().uuid(),
+    invoiceId: z.string().uuid(),
+  }),
+})
+
+// Client builds PDF (jspdf) and posts base64 for nodemailer attachment
+export const sendOrderInvoiceSchema = z.object({
+  body: z.object({
+    pdfBase64: z.string().min(32, 'PDF attachment is required'),
+    filename: z.string().max(180).optional(),
+  }),
+  query: empty,
+  params: z.object({
+    id: z.string().uuid(),
+    invoiceId: z.string().uuid(),
+  }),
+})

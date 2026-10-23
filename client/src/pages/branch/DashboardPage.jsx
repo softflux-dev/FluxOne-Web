@@ -4,7 +4,6 @@ import { BranchKpiCards } from '@/components/feature/branch/dashboard/BranchKpiC
 import { BranchWelcomeBanner } from '@/components/feature/branch/dashboard/BranchWelcomeBanner'
 import { DailySalesSummary } from '@/components/feature/branch/dashboard/DailySalesSummary'
 import { CounterSalesCard } from '@/components/feature/branch/dashboard/CounterSalesCard'
-import { InventoryStatusChart } from '@/components/feature/branch/dashboard/InventoryStatusChart'
 import { ProductSalesInsights } from '@/components/feature/branch/dashboard/ProductSalesInsights'
 import { SalesChart } from '@/components/feature/branch/dashboard/SalesChart'
 import { StaffPerformanceTable } from '@/components/feature/branch/dashboard/StaffPerformanceTable'
@@ -158,9 +157,6 @@ export function DashboardPage() {
           <MotionReveal delay={0.13} className="h-full">
             <StaffPerformanceTable staff={data.staff} className="h-full" />
           </MotionReveal>
-          {/* <MotionReveal delay={0.16} className="h-full">
-            <InventoryStatusChart inventory={data.inventory} className="h-full" />
-          </MotionReveal> */}
         </div>
 
         {/* Phase 2 — restore when AI Business Insights ships

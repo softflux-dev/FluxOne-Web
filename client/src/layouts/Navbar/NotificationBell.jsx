@@ -7,6 +7,7 @@ import { endpoints } from '@/api/endpoints'
 import { PATHS } from '@/router/paths'
 import { useAuthSession } from '@/hooks/useAuthSession'
 import { ROLES } from '@/lib/constants'
+import { BranchCapsule } from '@/components/shared/BranchRoleCapsules'
 import { displayNotification } from '@/lib/notificationDisplay'
 import { cn } from '@/lib/utils'
 
@@ -166,7 +167,7 @@ export function NotificationBell({ className }) {
                 <p className="px-3 py-6 text-center text-xs text-slate-400">No notifications yet</p>
               ) : (
                 items.map((n) => {
-                  const { title, body } = displayNotification(n)
+                  const { title, body, branchName } = displayNotification(n)
                   return (
                     <button
                       key={n.id}
@@ -185,6 +186,7 @@ export function NotificationBell({ className }) {
                           <span className="mt-1 size-2 shrink-0 rounded-full bg-[#8E238F]" />
                         ) : null}
                       </div>
+                      {branchName ? <BranchCapsule branchName={branchName} /> : null}
                       {body ? (
                         <p className="whitespace-normal break-words text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                           {body}

@@ -73,8 +73,16 @@ export function PurchaseOrdersPage() {
 
   async function handlePrint(row) {
     const result = await printOrder(row)
-    if (!result.success) toastError(result.error || 'PDF download failed')
-    else toastSuccess('Order PDF downloaded')
+    if (!result.success) {
+      toastError(result.error || 'PDF download failed')
+      return
+    }
+    const count = result.data?.count
+    if (result.data?.mode === 'invoices' && count) {
+      toastSuccess(`Downloaded ${count} supplier invoice PDF${count === 1 ? '' : 's'}`)
+    } else {
+      toastSuccess('Order PDF downloaded')
+    }
   }
 
   async function handleRecordReceival(row) {

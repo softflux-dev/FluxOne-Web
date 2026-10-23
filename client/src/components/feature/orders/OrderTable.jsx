@@ -94,8 +94,8 @@ function OrderActions({
         size="icon"
         variant="ghost"
         className="size-8 cursor-pointer text-slate-500 hover:bg-slate-100 hover:text-slate-900 hover:scale-110 active:scale-95"
-        title="Download PDF"
-        aria-label="Download PDF"
+        title="Download invoice PDF(s)"
+        aria-label="Download invoice PDF(s)"
         onClick={() => onPrint?.(row)}
       >
         <Printer className="size-4 transition-transform duration-200" />

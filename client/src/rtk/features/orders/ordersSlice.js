@@ -6,6 +6,10 @@ import { mapPurchaseHistory, mapPurchaseOrder } from '@/lib/mapPurchaseOrder'
 import { mapSupplier } from '@/lib/mapSupplier'
 import { mapProduct } from '@/lib/mapProduct'
 import { downloadPurchaseOrderPdf } from '@/lib/pdfDownload'
+import {
+  canDownloadPurchaseOrderInvoices,
+  downloadPurchaseOrderInvoicePdf,
+} from '@/lib/purchaseOrderInvoiceExport'
 
 export const ORDERS_PAGE_SIZE = 8
 
@@ -200,6 +204,7 @@ export const completeOrderReceival = createAsyncThunk(
   },
 )
 
+// Table printer: formal per-supplier invoices when available; else legacy PO dump
 export const printOrder = createAsyncThunk(
   'orders/print',
   async (idOrOrder, { rejectWithValue }) => {
@@ -214,8 +219,31 @@ export const printOrder = createAsyncThunk(
         order = mapPurchaseOrder(result.data)
       }
       if (!order) return rejectWithValue('Order not found')
+
+      if (canDownloadPurchaseOrderInvoices(order.status) && id) {
+        const listRes = await apiClient.get(endpoints.orders.invoices(id))
+        if (listRes.success) {
+          const invoices = Array.isArray(listRes.data?.items) ? listRes.data.items : []
+          if (invoices.length) {
+            const filenames = []
+            for (const row of invoices) {
+              const detailRes = await apiClient.get(endpoints.orders.invoiceDetail(id, row.id))
+              if (!detailRes.success) {
+                return rejectWithValue(detailRes.error || 'Failed to load invoice for PDF')
+              }
+              const { filename } = await downloadPurchaseOrderInvoicePdf(detailRes.data)
+              filenames.push(filename)
+            }
+            return {
+              success: true,
+              data: { downloaded: true, mode: 'invoices', count: filenames.length, filenames },
+            }
+          }
+        }
+      }
+
       downloadPurchaseOrderPdf(order)
-      return { success: true, data: { downloaded: true } }
+      return { success: true, data: { downloaded: true, mode: 'legacy' } }
     } catch (err) {
       return rejectWithValue(err?.message || 'PDF download failed')
     }

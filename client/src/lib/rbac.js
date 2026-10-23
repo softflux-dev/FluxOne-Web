@@ -9,11 +9,12 @@ export const PERMISSIONS = {
   'stock:out': [ROLES.INVENTORY_MANAGER, ROLES.BRANCH_MANAGER],
   'stock:adjust': [ROLES.INVENTORY_MANAGER],
   'stock:damaged': [ROLES.INVENTORY_MANAGER],
+  // §2.3 locked: IM Add/Edit/View · BM View/Block · Delete = B2B only
   'suppliers:read': [ROLES.INVENTORY_MANAGER, ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
-  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
-  // Block / Unblock only (no hard delete for BM)
+  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
+  // Block / Unblock — BM + B2B (BM cannot hard-delete)
   'suppliers:moderate': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
-  // Hard delete — B2B Admin only (BM never deletes; no soft-delete)
+  // Hard delete — B2B Admin only
   'suppliers:delete': [ROLES.B2B_ADMIN],
   'orders:read': [ROLES.INVENTORY_MANAGER, ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
   'orders:generate': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
@@ -25,12 +26,4 @@ export function hasPermission(role, permission) {
   const allowed = PERMISSIONS[permission]
   if (!allowed) return false
   return allowed.includes(role)
-}
-
-export function canAccessInventory(role) {
-  return role === ROLES.INVENTORY_MANAGER
-}
-
-export function canAccessBranch(role) {
-  return role === ROLES.BRANCH_MANAGER
 }
