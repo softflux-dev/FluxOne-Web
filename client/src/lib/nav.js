@@ -33,6 +33,7 @@ const ADMIN_SIDE_NAV = [
   { to: PATHS.admin.leaves, label: 'Leave Management', end: false },
   { to: PATHS.admin.notifications, label: 'Notifications', end: false },
   { to: PATHS.admin.company, label: 'Company & Policies', end: false },
+  { to: PATHS.admin.logs, label: 'Logs', end: false },
   { to: PATHS.admin.profile, label: 'Profile', end: false },
   { to: PATHS.admin.settings, label: 'Settings', end: false },
 ]

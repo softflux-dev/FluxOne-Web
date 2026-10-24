@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Send } from 'lucide-react'
+import { ClipboardList, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogCancelButton,
@@ -25,26 +25,7 @@ import { endpoints } from '@/api/endpoints'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { mapProduct, PRODUCT_STATUS } from '@/lib/mapProduct'
 import { formatShelfQuantity, getShelfStockStatus } from '@/lib/shelfStockStatus'
-import { parentVariantTitle, variantSkuLabel } from '@/lib/variantDisplay'
-
-/** Build stock-request target from a child SKU under a parent product. */
-export function toVariantRequestTarget(parent, sku) {
-  if (!sku?.id) return null
-  const parentName = parent?.name || 'Product'
-  return {
-    id: sku.id,
-    name: parentVariantTitle(parentName, sku),
-    quantity: sku.quantity,
-    scale: sku.scale || parent?.scale || 'pcs',
-    reorderPoint: sku.reorderPoint ?? parent?.reorderPoint,
-    sellingPrice: sku.sellingPrice,
-    finalPrice: sku.finalPrice,
-    itemCode: sku.itemCode,
-    variantLabel: variantSkuLabel(sku),
-    parentId: parent?.id || null,
-    parentName,
-  }
-}
+import { variantSkuLabel } from '@/lib/variantDisplay'
 
 async function fetchProductWithVariants(productId) {
   const res = await apiClient.get(endpoints.products.detail(productId))
@@ -53,13 +34,14 @@ async function fetchProductWithVariants(productId) {
 }
 
 /**
- * BM shelf: list each variant SKU with stock + per-row Stock Request.
+ * BM shelf: list each variant SKU with stock.
+ * Stock Request opens Demand Requests (IM→BM), not a BM→IM send flow.
  */
 export function BranchVariantStockDialog({
   open,
   product = null,
   onOpenChange,
-  onStockRequest,
+  onViewDemandRequests,
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -172,11 +154,9 @@ export function BranchVariantStockDialog({
                             variant="outline"
                             disabled={inactive}
                             className="h-8 text-xs"
-                            onClick={() =>
-                              onStockRequest?.(toVariantRequestTarget(detail || product, sku))
-                            }
+                            onClick={() => onViewDemandRequests?.()}
                           >
-                            <Send className="size-3" />
+                            <ClipboardList className="size-3" />
                             Stock Request
                           </Button>
                         </TableCell>

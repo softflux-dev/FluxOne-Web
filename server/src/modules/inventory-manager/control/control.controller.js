@@ -449,6 +449,7 @@ export async function patchDailyPrice(req, res) {
     const row = await updateDailyPrice(tenantId, req.validated.params.id, {
       ...req.validated.body,
       branchId,
+      createdBy: req.user?.id || null,
     })
     if (!row) return fail(res, 'Product not found or daily price change is off', 404)
     return success(res, row)

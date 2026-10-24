@@ -7,6 +7,7 @@ import {
 import { insertLedgerEventInTx } from '../control/control.model.js'
 import { buildPurchaseOrderSms, sendSms } from '../../../utils/sms.util.js'
 import { createInvoicesForApprovedOrder } from './purchase_order_invoice.model.js'
+import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
 
 function httpError(status, message) {
   const error = new Error(message)
@@ -33,6 +34,11 @@ function normalizeCompanies(payload) {
   return []
 }
 
+/**
+ * Append-only PO timeline + Admin Logs dual-write.
+ * purchase_order_events = IM/BM order page; activity_logs = company audit (Orders & Suppliers tab).
+ * Stock In from receival is logged separately via insertLedgerEventInTx (Stock tab + §5.9.3).
+ */
 async function insertOrderEvent(client, tenantId, { purchaseOrderId, eventType, actorId, payload = {} }) {
   await tenantClientQuery(
     client,
@@ -45,6 +51,115 @@ async function insertOrderEvent(client, tenantId, { purchaseOrderId, eventType, 
     `,
     [purchaseOrderId, eventType, actorId || null, JSON.stringify(payload || {})],
   )
+
+  const { rows: orderRows } = await tenantClientQuery(
+    client,
+    tenantId,
+    `
+      SELECT
+        order_number AS "orderNumber",
+        branch_id AS "branchId"
+      FROM purchase_orders
+      WHERE tenant_id = $1 AND id = $2
+      LIMIT 1
+    `,
+    [purchaseOrderId],
+  )
+  const order = orderRows[0]
+  if (!order?.branchId) return
+
+  const orderRef = order.orderNumber || purchaseOrderId
+  let action = 'order_edit'
+  let actionText = `Updated order ${orderRef}.`
+  // Snapshot status after this event — powers Admin Logs Order Status filter (§3.2)
+  let orderStatus = payload.orderStatus || null
+
+  switch (eventType) {
+    case PURCHASE_ORDER_EVENT_TYPES.CREATED:
+      action = 'order_generate'
+      orderStatus = PURCHASE_ORDER_STATUS.PENDING
+      actionText = `Submitted order request ${orderRef} with ${payload.itemsNumber ?? '—'} items from ${payload.companiesNumber ?? '—'} supplier(s). Status → Pending.`
+      break
+    case PURCHASE_ORDER_EVENT_TYPES.EDITED_BY_BM:
+      if (payload.action === 'cancelled') {
+        action = 'order_cancel'
+        orderStatus = PURCHASE_ORDER_STATUS.CANCELLED
+        actionText = `Cancelled order ${orderRef}.`
+      } else {
+        action = 'order_edit'
+        orderStatus = PURCHASE_ORDER_STATUS.PENDING
+        actionText = `Edited order ${orderRef} before approval: ${payload.companiesNumber ?? '—'} companies / ${payload.itemsNumber ?? '—'} items.`
+      }
+      break
+    case PURCHASE_ORDER_EVENT_TYPES.APPROVED:
+      action = 'order_approve'
+      orderStatus = PURCHASE_ORDER_STATUS.APPROVED
+      actionText = `Approved order ${orderRef}.`
+      break
+    case PURCHASE_ORDER_EVENT_TYPES.REJECTED:
+      action = 'order_reject'
+      orderStatus = PURCHASE_ORDER_STATUS.REJECTED
+      actionText = `Rejected order ${orderRef}. Notes: "${payload.rejectionNotes || '—'}".`
+      break
+    case PURCHASE_ORDER_EVENT_TYPES.RECEIVAL_RECORDED:
+      action = 'order_receival'
+      orderStatus = PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED
+      actionText = `Recorded receival round on ${orderRef}: ${payload.lineCount ?? '—'} line(s), ${payload.totalUnits ?? '—'} units stocked in. Status → Partially Received.`
+      break
+    case PURCHASE_ORDER_EVENT_TYPES.COMPLETED:
+      action = 'order_complete'
+      orderStatus = PURCHASE_ORDER_STATUS.RECEIVED
+      actionText = `Marked order ${orderRef} complete. Status → Received.`
+      break
+    default:
+      break
+  }
+
+  await writeAdminActivity(
+    tenantId,
+    {
+      branchId: order.branchId,
+      actorUserId: actorId,
+      category: 'orders_suppliers',
+      action,
+      entityType: 'purchase_order',
+      entityId: purchaseOrderId,
+      actionText,
+      affectedItem: orderRef,
+      details: {
+        eventType,
+        orderNumber: order.orderNumber || null,
+        orderStatus,
+        ...payload,
+      },
+    },
+    client,
+  )
+
+  // Invoice generate on approve (§5.9.2)
+  if (
+    eventType === PURCHASE_ORDER_EVENT_TYPES.APPROVED &&
+    Array.isArray(payload.invoiceNumbers) &&
+    payload.invoiceNumbers.length
+  ) {
+    for (const inv of payload.invoiceNumbers.filter(Boolean)) {
+      await writeAdminActivity(
+        tenantId,
+        {
+          branchId: order.branchId,
+          actorUserId: actorId,
+          source: 'system',
+          category: 'orders_suppliers',
+          action: 'invoice_generate',
+          entityType: 'purchase_order_invoice',
+          entityId: purchaseOrderId,
+          actionText: `Generated invoice ${inv} on order ${orderRef}.`,
+          affectedItem: inv,
+        },
+        client,
+      )
+    }
+  }
 }
 
 async function assertActiveSuppliers(client, tenantId, supplierIds, branchId) {
@@ -726,6 +841,7 @@ export async function recordPurchaseOrderReceival(
           scale: line.scale,
           supplierId: line.supplierId || order.supplierId,
           purchaseOrderId,
+          orderNumber: order.orderNumber,
           unitCost: line.unitCost,
           reason: `PO ${order.orderNumber} receival`,
           createdBy: actorId,

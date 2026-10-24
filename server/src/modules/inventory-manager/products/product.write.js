@@ -19,6 +19,12 @@ import {
   resolveVariantPromo,
 } from './product.shared.js'
 import { getProductDeleteEligibility } from './product.read.js'
+import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
+
+/** Admin Logs — products / bundles / pricing / variants from product writes. */
+async function logProductActivity(client, tenantId, payload) {
+  await writeAdminActivity(tenantId, payload, client)
+}
 
 const CATEGORY_NAME_MAX = 50
 const SUBCATEGORY_NAME_MAX = 60
@@ -987,6 +993,35 @@ async function notifyCustomVariantCatalog(
       additions: catalogAdditions,
       branchId,
     })
+    // Admin Logs — IM custom variant type/value (§5.5)
+    for (const add of catalogAdditions) {
+      const typeName = add.typeName || '—'
+      if (add.typeCreated) {
+        await writeAdminActivity(tenantId, {
+          branchId,
+          actorUserId: createdBy,
+          category: 'variants',
+          action: 'variant_type_create',
+          entityType: 'variant_type',
+          entityId: add.typeId || null,
+          actionText: `Added custom Variant Type "${typeName}" inline while creating product "${productName}". Pending Branch Manager review.`,
+          affectedItem: typeName,
+        })
+      }
+      for (const val of add.values || []) {
+        const valueName = val.name || val.valueName || '—'
+        await writeAdminActivity(tenantId, {
+          branchId,
+          actorUserId: createdBy,
+          category: 'variants',
+          action: 'variant_value_create',
+          entityType: 'variant_value',
+          entityId: val.id || null,
+          actionText: `Added custom value "${valueName}" under Variant Type "${typeName}" inline while creating product "${productName}". Pending Branch Manager review.`,
+          affectedItem: `${typeName}: ${valueName}`,
+        })
+      }
+    }
   } catch (err) {
     console.error('[products] Failed to notify BMs of custom variants:', err?.message || err)
   }
@@ -1254,6 +1289,17 @@ export async function createVariantProduct(tenantId, payload) {
         })
       }
 
+      await logProductActivity(client, tenantId, {
+        branchId: payload.branchId,
+        actorUserId: payload.createdBy,
+        category: 'products',
+        action: 'product_create',
+        entityType: 'product',
+        entityId: parent.id,
+        actionText: `Added new Variant product "${parent.name}" with ${children.length} combination(s).`,
+        affectedItem: parent.name,
+      })
+
       return {
         ...parent,
         creationBatchId,
@@ -1386,6 +1432,34 @@ export async function createProduct(tenantId, payload) {
           unitCost: purchasePrice,
           branchId: payload.branchId,
           createdBy: payload.createdBy,
+        })
+      }
+
+      // Admin Logs — product / bundle create (§5.3 / §5.4)
+      if (isBundle) {
+        const n = (payload.bundleItems || []).length
+        const qty = Math.max(0, Number(payload.quantity) || 0)
+        await logProductActivity(client, tenantId, {
+          branchId: payload.branchId,
+          actorUserId: payload.createdBy,
+          category: 'bundles',
+          action: 'bundle_create',
+          entityType: 'product',
+          entityId: product.id,
+          actionText: `Created bundle "${product.name}" with ${n} items and stock of ${qty} units.`,
+          affectedItem: product.name,
+        })
+      } else {
+        const kind = payload.type === PRODUCT_TYPES.VARIANT ? 'Variant' : 'Normal'
+        await logProductActivity(client, tenantId, {
+          branchId: payload.branchId,
+          actorUserId: payload.createdBy,
+          category: 'products',
+          action: 'product_create',
+          entityType: 'product',
+          entityId: product.id,
+          actionText: `Added new ${kind} product "${product.name}".`,
+          affectedItem: product.name,
         })
       }
 
@@ -1666,6 +1740,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
             quantity,
             purchase_price AS "purchasePrice",
             selling_price AS "sellingPrice",
+            offer_id AS "offerId",
             image_url AS "imageUrl",
             description,
             creation_batch_id AS "creationBatchId",
@@ -2028,6 +2103,144 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         )
       }
 
+      // Admin Logs — products / bundles / pricing on update (§5.2–5.4)
+      const branchIdForLog = product.branchId || branchId || payload.branchId
+      const actorUserId = payload.createdBy || null
+      const displayName = product.name || existing.name
+      const isBundleType = existing.type === PRODUCT_TYPES.BUNDLE
+
+      if (becomingInactive) {
+        await logProductActivity(client, tenantId, {
+          branchId: branchIdForLog,
+          actorUserId,
+          category: isBundleType ? 'bundles' : 'products',
+          action: isBundleType ? 'bundle_deactivate' : 'product_deactivate',
+          entityType: 'product',
+          entityId: id,
+          actionText: isBundleType
+            ? `Deactivated bundle "${displayName}". Remaining units dissolved; stock returned to component items.`
+            : `Deactivated product "${displayName}".`,
+          affectedItem: displayName,
+        })
+      } else if (
+        existing.status === PRODUCT_STATUS.INACTIVE &&
+        nextStatus === PRODUCT_STATUS.ACTIVE
+      ) {
+        await logProductActivity(client, tenantId, {
+          branchId: branchIdForLog,
+          actorUserId,
+          category: 'products',
+          action: 'product_reactivate',
+          entityType: 'product',
+          entityId: id,
+          actionText: `Reactivated product "${displayName}".`,
+          affectedItem: displayName,
+        })
+      }
+
+      if (qtyChanging && !becomingInactive) {
+        const added =
+          Math.max(0, Number(payload.quantity) || 0) - (Number(existing.quantity) || 0)
+        if (added > 0) {
+          await logProductActivity(client, tenantId, {
+            branchId: branchIdForLog,
+            actorUserId,
+            category: 'bundles',
+            action: 'bundle_top_up',
+            entityType: 'product',
+            entityId: id,
+            actionText: `Added ${added} additional units to bundle "${displayName}". New stock: ${Math.max(0, Number(payload.quantity) || 0)}.`,
+            affectedItem: displayName,
+          })
+        }
+      }
+
+      const oldSell = Number(existing.sellingPrice)
+      const newSell =
+        payload.sellingPrice !== undefined ? Number(payload.sellingPrice) : oldSell
+      const oldBuy = Number(existing.purchasePrice)
+      const newBuy =
+        payload.purchasePrice !== undefined ? Number(payload.purchasePrice) : oldBuy
+
+      if (payload.sellingPrice !== undefined && newSell !== oldSell) {
+        await logProductActivity(client, tenantId, {
+          branchId: branchIdForLog,
+          actorUserId,
+          category: isBundleType ? 'bundles' : 'pricing',
+          action: isBundleType ? 'bundle_price_change' : 'selling_price_change',
+          entityType: 'product',
+          entityId: id,
+          actionText: isBundleType
+            ? `Changed price of bundle "${displayName}" from £${oldSell} to £${newSell}.`
+            : `Changed selling price of ${displayName} from £${oldSell} to £${newSell}.`,
+          affectedItem: displayName,
+        })
+      }
+      if (!isBundleType && payload.purchasePrice !== undefined && newBuy !== oldBuy) {
+        await logProductActivity(client, tenantId, {
+          branchId: branchIdForLog,
+          actorUserId,
+          category: 'pricing',
+          action: 'purchase_price_change',
+          entityType: 'product',
+          entityId: id,
+          actionText: `Changed purchase price of ${displayName} from £${oldBuy} to £${newBuy}.`,
+          affectedItem: displayName,
+        })
+      }
+
+      if ('offerId' in payload) {
+        const oldOffer = existing.offerId || null
+        const newOffer = payload.offerId || null
+        if (oldOffer !== newOffer) {
+          await logProductActivity(client, tenantId, {
+            branchId: branchIdForLog,
+            actorUserId,
+            category: 'pricing',
+            action: newOffer ? 'offer_apply' : 'offer_remove',
+            entityType: 'product',
+            entityId: id,
+            actionText: newOffer
+              ? `Applied offer to ${displayName}.`
+              : `Removed offer from ${displayName}.`,
+            affectedItem: displayName,
+            details: { offerId: newOffer, previousOfferId: oldOffer },
+          })
+        }
+      }
+
+      // Generic edit when non-price/status fields changed
+      const editedKeys = Object.keys(payload).filter(
+        (k) =>
+          ![
+            'createdBy',
+            'branchId',
+            'confirmed',
+            'variants',
+            'bundleItems',
+            'quantity',
+            'sellingPrice',
+            'purchasePrice',
+            'offerId',
+            'discountPercent',
+            'status',
+            'taxIds',
+            'taxPercent',
+          ].includes(k) && payload[k] !== undefined,
+      )
+      if (editedKeys.length && !becomingInactive) {
+        await logProductActivity(client, tenantId, {
+          branchId: branchIdForLog,
+          actorUserId,
+          category: 'products',
+          action: 'product_update',
+          entityType: 'product',
+          entityId: id,
+          actionText: `Edited product "${displayName}": ${editedKeys.join(', ')} updated.`,
+          affectedItem: displayName,
+        })
+      }
+
       // Include synced SKU ids so the client can upload per-variant images
       if (syncedVariants) {
         return { ...product, variants: syncedVariants }
@@ -2094,7 +2307,11 @@ export async function permanentDeleteProduct(tenantId, id, { branchId = null } =
   })
 }
 
-export async function deleteProduct(tenantId, id, { branchId = null, permanent = false } = {}) {
+export async function deleteProduct(
+  tenantId,
+  id,
+  { branchId = null, permanent = false, createdBy = null } = {},
+) {
   // Soft delete (deactivate) or permanent — dissolve remaining bundle stock first
   if (permanent) {
     const eligibility = await getProductDeleteEligibility(tenantId, id, { branchId })
@@ -2128,6 +2345,9 @@ export async function deleteProduct(tenantId, id, { branchId = null, permanent =
       })
     }
 
+    const isBundleType = existing.type === PRODUCT_TYPES.BUNDLE
+    const logBranch = existing.branchId || branchId
+
     if (permanent) {
       // Ledger from opening stock / adjustments must go before product DELETE (no CASCADE)
       await deleteProductLedgerRows(client, tenantId, id)
@@ -2142,6 +2362,20 @@ export async function deleteProduct(tenantId, id, { branchId = null, permanent =
         `,
         [id, branchId],
       )
+      if (rows[0]) {
+        await logProductActivity(client, tenantId, {
+          branchId: logBranch,
+          actorUserId: createdBy,
+          category: isBundleType ? 'bundles' : 'products',
+          action: isBundleType ? 'bundle_delete' : 'product_delete',
+          entityType: 'product',
+          entityId: id,
+          actionText: isBundleType
+            ? `Deleted bundle "${existing.name}". Remaining units dissolved; stock returned to component items.`
+            : `Deleted product "${existing.name}".`,
+          affectedItem: existing.name,
+        })
+      }
       return Boolean(rows[0])
     }
 
@@ -2157,6 +2391,20 @@ export async function deleteProduct(tenantId, id, { branchId = null, permanent =
       `,
       [id, branchId],
     )
+    if (rows[0]) {
+      await logProductActivity(client, tenantId, {
+        branchId: logBranch,
+        actorUserId: createdBy,
+        category: isBundleType ? 'bundles' : 'products',
+        action: isBundleType ? 'bundle_deactivate' : 'product_deactivate',
+        entityType: 'product',
+        entityId: id,
+        actionText: isBundleType
+          ? `Deactivated bundle "${existing.name}". Remaining units dissolved; stock returned to component items.`
+          : `Deactivated product "${existing.name}".`,
+        affectedItem: existing.name,
+      })
+    }
     return Boolean(rows[0])
   })
 }

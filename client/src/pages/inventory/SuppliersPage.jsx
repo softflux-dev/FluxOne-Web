@@ -14,9 +14,9 @@ import { toastError, toastSuccess } from '@/lib/toast'
 
 export function SuppliersPage() {
   const { can } = usePermissions()
+  // IM + BM: create/edit · BM only: block + delete · IM never block/delete
   const canWrite = can('suppliers:write')
   const canModerate = can('suppliers:moderate')
-  // BM: View / Edit / Block only — never hard-delete (no soft-delete either)
   const canDelete = can('suppliers:delete')
 
   const {

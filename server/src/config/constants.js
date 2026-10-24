@@ -156,13 +156,13 @@ export const PERMISSIONS = {
   'stock:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'staff:lookup': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'stock-requests:write': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
-  // §2.3 locked: IM Add/Edit/View · BM View/Block · Delete = B2B only
+  // Supplier RBAC (CEO): IM + BM create/edit · BM block/delete · IM cannot block/delete
   'suppliers:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
-  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
-  // Block / Unblock — BM + B2B (BM cannot hard-delete)
+  'suppliers:write': [ROLES.INVENTORY_MANAGER, ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
+  // Block / Unblock — BM + B2B only (IM excluded)
   'suppliers:moderate': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
-  // Hard delete — B2B only
-  'suppliers:delete': [ROLES.B2B_ADMIN],
+  // Hard delete — BM + B2B (IM excluded; dependency check still blocks if used on orders)
+  'suppliers:delete': [ROLES.BRANCH_MANAGER, ROLES.B2B_ADMIN],
   'orders:read': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN, ROLES.BRANCH_MANAGER],
   'orders:generate': [ROLES.INVENTORY_MANAGER, ROLES.B2B_ADMIN],
   // BM reviews Demand Requests (edit / approve / reject); B2B retained for oversight
@@ -186,6 +186,8 @@ export const PERMISSIONS = {
   'admin:branches': [ROLES.B2B_ADMIN],
   'admin:company': [ROLES.B2B_ADMIN],
   'admin:policies': [ROLES.B2B_ADMIN],
+  // Admin Logs Module — company-wide audit (read + export only)
+  'admin-logs:read': [ROLES.B2B_ADMIN],
 }
 
 export function hasPermission(role, permission) {

@@ -16,6 +16,7 @@ import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
 import { BCRYPT_COST } from '../../../config/constants.js'
 import { fail, success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
+import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
 
 function normalizeManager(body) {
   if (body.manager) return body.manager
@@ -168,6 +169,17 @@ export async function patchBranch(req, res) {
   }
 
   if (!row) return fail(res, 'Branch not found', 404)
+  await writeAdminActivity(req.tenantId, {
+    branchId: row.id,
+    actorUserId: req.user?.id,
+    actorRole: req.user?.role,
+    category: 'settings',
+    action: 'branch_settings_update',
+    entityType: 'branch',
+    entityId: row.id,
+    actionText: `Updated branch setting(s) for "${row.name}".`,
+    affectedItem: row.name,
+  })
   return success(res, row)
 }
 
@@ -178,6 +190,17 @@ export async function patchBranchStatus(req, res) {
       req.validated.params.id,
       req.validated.body.status,
     )
+    await writeAdminActivity(req.tenantId, {
+      branchId: row.id,
+      actorUserId: req.user?.id,
+      actorRole: req.user?.role,
+      category: 'settings',
+      action: 'branch_status',
+      entityType: 'branch',
+      entityId: row.id,
+      actionText: `Changed status of branch "${row.name}" to ${row.status}.`,
+      affectedItem: row.name,
+    })
     return success(res, row)
   } catch (err) {
     return failFromError(res, err)

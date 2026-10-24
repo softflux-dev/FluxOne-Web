@@ -28,14 +28,14 @@ router.patch(
   validate(updateSupplierSchema),
   asyncHandler(update),
 )
-// Block / Unblock — BM moderate only
+// Block / Unblock — BM (+ B2B); IM cannot moderate
 router.patch(
   '/:id/status',
   requirePermission('suppliers:moderate'),
   validate(setSupplierActiveSchema),
   asyncHandler(setActive),
 )
-// Hard delete — B2B Admin only (BM cannot delete; use Block instead)
+// Hard delete — BM (+ B2B); IM cannot delete (use Block when referenced on orders)
 router.delete(
   '/:id',
   requirePermission('suppliers:delete'),

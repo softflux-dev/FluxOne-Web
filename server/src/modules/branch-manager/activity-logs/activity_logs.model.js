@@ -13,7 +13,7 @@ function mapRow(row) {
     entityId: row.entityId,
     details: row.details || {},
     createdAt: row.createdAt,
-    message: formatActivityMessage(row.actorName, row.action),
+    message: formatActivityMessage(row.actorName, row.action, row.details || {}),
   }
 }
 

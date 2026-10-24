@@ -33,6 +33,7 @@ import {
   sendPurchaseOrderInvoiceEmail,
   sendPurchaseOrderInvoiceSentBmEmail,
 } from '../../../mail/mail.service.js'
+import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
 
 export async function list(req, res) {
   try {
@@ -249,6 +250,18 @@ export async function sendInvoice(req, res) {
     const sentMeta = await markInvoiceSent(null, tenantId, invoiceId, {
       sentTo: toEmail,
       sentAt: new Date(),
+    })
+
+    await writeAdminActivity(tenantId, {
+      branchId: order.branchId || branchId,
+      actorUserId: req.user?.id,
+      actorRole: req.user?.role,
+      category: 'orders_suppliers',
+      action: 'invoice_send',
+      entityType: 'purchase_order_invoice',
+      entityId: invoiceId,
+      actionText: `Sent invoice ${invoice.invoiceNumber} for order ${order.orderNumber || orderId} to ${toEmail}.`,
+      affectedItem: invoice.invoiceNumber,
     })
 
     const actorName = req.user?.fullName || req.user?.name || 'Team member'

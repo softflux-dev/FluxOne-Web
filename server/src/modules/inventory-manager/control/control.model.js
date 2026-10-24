@@ -4,6 +4,11 @@ import {
   applyPriceLayersForMovement,
   shouldKeepExistingStockPrice,
 } from './priceLayers.js'
+import {
+  formatStockActionText,
+  stockActionFromMovement,
+  writeAdminActivity,
+} from '../../../utils/adminActivityLog.util.js'
 
 // products.quantity = on-hand for that branch-scoped product row (IM source of truth).
 // branch_inventory = per-branch allocation — must stay in sync when IM adjusts stock
@@ -190,7 +195,18 @@ async function assertSufficientStock(client, tenantId, productId, quantity) {
   const { rows } = await tenantClientQuery(
     client,
     tenantId,
-    `SELECT quantity, status, scale FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+    `
+      SELECT
+        quantity,
+        status,
+        scale,
+        name,
+        variant_label AS "variantLabel",
+        branch_id AS "branchId"
+      FROM products
+      WHERE tenant_id = $1 AND id = $2
+      FOR UPDATE
+    `,
     [productId],
   )
   if (!rows[0]) throw httpError(404, 'Product not found')
@@ -207,7 +223,18 @@ async function lockProduct(client, tenantId, productId) {
   const { rows } = await tenantClientQuery(
     client,
     tenantId,
-    `SELECT quantity, status, scale FROM products WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+    `
+      SELECT
+        quantity,
+        status,
+        scale,
+        name,
+        variant_label AS "variantLabel",
+        branch_id AS "branchId"
+      FROM products
+      WHERE tenant_id = $1 AND id = $2
+      FOR UPDATE
+    `,
     [productId],
   )
   if (!rows[0]) throw httpError(404, 'Product not found')
@@ -978,6 +1005,7 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
     ],
   )
 
+  const oldQty = Number(productRow?.quantity) || 0
   const handDelta = onHandDelta(event.movementType, event.quantity)
   await applyOnHand(client, tenantId, event.productId, handDelta)
   await applyPriceLayersForMovement(client, tenantId, {
@@ -999,6 +1027,51 @@ export async function insertLedgerEventInTx(client, tenantId, event) {
       unitCost: event.unitCost,
       addedQty: Math.abs(qty),
     })
+  }
+
+  // Admin Logs — Stock tab (and Order Receival Stock In via purchaseOrderId).
+  // Skip POS-origin ledger (posEventId) to avoid double-count with cashier_log / sale sync.
+  // Dual-write with Orders & Suppliers: receival also logs order_receival separately (Phase 3).
+  if (!event.posEventId && !event.skipActivityLog) {
+    const newTotal = oldQty + handDelta
+    const branchIdForLog =
+      event.branchId || destinationBranchId || productRow?.branchId || null
+    const orderRef = event.orderNumber || event.purchaseOrderId || null
+    const affected = productRow?.variantLabel
+      ? `${productRow.name || 'Product'} (${productRow.variantLabel})`
+      : productRow?.name || 'Product'
+    await writeAdminActivity(
+      tenantId,
+      {
+        branchId: branchIdForLog,
+        actorUserId: event.createdBy || null,
+        actorName: event.actorName,
+        actorRole: event.actorRole,
+        category: 'stock',
+        action: stockActionFromMovement(event.movementType),
+        entityType: 'product',
+        entityId: event.productId,
+        actionText: formatStockActionText({
+          movementType: event.movementType,
+          quantity: event.quantity,
+          productName: productRow?.name,
+          variantLabel: productRow?.variantLabel,
+          newTotal,
+          oldQty,
+          orderId: event.purchaseOrderId,
+          orderNumber: event.orderNumber,
+        }),
+        affectedItem: affected,
+        details: {
+          movementType: event.movementType,
+          quantity: Number(event.quantity),
+          purchaseOrderId: event.purchaseOrderId || null,
+          orderNumber: event.orderNumber || null,
+          reason: event.reason || null,
+        },
+      },
+      client,
+    )
   }
 
   return rows[0]
@@ -1306,13 +1379,32 @@ export async function listDailyPricePending(tenantId, { branchId = null } = {}) 
 export async function updateDailyPrice(
   tenantId,
   productId,
-  { purchasePrice, sellingPrice, branchId = null } = {},
+  { purchasePrice, sellingPrice, branchId = null, createdBy = null } = {},
 ) {
   return withTransaction(async (client) => {
     await assertPriceChangeAllowed(client, tenantId, productId, {
       purchasePrice,
       sellingPrice,
     })
+
+    const { rows: beforeRows } = await tenantClientQuery(
+      client,
+      tenantId,
+      `
+        SELECT
+          purchase_price AS "purchasePrice",
+          selling_price AS "sellingPrice",
+          name,
+          branch_id AS "branchId",
+          variant_label AS "variantLabel"
+        FROM products
+        WHERE tenant_id = $1 AND id = $2
+          AND ($3::uuid IS NULL OR branch_id = $3)
+        LIMIT 1
+      `,
+      [productId, branchId || null],
+    )
+    const before = beforeRows[0]
 
     const { rows } = await tenantClientQuery(
       client,
@@ -1339,11 +1431,55 @@ export async function updateDailyPrice(
           name,
           purchase_price AS "purchasePrice",
           selling_price AS "sellingPrice",
-          daily_price_updated_on AS "dailyPriceUpdatedOn"
+          daily_price_updated_on AS "dailyPriceUpdatedOn",
+          branch_id AS "branchId",
+          variant_label AS "variantLabel"
       `,
       [productId, purchasePrice ?? null, sellingPrice ?? null, branchId || null],
     )
-    return rows[0] || null
+    const row = rows[0] || null
+    if (row && before) {
+      const label = row.variantLabel ? `${row.name} (${row.variantLabel})` : row.name
+      if (
+        sellingPrice != null &&
+        Number(before.sellingPrice) !== Number(row.sellingPrice)
+      ) {
+        await writeAdminActivity(
+          tenantId,
+          {
+            branchId: row.branchId || branchId,
+            actorUserId: createdBy,
+            category: 'pricing',
+            action: 'daily_price_change',
+            entityType: 'product',
+            entityId: productId,
+            actionText: `Changed selling price of ${label} from £${before.sellingPrice} to £${row.sellingPrice}.`,
+            affectedItem: label,
+          },
+          client,
+        )
+      }
+      if (
+        purchasePrice != null &&
+        Number(before.purchasePrice) !== Number(row.purchasePrice)
+      ) {
+        await writeAdminActivity(
+          tenantId,
+          {
+            branchId: row.branchId || branchId,
+            actorUserId: createdBy,
+            category: 'pricing',
+            action: 'purchase_price_change',
+            entityType: 'product',
+            entityId: productId,
+            actionText: `Changed purchase price of ${label} from £${before.purchasePrice} to £${row.purchasePrice}.`,
+            affectedItem: label,
+          },
+          client,
+        )
+      }
+    }
+    return row
   })
 }
 

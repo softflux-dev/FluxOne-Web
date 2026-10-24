@@ -50,6 +50,11 @@ export const endpoints = {
       list: '/admin/leaves',
       decide: (id) => `/admin/leaves/${id}/decide`,
     },
+    logs: {
+      list: '/admin/logs',
+      actors: '/admin/logs/actors',
+      filterOptions: '/admin/logs/filter-options',
+    },
   },
   notifications: {
     list: '/notifications',

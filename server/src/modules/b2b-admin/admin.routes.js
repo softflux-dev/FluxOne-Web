@@ -9,6 +9,7 @@ import taxProfitRoutes from './tax-profit/tax-profit.routes.js'
 import settingsRoutes from './settings/settings.routes.js'
 import invoicesRoutes from './invoices/invoices.routes.js'
 import leavesRoutes from './leaves/leaves.routes.js'
+import logsRoutes from './logs/logs.routes.js'
 
 const router = Router()
 
@@ -22,5 +23,6 @@ router.use('/policies', policiesRoutes)
 router.use('/tax-profit', taxProfitRoutes)
 router.use('/settings', settingsRoutes)
 router.use('/invoices', invoicesRoutes)
+router.use('/logs', logsRoutes)
 
 export default router

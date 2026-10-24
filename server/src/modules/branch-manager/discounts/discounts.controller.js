@@ -8,6 +8,7 @@ import {
 } from './discounts.model.js'
 import { resolveListBranchId, resolveScopedBranchId } from '../staff/staff.access.js'
 import { success, fail, failFromError } from '../../../utils/response.util.js'
+import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
 
 // BM locked to JWT branch — never list/mutate another branch's offers
 function requireBranchId(req) {
@@ -41,6 +42,17 @@ export async function addDiscount(req, res) {
     }
     await assertCategoryInBranch(req.tenantId, categoryId, branchId)
     const row = await createOffer(req.tenantId, { name, percent, categoryId, branchId })
+    await writeAdminActivity(req.tenantId, {
+      branchId,
+      actorUserId: req.user?.id,
+      actorRole: req.user?.role,
+      category: 'settings',
+      action: 'offer_create',
+      entityType: 'offer',
+      entityId: row.id,
+      actionText: `Created new offer "${row.name}" at ${row.percent}%.`,
+      affectedItem: row.name,
+    })
     return success(res, row, 201)
   } catch (err) {
     return failFromError(res, err, 'Failed to create discount')
@@ -73,6 +85,17 @@ export async function editDiscount(req, res) {
     if (!row) {
       return fail(res, 'Discount not found', 404)
     }
+    await writeAdminActivity(req.tenantId, {
+      branchId,
+      actorUserId: req.user?.id,
+      actorRole: req.user?.role,
+      category: 'settings',
+      action: 'offer_update',
+      entityType: 'offer',
+      entityId: row.id,
+      actionText: `Edited offer "${row.name}".`,
+      affectedItem: row.name,
+    })
     return success(res, row)
   } catch (err) {
     return failFromError(res, err, 'Failed to update discount')
@@ -86,10 +109,22 @@ export async function removeDiscount(req, res) {
     if (!branchId) {
       return fail(res, 'Discounts must be deleted for a specific branch', 400)
     }
+    const existing = await getOfferById(req.tenantId, id, { branchId })
     const ok = await deleteOffer(req.tenantId, id, { branchId })
     if (!ok) {
       return fail(res, 'Discount not found', 404)
     }
+    await writeAdminActivity(req.tenantId, {
+      branchId,
+      actorUserId: req.user?.id,
+      actorRole: req.user?.role,
+      category: 'settings',
+      action: 'offer_delete',
+      entityType: 'offer',
+      entityId: id,
+      actionText: `Deleted offer "${existing?.name || id}".`,
+      affectedItem: existing?.name || id,
+    })
     return success(res, { message: 'Discount deleted successfully' })
   } catch (err) {
     return failFromError(res, err, 'Failed to delete discount')

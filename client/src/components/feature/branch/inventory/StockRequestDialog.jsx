@@ -25,8 +25,9 @@ function resolveProductPrice(prod) {
 }
 
 /**
- * Send replenishment request to Inventory Manager.
- * `target` must include sellable product/SKU `id` + name + quantity.
+ * Legacy BM→IM shelf replenishment dialog (POST /branch/stock-requests).
+ * Inventory Monitoring "Stock Request" no longer uses this — it opens Demand Requests
+ * (IM→BM order flow). Keep for any remaining callers of the stock-requests API.
  */
 export function StockRequestDialog({ open, target, onOpenChange, onSent }) {
   const [requiredQty, setRequiredQty] = useState(1)

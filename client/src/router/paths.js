@@ -58,6 +58,7 @@ export const PATHS = {
     taxProfit: '/admin/tax-profit',
     company: '/admin/company',
     settings: '/admin/settings',
+    logs: '/admin/logs',
     profile: '/admin/profile',
   },
 }

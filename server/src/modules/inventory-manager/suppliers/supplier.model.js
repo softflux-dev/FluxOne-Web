@@ -220,11 +220,11 @@ export async function deleteSupplier(tenantId, id, { branchId = null } = {}) {
       DELETE FROM suppliers
       WHERE tenant_id = $1 AND id = $2
         ${branchClause(3)}
-      RETURNING id
+      RETURNING id, company_name AS "companyName", branch_id AS "branchId"
     `,
     [id, branchId],
   )
-  return Boolean(rows[0])
+  return rows[0] || null
 }
 
 export async function assertSupplierActive(tenantId, id, { branchId = null } = {}) {

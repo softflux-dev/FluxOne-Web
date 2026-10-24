@@ -21,6 +21,19 @@ import { fail, success, failFromError } from '../../../utils/response.util.js'
 import { paginatedResult } from '../../../utils/pagination.util.js'
 import { resolveUploadUrl } from '../../../utils/uploadUrl.util.js'
 import { reallocateStaffHardware } from './hardwareAllocation.model.js'
+import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
+
+function roleLabel(role) {
+  const map = {
+    [ROLES.BRANCH_MANAGER]: 'Branch Manager',
+    [ROLES.INVENTORY_MANAGER]: 'Inventory Manager',
+    [ROLES.CASHIER]: 'Cashier',
+    [ROLES.BRANCH_ADMIN]: 'Local Admin',
+    [ROLES.PRODUCTION_STAFF]: 'Production Staff',
+    [ROLES.DELIVERY_STAFF]: 'Delivery Staff',
+  }
+  return map[role] || role || '—'
+}
 
 function bmBranchFilter(req) {
   if (req.user?.role === ROLES.BRANCH_MANAGER) {
@@ -85,6 +98,17 @@ export async function createStaff(req, res) {
       branchId,
       imageUrl: resolveUploadUrl(req.file, req),
     })
+    await writeAdminActivity(req.tenantId, {
+      branchId,
+      actorUserId: req.user.id,
+      actorRole: req.user.role,
+      category: 'employees',
+      action: 'staff_create',
+      entityType: 'user',
+      entityId: created.id,
+      actionText: `Added new employee ${created.fullName} with role ${roleLabel(created.role)}.`,
+      affectedItem: created.fullName,
+    })
     return success(res, created, 201)
   } catch (err) {
     return failFromError(res, err)
@@ -140,10 +164,39 @@ export async function patchStaff(req, res) {
   }
 
   try {
+    const before = await getStaffById(req.tenantId, req.validated.params.id, {
+      branchId: bmBranchFilter(req),
+    })
     const row = await updateStaff(req.tenantId, req.validated.params.id, body, {
       branchId: bmBranchFilter(req),
     })
     if (!row) return fail(res, 'Staff not found', 404)
+    const branchId = row.branchId || before?.branchId
+    if (body.role && before && before.role !== body.role) {
+      await writeAdminActivity(req.tenantId, {
+        branchId,
+        actorUserId: req.user.id,
+        actorRole: req.user.role,
+        category: 'employees',
+        action: 'staff_role_change',
+        entityType: 'user',
+        entityId: row.id,
+        actionText: `Changed role of ${row.fullName} from ${roleLabel(before.role)} to ${roleLabel(row.role)}.`,
+        affectedItem: row.fullName,
+      })
+    } else {
+      await writeAdminActivity(req.tenantId, {
+        branchId,
+        actorUserId: req.user.id,
+        actorRole: req.user.role,
+        category: 'employees',
+        action: 'staff_update',
+        entityType: 'user',
+        entityId: row.id,
+        actionText: `Edited profile of employee ${row.fullName}.`,
+        affectedItem: row.fullName,
+      })
+    }
     return success(res, row)
   } catch (err) {
     return failFromError(res, err)
@@ -151,6 +204,9 @@ export async function patchStaff(req, res) {
 }
 
 export async function patchStaffStatus(req, res) {
+  const before = await getStaffById(req.tenantId, req.validated.params.id, {
+    branchId: bmBranchFilter(req),
+  })
   const row = await setStaffStatus(
     req.tenantId,
     req.validated.params.id,
@@ -158,6 +214,20 @@ export async function patchStaffStatus(req, res) {
     { branchId: bmBranchFilter(req) },
   )
   if (!row) return fail(res, 'Staff not found', 404)
+  const active = row.status === 'active'
+  await writeAdminActivity(req.tenantId, {
+    branchId: row.branchId || before?.branchId,
+    actorUserId: req.user.id,
+    actorRole: req.user.role,
+    category: 'employees',
+    action: 'staff_status',
+    entityType: 'user',
+    entityId: row.id,
+    actionText: active
+      ? `Reactivated employee ${row.fullName} (${roleLabel(row.role)}).`
+      : `Deactivated employee ${row.fullName} (${roleLabel(row.role)}).`,
+    affectedItem: row.fullName,
+  })
   return success(res, row)
 }
 
@@ -181,9 +251,25 @@ export async function reallocateHardware(req, res) {
 }
 
 export async function removeStaff(req, res) {
+  const before = await getStaffById(req.tenantId, req.validated.params.id, {
+    branchId: bmBranchFilter(req),
+  })
   const deleted = await deleteStaff(req.tenantId, req.validated.params.id, {
     branchId: bmBranchFilter(req),
   })
   if (!deleted) return fail(res, 'Staff not found', 404)
+  if (before) {
+    await writeAdminActivity(req.tenantId, {
+      branchId: before.branchId,
+      actorUserId: req.user.id,
+      actorRole: req.user.role,
+      category: 'employees',
+      action: 'staff_delete',
+      entityType: 'user',
+      entityId: deleted.id,
+      actionText: `Deleted employee ${before.fullName} (${roleLabel(before.role)}).`,
+      affectedItem: before.fullName,
+    })
+  }
   return success(res, { id: deleted.id, deleted: true })
 }

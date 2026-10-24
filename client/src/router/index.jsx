@@ -57,6 +57,7 @@ import { InvoicesPage as AdminInvoicesPage } from '@/pages/admin/InvoicesPage'
 import { TaxProfitPage as AdminTaxProfitPage } from '@/pages/admin/TaxProfitPage'
 import { CompanyPage as AdminCompanyPage } from '@/pages/admin/CompanyPage'
 import { SettingsPage as AdminSettingsPage } from '@/pages/admin/SettingsPage'
+import { AdminLogsPage } from '@/pages/admin/AdminLogsPage'
 import { AdminProfilePage } from '@/pages/admin/AdminProfilePage'
 import { NotificationsPage } from '@/pages/shared/NotificationsPage'
 import { NotFoundPage, RootNotFoundPage } from '@/pages/shared/NotFoundPage'
@@ -91,6 +92,7 @@ const router = createBrowserRouter([
           { path: 'tax-profit', element: <AdminTaxProfitPage /> },
           { path: 'company', element: <AdminCompanyPage /> },
           { path: 'settings', element: <AdminSettingsPage /> },
+          { path: 'logs', element: <AdminLogsPage /> },
           { path: 'profile', element: <AdminProfilePage /> },
           // Unknown /admin/* — keep AdminLayout topbar
           { path: '*', element: <NotFoundPage /> },

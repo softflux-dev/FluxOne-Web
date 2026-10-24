@@ -237,6 +237,7 @@ export async function remove(req, res) {
     const deactivated = await deleteProduct(tenantId, req.validated.params.id, {
       branchId,
       permanent,
+      createdBy: req.user?.id || null,
     })
     if (!deactivated) return fail(res, 'Item not found', 404)
     if (permanent) {
