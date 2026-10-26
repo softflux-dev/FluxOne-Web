@@ -133,7 +133,7 @@ export function NotificationsPage() {
                         <p className="text-sm font-semibold text-slate-900">{title}</p>
                       </div>
                       {branchName ? (
-                        <div className="mt-1 pl-4">
+                        <div className="mt-1 min-w-0 max-w-full pl-4">
                           <BranchCapsule branchName={branchName} />
                         </div>
                       ) : null}

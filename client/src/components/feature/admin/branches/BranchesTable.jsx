@@ -1,3 +1,4 @@
+import { EmptyState } from '@/components/shared/EmptyState'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -12,7 +13,7 @@ import {
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
 import { displayBranchRef } from '@/lib/formatDisplayId'
 import { formatWorkingDaysShort } from '@/lib/validation/branchForms'
-import { Ban, CheckCircle, Loader2, Mail, MapPin, Phone, Users } from 'lucide-react'
+import { Ban, Building2, CheckCircle, Loader2, Mail, MapPin, Phone, Users } from 'lucide-react'
 import { BranchRowActions } from './BranchRowActions'
 import {
   DEFAULT_BRANCH_IMAGE,
@@ -37,7 +38,14 @@ export function BranchesTable({
   onResetPassword,
   onToggleStatus,
   onDelete,
+  // When set, empty state reflects search/filter — not “add a branch”
+  searchQuery = '',
+  statusFilter = 'all',
 }) {
+  const hasSearch = Boolean(String(searchQuery || '').trim())
+  const hasStatusFilter = statusFilter && statusFilter !== 'all'
+  const hasActiveFilters = hasSearch || hasStatusFilter
+
   return (
             <SurfaceCard
               title="List of branches"
@@ -49,9 +57,21 @@ export function BranchesTable({
                   Loading branches…
                 </div>
               ) : filteredBranches.length === 0 ? (
-                <p className="py-8 text-center text-xs text-slate-400">
-                  No branches match the filter criteria. Add a branch to start the SoftFlux upward flow.
-                </p>
+                // use reusable EmptyState — search hits vs empty catalog
+                <EmptyState
+                  icon={Building2}
+                  title={
+                    hasActiveFilters
+                      ? 'No branches match your search'
+                      : 'No branches yet'
+                  }
+                  description={
+                    hasActiveFilters
+                      ? 'Try a different name, ID, or clear the status filter.'
+                      : 'Add a branch to start the SoftFlux upward flow.'
+                  }
+                  compact
+                />
               ) : (
                 <ResponsiveDataShell
                   mobile={pagedBranches.map((b) => {

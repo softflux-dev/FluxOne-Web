@@ -186,7 +186,11 @@ export function NotificationBell({ className }) {
                           <span className="mt-1 size-2 shrink-0 rounded-full bg-[#8E238F]" />
                         ) : null}
                       </div>
-                      {branchName ? <BranchCapsule branchName={branchName} /> : null}
+                      {branchName ? (
+                        <div className="min-w-0 max-w-full">
+                          <BranchCapsule branchName={branchName} />
+                        </div>
+                      ) : null}
                       {body ? (
                         <p className="whitespace-normal break-words text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                           {body}

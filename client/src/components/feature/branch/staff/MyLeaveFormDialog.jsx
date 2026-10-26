@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { localDateInputValue } from '@/lib/adminLogs'
 import { validateLeaveFormFields } from '@/lib/validation/branchForms'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
@@ -44,10 +45,15 @@ export function MyLeaveFormDialog({ open, onOpenChange, onSuccess }) {
   }, [open, resetErrors, captureBaseline])
 
   const dirty = isDirty({ startDate, endDate, reason })
+  const today = localDateInputValue()
+  const endMin = startDate && startDate > today ? startDate : today
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    const errors = validateLeaveFormFields({ reason, startDate, endDate })
+    const errors = validateLeaveFormFields(
+      { reason, startDate, endDate },
+      { disallowPast: true },
+    )
     if (Object.keys(errors).length) {
       applyErrors(errors, FIELD_IDS, LEAVE_FIELD_ORDER)
       return
@@ -104,6 +110,7 @@ export function MyLeaveFormDialog({ open, onOpenChange, onSuccess }) {
             <Input
               id="my-leave-start"
               type="date"
+              min={today}
               value={startDate}
               onChange={(e) => {
                 setStartDate(e.target.value)
@@ -119,6 +126,7 @@ export function MyLeaveFormDialog({ open, onOpenChange, onSuccess }) {
             <Input
               id="my-leave-end"
               type="date"
+              min={endMin}
               value={endDate}
               onChange={(e) => {
                 setEndDate(e.target.value)

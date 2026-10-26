@@ -195,7 +195,12 @@ export function GenerateOrderPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={addCompanyBlock}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={addCompanyBlock}
+          className="h-10 gap-2 rounded-xl border-dashed border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-xs hover:border-purple-300 hover:bg-purple-50/60 hover:text-purple-900"
+        >
           <Plus className="size-4" />
           Add Company
         </Button>

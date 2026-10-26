@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Building2, Trash2 } from 'lucide-react'
 import { OrderCatalogueResults } from '@/components/feature/orders/OrderCatalogueResults'
 import { OrderItemFilters } from '@/components/feature/orders/OrderItemFilters'
 import { OrderLinesTable } from '@/components/feature/orders/OrderLinesTable'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { SearchableSelect } from '@/components/shared/SearchableSelect'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/select'
 import { BRAND } from '@/lib/constants'
 import { PRODUCT_TYPES } from '@/lib/mapProduct'
 import {
@@ -42,6 +43,8 @@ export function OrderCompanyBlock({
 
   const filters = block.filters || emptyOrderFilters()
   const lines = block.lines || []
+  // Mandatory sequence — catalogue locked until a supplier company is selected
+  const supplierReady = Boolean(block.supplierId)
   const addedIds = useMemo(() => new Set(lines.map((line) => line.productId)), [lines])
 
   const parents = catalog?.parents || []
@@ -62,9 +65,9 @@ export function OrderCompanyBlock({
 
   const supplierOptions = useMemo(
     () =>
-      suppliers.filter(
-        (s) => s.id === block.supplierId || !usedSupplierIds.has(s.id),
-      ),
+      suppliers
+        .filter((s) => s.id === block.supplierId || !usedSupplierIds.has(s.id))
+        .map((s) => ({ id: s.id, label: s.companyName || 'Supplier' })),
     [suppliers, block.supplierId, usedSupplierIds],
   )
 
@@ -91,9 +94,16 @@ export function OrderCompanyBlock({
     patchBlock({ filters: nextFilters })
   }
 
-  // Load product dropdown options for step 4
+  // Load product dropdown options for step 4 — only after supplier is selected
   useEffect(() => {
     let cancelled = false
+    if (!supplierReady) {
+      setProductChoices([])
+      return () => {
+        cancelled = true
+      }
+    }
+
     const type =
       filters.productType === PRODUCT_TYPES.VARIANT
         ? PRODUCT_TYPES.VARIANT
@@ -124,11 +134,18 @@ export function OrderCompanyBlock({
     return () => {
       cancelled = true
     }
-  }, [filters.categoryId, filters.subcategoryId, filters.productType])
+  }, [supplierReady, filters.categoryId, filters.subcategoryId, filters.productType])
 
   // Load variant children when a variant parent is selected
   useEffect(() => {
     let cancelled = false
+    if (!supplierReady) {
+      setVariantChildren([])
+      return () => {
+        cancelled = true
+      }
+    }
+
     const parent = productChoices.find((p) => p.id === filters.productId)
     const needsChildren = parent?.type === PRODUCT_TYPES.VARIANT
 
@@ -149,11 +166,19 @@ export function OrderCompanyBlock({
     return () => {
       cancelled = true
     }
-  }, [filters.productId, productChoices])
+  }, [supplierReady, filters.productId, productChoices])
 
-  // Build catalogue result rows
+  // Build catalogue result rows — skipped until supplier is selected
   useEffect(() => {
     let cancelled = false
+    if (!supplierReady) {
+      setCatalogue([])
+      setLoadingCatalogue(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
     setLoadingCatalogue(true)
 
     void (async () => {
@@ -217,6 +242,7 @@ export function OrderCompanyBlock({
       cancelled = true
     }
   }, [
+    supplierReady,
     filters.categoryId,
     filters.subcategoryId,
     filters.productType,
@@ -226,6 +252,19 @@ export function OrderCompanyBlock({
     variantChildren,
     productChoices,
   ])
+
+  function handleSupplierChange(nextSupplierId) {
+    // Clearing supplier resets catalogue state so no orphan lines sit under 0 companies
+    if (!nextSupplierId) {
+      patchBlock({
+        supplierId: '',
+        filters: emptyOrderFilters(),
+        lines: [],
+      })
+      return
+    }
+    patchBlock({ supplierId: nextSupplierId })
+  }
 
   function handleAdd(product) {
     if (addedIds.has(product.id)) return
@@ -292,18 +331,17 @@ export function OrderCompanyBlock({
         <Label htmlFor={`supplier-${block.key}`}>
           Supplier company <span className="text-rose-500">*</span>
         </Label>
-        <NativeSelect
+        {/* use reusable SearchableSelect — filter suppliers by name as user types */}
+        <SearchableSelect
           id={`supplier-${block.key}`}
           value={block.supplierId}
-          onChange={(e) => patchBlock({ supplierId: e.target.value })}
-        >
-          <option value="">Select supplier</option>
-          {supplierOptions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.companyName}
-            </option>
-          ))}
-        </NativeSelect>
+          options={supplierOptions}
+          placeholder="Select supplier"
+          searchPlaceholder="Search supplier…"
+          emptyLabel="Select supplier"
+          includeEmpty
+          onChange={(nextId) => handleSupplierChange(nextId || '')}
+        />
         {!suppliers.length ? (
           <p className="text-xs text-amber-700">
             No active suppliers — add one under Supplier Management first.
@@ -311,32 +349,44 @@ export function OrderCompanyBlock({
         ) : null}
       </div>
 
-      <OrderItemFilters
-        filters={filters}
-        categoryOptions={categoryOptions}
-        subcategoryOptions={subcategoryOptions}
-        productOptions={productOptions}
-        variantTypeOptions={variantAxes.map((axis) => ({ id: axis.id, label: axis.name }))}
-        variantValueOptions={selectedTypeValues.map((value) => ({
-          id: value.id,
-          label: value.name,
-        }))}
-        onChange={patchFilters}
-        onClear={() => patchFilters(emptyOrderFilters())}
-      />
+      {/* use reusable EmptyState — hide catalogue until supplier is selected */}
+      {!supplierReady ? (
+        <EmptyState
+          icon={Building2}
+          title="Please select a supplier to view and add products"
+          description="Search, filters, and the product catalogue stay locked until a supplier company is selected."
+          compact
+        />
+      ) : (
+        <>
+          <OrderItemFilters
+            filters={filters}
+            categoryOptions={categoryOptions}
+            subcategoryOptions={subcategoryOptions}
+            productOptions={productOptions}
+            variantTypeOptions={variantAxes.map((axis) => ({ id: axis.id, label: axis.name }))}
+            variantValueOptions={selectedTypeValues.map((value) => ({
+              id: value.id,
+              label: value.name,
+            }))}
+            onChange={patchFilters}
+            onClear={() => patchFilters(emptyOrderFilters())}
+          />
 
-      <OrderCatalogueResults
-        items={catalogue}
-        addedProductIds={addedIds}
-        loading={loadingCatalogue}
-        onAdd={handleAdd}
-      />
+          <OrderCatalogueResults
+            items={catalogue}
+            addedProductIds={addedIds}
+            loading={loadingCatalogue}
+            onAdd={handleAdd}
+          />
 
-      <OrderLinesTable
-        lines={lines}
-        onQuantityChange={handleQty}
-        onRemove={handleRemoveLine}
-      />
+          <OrderLinesTable
+            lines={lines}
+            onQuantityChange={handleQty}
+            onRemove={handleRemoveLine}
+          />
+        </>
+      )}
     </section>
   )
 }

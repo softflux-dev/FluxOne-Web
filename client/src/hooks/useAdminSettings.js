@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 
@@ -21,13 +21,21 @@ export function useAdminDevices({
     total: 0,
     pageCount: 1,
   })
+  // listLoading — table only; KPIs keep last good stats (status filter must not flash cards)
   const [loading, setLoading] = useState(true)
+  const [statsReady, setStatsReady] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [error, setError] = useState(null)
+  const requestIdRef = useRef(0)
+  const statsReadyRef = useRef(false)
 
   const load = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
+    // Clear stale rows immediately so Blocked never shows leftover Active systems
+    setItems([])
+
     const result = await apiClient.get(endpoints.admin.settings.devices, {
       q: q?.trim() || undefined,
       status: status && status !== 'all' ? status : undefined,
@@ -36,25 +44,42 @@ export function useAdminDevices({
       page,
       limit,
     })
+
+    // Ignore out-of-order responses when filters change quickly
+    if (requestId !== requestIdRef.current) return result
+
     if (!result.success) {
       setItems([])
-      setStats({ total: 0, active: 0, blocked: 0 })
+      // Keep last KPI stats on filter refetch failure; only wipe on first load
+      if (!statsReadyRef.current) {
+        setStats({ total: 0, active: 0, blocked: 0 })
+      }
       setPagination({ page: 1, limit, total: 0, pageCount: 1 })
       setError(result.error || 'Failed to load devices')
       setLoading(false)
       return result
     }
-    setItems(result.data?.items || [])
+
+    const nextItems = result.data?.items || []
+    // Defensive client filter — status list must match selected pill
+    const filteredItems =
+      status && status !== 'all'
+        ? nextItems.filter((row) => row.status === status)
+        : nextItems
+
+    setItems(filteredItems)
     setStats({
       total: result.data?.stats?.total || 0,
       active: result.data?.stats?.active || 0,
       blocked: result.data?.stats?.blocked || 0,
     })
+    statsReadyRef.current = true
+    setStatsReady(true)
     setPagination(
       result.data?.pagination || {
         page,
         limit,
-        total: result.data?.items?.length || 0,
+        total: filteredItems.length,
         pageCount: 1,
       },
     )
@@ -82,6 +107,7 @@ export function useAdminDevices({
   return {
     items,
     stats,
+    statsReady,
     pagination,
     loading,
     mutating,

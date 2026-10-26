@@ -1,7 +1,11 @@
 // Branch Manager form validators (Resources, Discounts, shared field rules).
 
+import { localDateInputValue } from '@/lib/adminLogs'
 import { validatePercentage } from '@/lib/validation/formValidators'
 import { firstValidationMessage } from '@/lib/validation/fieldErrors'
+
+export const LEAVE_PAST_DATE_MESSAGE =
+  'Leave cannot be applied for past dates. Please select today or a future date.'
 
 // Weekday tokens — match server schedule.validation WEEK_DAYS / branches.working_days
 export const WEEK_DAY_OPTIONS = [
@@ -215,16 +219,29 @@ export function validateHolidayForm(fields = {}) {
   ])
 }
 
-export function validateLeaveFormFields(fields = {}) {
+export function validateLeaveFormFields(fields = {}, { disallowPast = false } = {}) {
   const errors = {}
+  const today = localDateInputValue()
   if (!fields.startDate) errors.startDate = 'Start date is required'
   if (!fields.endDate) errors.endDate = 'End date is required'
+  // My Leave only — staff appointment may still record historical leave
+  if (disallowPast) {
+    if (fields.startDate && fields.startDate < today) {
+      errors.startDate = LEAVE_PAST_DATE_MESSAGE
+    }
+    if (fields.endDate && fields.endDate < today) {
+      errors.endDate = LEAVE_PAST_DATE_MESSAGE
+    }
+  }
   if (fields.startDate && fields.endDate && fields.startDate > fields.endDate) {
     errors.endDate = 'End date must be on or after start date'
   }
   return errors
 }
 
-export function validateLeaveForm(fields = {}) {
-  return firstValidationMessage(validateLeaveFormFields(fields), ['startDate', 'endDate'])
+export function validateLeaveForm(fields = {}, options) {
+  return firstValidationMessage(
+    validateLeaveFormFields(fields, options),
+    ['startDate', 'endDate'],
+  )
 }

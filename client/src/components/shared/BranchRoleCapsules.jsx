@@ -13,7 +13,8 @@ function Capsule({ children, className }) {
   return (
     <span
       className={cn(
-        'inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1',
+        // Consistent height + vertical center — avoids clipped text in notification dropdown
+        'inline-flex min-h-[1.25rem] min-w-0 max-w-full items-center truncate rounded-full px-2 py-1 text-[10px] leading-none font-semibold ring-1',
         className,
       )}
       title={typeof children === 'string' ? children : undefined}
@@ -34,7 +35,10 @@ export function BranchCapsule({ branchName, className }) {
   if (!branchName) return null
   return (
     <Capsule
-      className={cn('bg-emerald-50 text-emerald-800 ring-emerald-200', className)}
+      className={cn(
+        'bg-emerald-50 text-emerald-800 ring-emerald-200',
+        className,
+      )}
     >
       {branchName}
     </Capsule>

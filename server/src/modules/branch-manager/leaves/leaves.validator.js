@@ -1,9 +1,16 @@
 import { z } from 'zod'
 import { empty, idParams, optionalUuid } from '../shared.validator.js'
 
+const LEAVE_PAST_DATE_MESSAGE =
+  'Leave cannot be applied for past dates. Please select today or a future date.'
+
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+
+function todayIsoUtc() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 function withOrderedDates(schema) {
   return schema.superRefine((value, ctx) => {
@@ -11,6 +18,27 @@ function withOrderedDates(schema) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'End date must be on or after start date',
+        path: ['endDate'],
+      })
+    }
+  })
+}
+
+// BM My Leave — start/end cannot be before today
+function withNotPastDates(schema) {
+  return schema.superRefine((value, ctx) => {
+    const today = todayIsoUtc()
+    if (value.startDate && value.startDate < today) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: LEAVE_PAST_DATE_MESSAGE,
+        path: ['startDate'],
+      })
+    }
+    if (value.endDate && value.endDate < today) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: LEAVE_PAST_DATE_MESSAGE,
         path: ['endDate'],
       })
     }
@@ -36,7 +64,7 @@ export const createStaffLeaveSchema = z.object({
 
 // BM self leave request (pending Admin approval)
 export const createMyLeaveSchema = z.object({
-  body: withOrderedDates(leaveDatesFields),
+  body: withNotPastDates(withOrderedDates(leaveDatesFields)),
   query: empty,
   params: empty,
 })
@@ -53,11 +81,15 @@ export const updateStaffLeaveSchema = z.object({
 })
 
 export const updateMyLeaveSchema = z.object({
-  body: z.object({
-    startDate: isoDate.optional(),
-    endDate: isoDate.optional(),
-    reason: z.string().trim().max(500).optional().nullable(),
-  }),
+  body: withNotPastDates(
+    withOrderedDates(
+      z.object({
+        startDate: isoDate.optional(),
+        endDate: isoDate.optional(),
+        reason: z.string().trim().max(500).optional().nullable(),
+      }),
+    ),
+  ),
   query: empty,
   params: idParams,
 })

@@ -426,6 +426,8 @@ export function BranchesPage() {
           onResetPassword={handlePromptResetPassword}
           onToggleStatus={handlePromptToggleStatus}
           onDelete={setDeleteTarget}
+          searchQuery={searchQuery}
+          statusFilter={statusFilter}
         />
       </MotionReveal>
 

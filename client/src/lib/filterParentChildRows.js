@@ -14,20 +14,14 @@ export function filterParentChildRows(rows, statusFilter = 'all', query = '') {
         children: (row.children || []).filter((child) => child.isActive !== false),
       }))
   } else if (statusFilter === 'inactive') {
+    // Parent status only — Active parents with inactive children must not appear
+    // (Categories Inactive tab; Sub Categories use filterFlatChildRows instead)
     next = list
-      .map((row) => {
-        const inactiveChildren = (row.children || []).filter(
-          (child) => child.isActive === false,
-        )
-        if (row.isActive === false) {
-          return { ...row, children: inactiveChildren }
-        }
-        if (inactiveChildren.length > 0) {
-          return { ...row, children: inactiveChildren }
-        }
-        return null
-      })
-      .filter(Boolean)
+      .filter((row) => row.isActive === false)
+      .map((row) => ({
+        ...row,
+        children: (row.children || []).filter((child) => child.isActive === false),
+      }))
   }
 
   const needle = String(query || '')

@@ -144,6 +144,7 @@ export function SettingsPage() {
   const {
     items: systems,
     stats,
+    statsReady,
     pagination,
     loading,
     error,
@@ -155,6 +156,7 @@ export function SettingsPage() {
     page,
     limit,
   })
+  // KPI cards use statsReady — never flash "—" when only the list reloads on status filter
 
   const slowHint = useSlowLoadingHint(loading && activeTab === 'systems')
   const hasDeviceFilters =
@@ -624,7 +626,7 @@ export function SettingsPage() {
                     Registered Systems
                   </p>
                   <p className="text-lg font-bold text-slate-900 leading-tight">
-                    {loading ? '—' : stats.total}
+                    {statsReady ? stats.total : '—'}
                   </p>
                 </div>
               </div>
@@ -638,7 +640,7 @@ export function SettingsPage() {
                     Active & Authorized
                   </p>
                   <p className="text-lg font-bold text-emerald-700 leading-tight">
-                    {loading ? '—' : stats.active}
+                    {statsReady ? stats.active : '—'}
                   </p>
                 </div>
               </div>
@@ -652,7 +654,7 @@ export function SettingsPage() {
                     Blocked Systems
                   </p>
                   <p className="text-lg font-bold text-rose-700 leading-tight">
-                    {loading ? '—' : stats.blocked}
+                    {statsReady ? stats.blocked : '—'}
                   </p>
                 </div>
               </div>

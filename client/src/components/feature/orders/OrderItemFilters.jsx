@@ -16,7 +16,7 @@ function FilterSelect({
   className,
 }) {
   return (
-    <div className={cn('min-w-0 flex-1 space-y-1.5', className)}>
+    <div className={cn('min-w-0 space-y-1.5', className)}>
       <Label htmlFor={id} className="text-xs text-slate-500">
         {step ? `${step}. ${label}` : label}
       </Label>
@@ -76,7 +76,8 @@ export function OrderItemFilters({
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {/* Equal 4-col grid — Category / Sub / Type / Product aligned side-by-side */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FilterSelect
           id={`ord-cat-${categoryId || 'x'}`}
           step={1}
@@ -145,31 +146,33 @@ export function OrderItemFilters({
             })
           }
         />
-        {isVariant ? (
-          <>
-            <FilterSelect
-              id="ord-vtype"
-              step={5}
-              label="Variant Type"
-              value={variantTypeId}
-              disabled={!productId}
-              placeholder="Any variant type"
-              options={variantTypeOptions}
-              onChange={(next) => patch({ variantTypeId: next, variantValueId: '' })}
-            />
-            <FilterSelect
-              id="ord-vvalue"
-              step={6}
-              label="Variant Value"
-              value={variantValueId}
-              disabled={!variantTypeId}
-              placeholder="Any value"
-              options={variantValueOptions}
-              onChange={(next) => patch({ variantValueId: next })}
-            />
-          </>
-        ) : null}
       </div>
+
+      {/* Conditional wrap — variant type/value drop to the next line */}
+      {isVariant ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FilterSelect
+            id="ord-vtype"
+            step={5}
+            label="Variant Type"
+            value={variantTypeId}
+            disabled={!productId}
+            placeholder="Any variant type"
+            options={variantTypeOptions}
+            onChange={(next) => patch({ variantTypeId: next, variantValueId: '' })}
+          />
+          <FilterSelect
+            id="ord-vvalue"
+            step={6}
+            label="Variant Value"
+            value={variantValueId}
+            disabled={!variantTypeId}
+            placeholder="Any value"
+            options={variantValueOptions}
+            onChange={(next) => patch({ variantValueId: next })}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }
