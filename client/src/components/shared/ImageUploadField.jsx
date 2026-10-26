@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 // Browsers cannot pre-fill <input type="file">; we preview File / existing URL ourselves.
 export function ImageUploadField({
   id,
+  name,
   label,
   value = null,
   existingImageUrl = null,
@@ -89,6 +90,7 @@ export function ImageUploadField({
         key={inputKey}
         ref={inputRef}
         id={id}
+        name={name || id}
         type="file"
         accept={IMAGE_ACCEPT}
         className="sr-only"

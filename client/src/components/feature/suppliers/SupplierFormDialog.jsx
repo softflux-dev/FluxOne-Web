@@ -65,6 +65,9 @@ export function SupplierFormDialog({
   const { captureBaseline, isDirty } = useFormBaseline(open)
   const busy = loading || submitting
 
+  // Reset only when dialog opens / switches supplier — not on every parent re-render
+  // (avoids wiping File previews when list refresh replaces initialSupplier reference).
+  const editSupplierId = isEdit ? initialSupplier?.id || null : null
   useEffect(() => {
     if (!open) return
     resetErrors()
@@ -86,11 +89,14 @@ export function SupplierFormDialog({
       setForm(nextForm)
       captureBaseline(nextForm)
     } else {
-      setForm(EMPTY)
-      captureBaseline(EMPTY)
+      const nextForm = { ...EMPTY }
+      setForm(nextForm)
+      captureBaseline(nextForm)
     }
-  }, [open, isEdit, initialSupplier, captureBaseline, resetErrors])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed by editSupplierId
+  }, [open, isEdit, editSupplierId, captureBaseline, resetErrors])
 
+  // Patch one field only — image and signature stay independent
   function patch(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
     clearField(field)
@@ -154,7 +160,9 @@ export function SupplierFormDialog({
             </div>
 
             <ImageUploadField
+              key="sup-company-image"
               id="sup-image"
+              name="image"
               label="Image"
               optionalLabel="(optional)"
               value={form.image}
@@ -261,7 +269,9 @@ export function SupplierFormDialog({
             </div>
 
             <ImageUploadField
+              key="sup-digital-signature"
               id="sup-signature"
+              name="signature"
               label="Digital signature"
               optionalLabel="(optional)"
               className="sm:col-span-2"

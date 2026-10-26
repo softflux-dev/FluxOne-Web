@@ -15,11 +15,15 @@ function fileUrl(file, req) {
   return resolveUploadUrl(file, req)
 }
 
+// Only return keys for files that were actually uploaded — never null-out the other field.
+// Bug: always returning imageUrl/signatureUrl: null wiped company image when only signature changed (and vice versa).
 function filesFromRequest(req) {
-  return {
-    imageUrl: fileUrl(req.files?.image?.[0] || req.file, req),
-    signatureUrl: fileUrl(req.files?.signature?.[0], req),
-  }
+  const out = {}
+  const imageFile = req.files?.image?.[0] || req.file || null
+  const signatureFile = req.files?.signature?.[0] || null
+  if (imageFile) out.imageUrl = fileUrl(imageFile, req)
+  if (signatureFile) out.signatureUrl = fileUrl(signatureFile, req)
+  return out
 }
 
 

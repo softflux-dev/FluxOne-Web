@@ -74,10 +74,13 @@ export function SupplierTable({
   onDelete,
   statusUpdatingId = null,
   className,
+  // When set, empty state is "no search hits" instead of "no suppliers yet"
+  searchQuery = '',
   // canModerate unused — actions gated by which handlers the page passes
 }) {
   const list = Array.isArray(items) ? items : []
   const isEmpty = !loading && list.length === 0
+  const hasSearch = Boolean(String(searchQuery || '').trim())
   const page = pagination?.page || 1
   const pageCount = Math.max(1, pagination?.pageCount || 1)
   const total = pagination?.total ?? list.length
@@ -94,8 +97,12 @@ export function SupplierTable({
       ) : isEmpty ? (
         <EmptyState
           icon={Building2}
-          title="No suppliers yet"
-          description="Add a supplier before generating purchase orders."
+          title={hasSearch ? 'No matching suppliers' : 'No suppliers yet'}
+          description={
+            hasSearch
+              ? 'Try a company name or full Supplier ID (e.g. SUP-5BD13512).'
+              : 'Add a supplier before generating purchase orders.'
+          }
         />
       ) : (
         <>

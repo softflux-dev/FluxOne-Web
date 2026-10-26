@@ -157,6 +157,7 @@ export function SuppliersPage() {
           onActivate={canModerate ? handleActivate : undefined}
           onDelete={canDelete ? setDeleteTarget : undefined}
           statusUpdatingId={statusUpdatingId}
+          searchQuery={filters.q}
         />
       </MotionReveal>
 

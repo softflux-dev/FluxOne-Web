@@ -19,7 +19,7 @@ export function SupplierFilters({
       className={className}
       q={q}
       status={active}
-      searchPlaceholder="Search by company name or ID…"
+      searchPlaceholder="Search by company name or ID (SUP-…)"
       statusOptions={SUPPLIER_STATUS_OPTIONS}
       onSearchChange={onSearchChange}
       onStatusChange={onActiveChange}
