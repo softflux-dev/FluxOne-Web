@@ -509,7 +509,8 @@ export function StaffPerformanceTab({
             <Button
               size="sm"
               variant="brand"
-              disabled={!canSaveScale || savingScale}
+              loading={savingScale}
+              disabled={!canSaveScale}
               title={
                 !sumValid
                   ? `Total must equal ${SCALE_SUM_TARGET}`
@@ -519,7 +520,7 @@ export function StaffPerformanceTab({
               }
               onClick={handleSaveScaleVersion}
             >
-              {savingScale ? 'Saving…' : 'Save Scale'}
+              Save Scale
             </Button>
           }
         >

@@ -130,9 +130,9 @@ export function VariantTypeDialog({
               type="submit"
               className="cursor-pointer text-white"
               style={{ background: BRAND.purple }}
-              disabled={loading}
+              loading={loading}
             >
-              {loading ? 'Saving…' : 'Save'}
+              Save
             </Button>
           </DialogFooter>
         </form>

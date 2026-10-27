@@ -100,10 +100,11 @@ export function PrintBarcodeDialog({
             type="button"
             className="cursor-pointer text-white"
             style={{ background: BRAND.purple }}
-            disabled={!url || downloading}
+            loading={downloading}
+            disabled={!url}
             onClick={handleDownloadPdf}
           >
-            {downloading ? 'Downloading…' : 'Download PDF'}
+            Download PDF
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -13,7 +13,8 @@ import {
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
 import { displayBranchRef } from '@/lib/formatDisplayId'
 import { formatWorkingDaysShort } from '@/lib/validation/branchForms'
-import { Ban, Building2, CheckCircle, Loader2, Mail, MapPin, Phone, Users } from 'lucide-react'
+import { Ban, Building2, CheckCircle, Mail, MapPin, Phone, Users } from 'lucide-react'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { BranchRowActions } from './BranchRowActions'
 import {
   DEFAULT_BRANCH_IMAGE,
@@ -52,10 +53,7 @@ export function BranchesTable({
               description="Registered branch network, branch manager assignments, locations & access statuses"
             >
               {loading && items.length === 0 ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-400">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading branches…
-                </div>
+                <TableRowsSkeleton rows={5} />
               ) : filteredBranches.length === 0 ? (
                 // use reusable EmptyState — search hits vs empty catalog
                 <EmptyState

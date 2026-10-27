@@ -28,7 +28,8 @@ import {
   SELLING_PRICE_FORMULA,
   TAX_PCT_FORMULA,
 } from '@/lib/pricingFormulaCopy'
-import { BadgePercent, Loader2, PackageOpen, Receipt } from 'lucide-react'
+import { BadgePercent, PackageOpen, Receipt } from 'lucide-react'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function resolveRowPricing(p) {
   const sellingPrice = Number(p.sellingPrice ?? 0)
@@ -110,10 +111,7 @@ export function TaxProfitTable({
       }
     >
       {loading && products.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
-          <Loader2 className="size-4 animate-spin" />
-          Loading catalog…
-        </div>
+        <TableRowsSkeleton rows={5} />
       ) : products.length === 0 ? (
         <EmptyState
           icon={PackageOpen}

@@ -93,8 +93,8 @@ export function MyLeaveFormDialog({ open, onOpenChange, onSuccess }) {
       footer={
         <>
           <DialogCancelButton disabled={mutating} />
-          <Button type="submit" form="my-leave-form" disabled={mutating} variant="brand">
-            {mutating ? 'Submitting…' : 'Submit Request'}
+          <Button type="submit" form="my-leave-form" loading={mutating} variant="brand">
+            Submit Request
           </Button>
         </>
       }

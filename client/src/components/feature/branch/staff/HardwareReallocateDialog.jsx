@@ -13,6 +13,7 @@ import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { formatSlotKey, formatSlotLabel } from '@/lib/validation/hardwareSlots'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function holderLabel(holder) {
   if (!holder?.staffName) return 'another employee'
@@ -127,7 +128,7 @@ export function HardwareReallocateDialog({ open, holder, onOpenChange, onRealloc
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? <p className="text-sm text-slate-500">Loading available hardware…</p> : null}
+        {loading ? <TableRowsSkeleton rows={3} /> : null}
         {!loading && devices.length === 0 ? (
           <p className="text-sm text-amber-700">No other hardware is free for this employee’s day and time.</p>
         ) : null}
@@ -183,10 +184,11 @@ export function HardwareReallocateDialog({ open, holder, onOpenChange, onRealloc
           <Button
             type="button"
             variant="brand"
-            disabled={saving || !selectedId}
+            loading={saving}
+            disabled={!selectedId}
             onClick={() => void handleConfirm()}
           >
-            {saving ? 'Saving…' : 'Confirm reallocation'}
+            Confirm reallocation
           </Button>
         </DialogFooter>
       </DialogContent>

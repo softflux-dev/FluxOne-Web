@@ -3,7 +3,7 @@ import { Check, ChevronDown, Search } from 'lucide-react'
 import { TruncatedText } from '@/components/shared/TruncatedText'
 import { cn } from '@/lib/utils'
 
-// Single-select filter with search, fixed width, and 2-line option clamp
+// Combobox select — type in the field to filter; list opens below (image-2 pattern)
 export function SearchableSelect({
   id,
   value = '',
@@ -14,13 +14,14 @@ export function SearchableSelect({
   disabled = false,
   includeEmpty = true,
   emptyLabel,
+  emptyMessage = 'No options available',
   className,
   triggerClassName,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const rootRef = useRef(null)
-  const searchRef = useRef(null)
+  const inputRef = useRef(null)
 
   const emptyOptionLabel = emptyLabel || placeholder
 
@@ -49,13 +50,12 @@ export function SearchableSelect({
       if (event.key === 'Escape') {
         setOpen(false)
         setQuery('')
+        inputRef.current?.blur()
       }
     }
 
     document.addEventListener('mousedown', onDocClick)
     document.addEventListener('keydown', onKeyDown)
-    // Focus search when panel opens
-    requestAnimationFrame(() => searchRef.current?.focus())
 
     return () => {
       document.removeEventListener('mousedown', onDocClick)
@@ -63,101 +63,131 @@ export function SearchableSelect({
     }
   }, [open])
 
+  function openPanel() {
+    if (disabled) return
+    setOpen(true)
+    setQuery('')
+  }
+
   function selectValue(next) {
     onChange?.(next)
     setOpen(false)
     setQuery('')
+    inputRef.current?.blur()
   }
 
-  const displayLabel = selected?.label || emptyOptionLabel
+  const showEmptyOption =
+    includeEmpty && (!query.trim() || emptyOptionLabel.toLowerCase().includes(query.trim().toLowerCase()))
+
+  const hasVisibleOptions = showEmptyOption || filtered.length > 0
+
+  // Closed: selected label. Open: live query (placeholder shows selection / search hint).
+  const inputDisplay = open ? query : selected?.label || ''
+  const inputPlaceholder = open
+    ? selected?.label || searchPlaceholder || placeholder
+    : placeholder
 
   return (
     <div ref={rootRef} className={cn('relative w-full', className)}>
-      <button
-        id={id}
-        type="button"
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={selected?.label || undefined}
-        onClick={() => {
-          if (disabled) return
-          setOpen((prev) => !prev)
-        }}
+      <div
         className={cn(
-          'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-2 text-left text-sm',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-60 dark:disabled:bg-muted',
-          open && 'border-purple-300 ring-1 ring-purple-200 dark:border-[#c084c1]/50 dark:ring-[#c084c1]/20',
+          'flex h-10 w-full items-center gap-2 rounded-lg border border-input bg-slate-50/80 px-3 text-sm',
+          'focus-within:border-purple-300 focus-within:bg-white focus-within:ring-1 focus-within:ring-purple-200',
+          'dark:bg-muted dark:focus-within:bg-card dark:focus-within:border-[#c084c1]/50 dark:focus-within:ring-[#c084c1]/20',
+          disabled && 'cursor-not-allowed opacity-60',
+          open && 'border-purple-300 bg-white ring-1 ring-purple-200 dark:border-[#c084c1]/50 dark:ring-[#c084c1]/20',
           triggerClassName,
         )}
       >
-        <TruncatedText
-          as="span"
-          text={displayLabel}
-          lines={1}
+        <Search className="pointer-events-none size-4 shrink-0 text-slate-400" aria-hidden />
+        <input
+          ref={inputRef}
+          id={id}
+          type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-controls={open ? `${id}-listbox` : undefined}
+          aria-autocomplete="list"
+          disabled={disabled}
+          autoComplete="off"
+          value={inputDisplay}
+          placeholder={inputPlaceholder}
+          title={selected?.label || undefined}
+          onFocus={openPanel}
+          onClick={openPanel}
+          onChange={(event) => {
+            if (disabled) return
+            setQuery(event.target.value)
+            if (!open) setOpen(true)
+          }}
           className={cn(
-            'block min-w-0 flex-1 text-left',
-            selected
+            'min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-slate-400',
+            selected && !open
               ? 'font-medium text-slate-900 dark:text-slate-100'
-              : 'text-slate-500 dark:text-slate-400',
+              : 'text-slate-800 dark:text-slate-200',
           )}
         />
-        <ChevronDown
-          className={cn(
-            'size-4 shrink-0 text-slate-400 transition-transform',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          aria-label={open ? 'Close options' : 'Open options'}
+          className="shrink-0 text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed"
+          onMouseDown={(event) => {
+            // Keep focus on input; toggle panel without stealing click-outside
+            event.preventDefault()
+            if (disabled) return
+            if (open) {
+              setOpen(false)
+              setQuery('')
+            } else {
+              openPanel()
+              inputRef.current?.focus()
+            }
+          }}
+        >
+          <ChevronDown
+            className={cn('size-4 transition-transform', open && 'rotate-180')}
+          />
+        </button>
+      </div>
 
       {open ? (
-        <div className="absolute z-40 mt-1 w-full min-w-0 overflow-hidden rounded-lg border border-border bg-white shadow-lg dark:bg-popover">
-          <div className="border-b border-border p-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="h-9 w-full rounded-lg border border-input bg-slate-50/70 py-1.5 pr-3 pl-8 text-xs outline-none focus:border-purple-300 focus:bg-white focus:ring-1 focus:ring-purple-200 dark:bg-muted dark:focus:bg-card dark:focus:border-[#c084c1]/50 dark:focus:ring-[#c084c1]/20"
-              />
-            </div>
-          </div>
+        <ul
+          id={`${id}-listbox`}
+          role="listbox"
+          aria-labelledby={id}
+          className="absolute z-50 mt-1 max-h-52 w-full min-w-0 overflow-y-auto rounded-lg border border-border bg-white py-1 shadow-lg dark:bg-popover"
+        >
+          {!hasVisibleOptions ? (
+            <li className="px-3 py-3 text-sm text-slate-400">{emptyMessage}</li>
+          ) : (
+            <>
+              {showEmptyOption ? (
+                <li role="option" aria-selected={!value}>
+                  <button
+                    type="button"
+                    className={cn(
+                      'flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted',
+                      !value && 'bg-purple-50/60 dark:bg-accent/60',
+                    )}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectValue('')}
+                  >
+                    <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                      {!value ? (
+                        <Check className="size-3.5 text-purple-700 dark:text-[#c084c1]" />
+                      ) : null}
+                    </span>
+                    <span className="min-w-0 flex-1 text-slate-500 dark:text-slate-400">
+                      {emptyOptionLabel}
+                    </span>
+                  </button>
+                </li>
+              ) : null}
 
-          <ul
-            role="listbox"
-            aria-labelledby={id}
-            className="max-h-52 overflow-y-auto py-1"
-          >
-            {includeEmpty ? (
-              <li role="option" aria-selected={!value}>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted',
-                    !value && 'bg-purple-50/60 dark:bg-accent/60',
-                  )}
-                  onClick={() => selectValue('')}
-                >
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                    {!value ? (
-                      <Check className="size-3.5 text-purple-700 dark:text-[#c084c1]" />
-                    ) : null}
-                  </span>
-                  <span className="min-w-0 flex-1 text-slate-500 dark:text-slate-400">
-                    {emptyOptionLabel}
-                  </span>
-                </button>
-              </li>
-            ) : null}
-
-            {filtered.length === 0 ? (
-              <li className="px-3 py-4 text-center text-xs text-slate-400">No matches</li>
-            ) : (
-              filtered.map((opt) => {
+              {filtered.map((opt) => {
                 const isSelected = String(opt.id) === String(value)
                 return (
                   <li key={opt.id} role="option" aria-selected={isSelected}>
@@ -167,6 +197,7 @@ export function SearchableSelect({
                         'flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted',
                         isSelected && 'bg-purple-50/60 dark:bg-accent/60',
                       )}
+                      onMouseDown={(event) => event.preventDefault()}
                       onClick={() => selectValue(opt.id)}
                     >
                       <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
@@ -183,10 +214,10 @@ export function SearchableSelect({
                     </button>
                   </li>
                 )
-              })
-            )}
-          </ul>
-        </div>
+              })}
+            </>
+          )}
+        </ul>
       ) : null}
     </div>
   )

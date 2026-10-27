@@ -13,8 +13,8 @@ export function DateTimeLines({
 
   return (
     <span className={`inline-flex flex-col leading-tight ${className}`.trim()}>
-      <span>{parts.date}</span>
-      {parts.time !== '—' ? <span className={timeClassName}>{parts.time}</span> : null}
+      <span>{parts.date} - {parts.time}</span>
+      {/* {parts.time !== '—' ? <span className={timeClassName}>{parts.time}</span> : null} */}
     </span>
   )
 }

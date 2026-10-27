@@ -539,10 +539,10 @@ export function AdjustmentDialog({
             type="button"
             className="text-white"
             style={{ background: BRAND.purple }}
-            disabled={loading || saving}
+            loading={loading || saving}
             onClick={handleSave}
           >
-            {loading || saving ? 'Saving…' : 'Save'}
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

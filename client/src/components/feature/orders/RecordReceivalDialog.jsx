@@ -265,7 +265,8 @@ export function RecordReceivalDialog({
             type="button"
             variant="brand"
             className="w-full cursor-pointer sm:w-auto"
-            disabled={loading || !canSubmit}
+            loading={loading}
+            disabled={!canSubmit}
             onClick={() =>
               onConfirm?.({
                 lines: selectedLines.map((row) => ({
@@ -276,7 +277,7 @@ export function RecordReceivalDialog({
               })
             }
           >
-            {loading ? 'Recording…' : 'Record Stock In'}
+            Record Stock In
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -23,6 +23,7 @@ import { displayItemCode } from '@/lib/formatDisplayId'
 import { CategoryLines } from '@/components/shared/CategoryLines'
 import { TruncatedText } from '@/components/shared/TruncatedText'
 import { CATEGORY_ACTIVE_QUERY } from '@/lib/productCatalogCache'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { filterActiveCategories } from '@/lib/mapProduct'
 import { getShelfStockStatus } from '@/lib/shelfStockStatus'
 import { BRAND } from '@/lib/constants'
@@ -240,7 +241,7 @@ export function BranchInventoryPage() {
           <MotionReveal delay={0.04}>
             <SurfaceCard title="Shelf Stock Levels" className="min-h-[400px]">
               {loading ? (
-                <p className="py-8 text-center text-sm text-slate-400">Loading shelf stock...</p>
+                <TableRowsSkeleton rows={5} />
               ) : products.length === 0 ? (
                 <p className="py-8 text-center text-sm text-slate-400">No stock products found</p>
               ) : (

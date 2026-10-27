@@ -36,6 +36,7 @@ import {
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { useFieldErrors } from '@/hooks/useFieldErrors'
 import { useFormBaseline } from '@/hooks/useFormBaseline'
+import { Skeleton, TableRowsSkeleton } from '@/components/ui/skeleton'
 
 const COMPANY_FIELD_IDS = {
   name: 'companyName',
@@ -70,7 +71,6 @@ import {
   Store,
   MapPin,
   Mail,
-  Loader2,
 } from 'lucide-react'
 import { FacebookIcon, InstagramIcon } from '@/components/shared/BrandIcons'
 
@@ -455,9 +455,14 @@ export function CompanyPage() {
             description="Official corporate registration details and customer service links displayed across invoices and receipts"
           >
             {companyLoading && !formHydrated ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-                <Loader2 className="size-4 animate-spin" />
-                Loading company details…
+              <div className="space-y-3 py-2">
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full sm:col-span-2" />
+                </div>
+                <Skeleton className="h-10 w-40" />
               </div>
             ) : (
               <form onSubmit={handleSaveCompanyDetails} className="space-y-5" noValidate>
@@ -631,18 +636,14 @@ export function CompanyPage() {
                 <div className="pt-3 border-t border-slate-100 flex justify-end">
                   <Button
                     type="submit"
-                    disabled={companyMutating}
+                    loading={companyMutating}
                     className="text-white font-semibold cursor-pointer gap-1.5 shadow-sm"
                     style={{
                       background: `linear-gradient(90deg, ${BRAND.purple}, ${BRAND.deep})`,
                     }}
                   >
-                    {companyMutating ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Save className="size-4" />
-                    )}
-                    {companyMutating ? 'Saving…' : 'Save Company Details'}
+                    <Save className="size-4" />
+                    Save Company Details
                   </Button>
                 </div>
               </form>
@@ -719,10 +720,7 @@ export function CompanyPage() {
 
             <div className="space-y-4">
               {policiesLoading ? (
-                <div className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-12 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading policies…
-                </div>
+                <TableRowsSkeleton rows={5} />
               ) : (
                 <PoliciesTable
                   items={filteredPolicies}
@@ -903,15 +901,11 @@ export function CompanyPage() {
               <DialogCancelButton disabled={policiesMutating} />
               <Button
                 type="submit"
-                disabled={policiesMutating}
+                loading={policiesMutating}
                 className="text-white font-semibold"
                 style={{ background: BRAND.purple }}
               >
-                {policiesMutating
-                  ? 'Saving…'
-                  : editingPolicy
-                    ? 'Update Policy'
-                    : 'Save & Publish Policy'}
+                {editingPolicy ? 'Update Policy' : 'Save & Publish Policy'}
               </Button>
             </DialogFooter>
           </form>

@@ -403,8 +403,8 @@ export function HolidayScheduleFormDialog({
 
           <DialogFooter className="pt-2">
             <DialogCancelButton disabled={mutating}>Cancel</DialogCancelButton>
-            <Button type="submit" disabled={mutating} variant="brand">
-              {mutating ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Holiday'}
+            <Button type="submit" loading={mutating} variant="brand">
+              {isEdit ? 'Save Changes' : 'Create Holiday'}
             </Button>
           </DialogFooter>
         </form>

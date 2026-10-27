@@ -1,5 +1,6 @@
 import { cva } from 'class-variance-authority'
 import { Slot } from '@radix-ui/react-slot'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BRAND } from '@/lib/constants'
 
@@ -48,17 +49,42 @@ const buttonVariants = cva(
   },
 )
 
-function Button({ className, variant, size, asChild = false, style, ...props }) {
+function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  loading = false,
+  disabled,
+  children,
+  style,
+  ...props
+}) {
   const Comp = asChild ? Slot : 'button'
   const brandStyle =
     variant === 'brand' ? { background: BRAND.purple, ...style } : style
+  // Keep label stable; spinner signals busy (Slot/asChild cannot wrap spinner + text)
+  const isDisabled = Boolean(disabled || loading)
 
   return (
     <Comp
       className={cn(buttonVariants({ variant, size, className }))}
       style={brandStyle}
+      disabled={asChild ? disabled : isDisabled}
+      aria-busy={loading || undefined}
       {...props}
-    />
+    >
+      {asChild ? (
+        children
+      ) : (
+        <>
+          {loading ? (
+            <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+          ) : null}
+          {children}
+        </>
+      )}
+    </Comp>
   )
 }
 

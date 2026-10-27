@@ -38,6 +38,7 @@ import { resolveApplyDefaultTaxFromProduct } from '@/lib/imTaxProfitPolicy'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
 import { focusFieldById } from '@/lib/validation/fieldErrors'
 import { cn } from '@/lib/utils'
+import { FormPageSkeleton, TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function newId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -467,20 +468,7 @@ export function EditItemPage() {
   // Single loading shell until product + catalog (+ variant hydrate) are ready
   if (!pageReady) {
     return (
-      <div className="space-y-5 pb-8">
-        <PageHeader title="Edit Item" description="Loading product…" />
-        <SurfaceCard title="Loading" description="Preparing the edit form.">
-          <div className="space-y-3 animate-pulse">
-            <div className="h-10 rounded-lg bg-slate-100" />
-            <div className="h-24 rounded-lg bg-slate-100" />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="h-10 rounded-lg bg-slate-100" />
-              <div className="h-10 rounded-lg bg-slate-100" />
-            </div>
-            <div className="h-28 rounded-lg bg-slate-100" />
-          </div>
-        </SurfaceCard>
-      </div>
+      <FormPageSkeleton aria-label="Loading product" kpiCount={0} blocks={1} />
     )
   }
 
@@ -666,7 +654,7 @@ export function EditItemPage() {
 
           {tab === 'variantTypes' ? (
             variantsLoading || !hydrated ? (
-              <p className="text-sm text-slate-500">Loading variant types…</p>
+              <TableRowsSkeleton rows={3} />
             ) : (
               <SearchableMultiSelect
                 label="Variant types"
@@ -815,10 +803,10 @@ export function EditItemPage() {
                   type="button"
                   className="cursor-pointer text-white"
                   style={{ background: BRAND.purple }}
-                  disabled={saving}
+                  loading={saving}
                   onClick={() => void handleSave()}
                 >
-                  {saving ? 'Saving…' : 'Save changes'}
+                  Save changes
                 </Button>
               )}
             </div>

@@ -291,10 +291,10 @@ export function OrderCompanyBlock({
         className,
       )}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white"
             style={{ background: `linear-gradient(145deg, ${BRAND.purple}, ${BRAND.deep})` }}
           >
             {index + 1}
@@ -308,8 +308,32 @@ export function OrderCompanyBlock({
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-800">
+
+        <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          {/* Combobox supplier — type in field filters list (shared SearchableSelect) */}
+          <div className="min-w-[14rem] flex-1 space-y-1.5 sm:max-w-xs">
+            <Label htmlFor={`supplier-${block.key}`} className="text-xs text-slate-500">
+              Supplier company <span className="text-rose-500">*</span>
+            </Label>
+            <SearchableSelect
+              id={`supplier-${block.key}`}
+              value={block.supplierId}
+              options={supplierOptions}
+              placeholder="Select supplier"
+              searchPlaceholder="Search supplier…"
+              emptyLabel="Select supplier"
+              emptyMessage="No suppliers found"
+              includeEmpty
+              onChange={(nextId) => handleSupplierChange(nextId || '')}
+            />
+            {!suppliers.length ? (
+              <p className="text-xs text-amber-700">
+                No active suppliers — add one under Supplier Management first.
+              </p>
+            ) : null}
+          </div>
+
+          <span className="mb-1 rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-800">
             {lines.length} item{lines.length === 1 ? '' : 's'}
           </span>
           {canRemove ? (
@@ -317,7 +341,7 @@ export function OrderCompanyBlock({
               type="button"
               size="icon"
               variant="ghost"
-              className="size-8 text-rose-600 hover:bg-rose-50"
+              className="mb-0.5 size-8 text-rose-600 hover:bg-rose-50"
               aria-label={`Remove company block ${index + 1}`}
               onClick={onRemove}
             >
@@ -325,28 +349,6 @@ export function OrderCompanyBlock({
             </Button>
           ) : null}
         </div>
-      </div>
-
-      <div className="max-w-xl space-y-1.5">
-        <Label htmlFor={`supplier-${block.key}`}>
-          Supplier company <span className="text-rose-500">*</span>
-        </Label>
-        {/* use reusable SearchableSelect — filter suppliers by name as user types */}
-        <SearchableSelect
-          id={`supplier-${block.key}`}
-          value={block.supplierId}
-          options={supplierOptions}
-          placeholder="Select supplier"
-          searchPlaceholder="Search supplier…"
-          emptyLabel="Select supplier"
-          includeEmpty
-          onChange={(nextId) => handleSupplierChange(nextId || '')}
-        />
-        {!suppliers.length ? (
-          <p className="text-xs text-amber-700">
-            No active suppliers — add one under Supplier Management first.
-          </p>
-        ) : null}
       </div>
 
       {/* use reusable EmptyState — hide catalogue until supplier is selected */}

@@ -15,11 +15,11 @@ export function ControlSecondaryActions({
         variant="outline"
         className="cursor-pointer"
         style={{ color: BRAND.deep }}
-        disabled={exportLoading}
+        loading={exportLoading}
         onClick={() => onExport?.()}
       >
         <Download className="size-4" />
-        {exportLoading ? 'Exporting…' : 'Export'}
+        Export
       </Button>
     </div>
   )

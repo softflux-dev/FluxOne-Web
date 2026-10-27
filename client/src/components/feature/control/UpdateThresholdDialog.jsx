@@ -131,10 +131,11 @@ export function UpdateThresholdDialog({
             type="button"
             variant="brand"
             style={{ background: BRAND.purple }}
-            disabled={loading || loadingProduct}
+            loading={loading}
+            disabled={loadingProduct}
             onClick={() => void handleSave()}
           >
-            {loading ? 'Saving…' : 'Save'}
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

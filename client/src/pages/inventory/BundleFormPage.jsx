@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Skeleton, TableRowsSkeleton } from '@/components/ui/skeleton'
+import { FormPageSkeleton } from '@/components/ui/skeleton'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { useProducts } from '@/hooks/useProducts'
@@ -533,32 +533,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
   // Same skeleton pattern as ProductTable / other IM pages (QA TC-Bundle edit-002).
   if (isEdit && loadingDetail) {
     return (
-      <div className="space-y-5 pb-8">
-        <MotionHeader>
-          <PageHeader
-            eyebrow="Inventory Manager"
-            title="Edit Bundle"
-            description="Loading bundle details…"
-          />
-        </MotionHeader>
-        <SurfaceCard>
-          <div className="space-y-4" aria-busy="true" aria-label="Loading bundle details">
-            <div className="flex flex-col items-center gap-3 py-6">
-              <div
-                className="size-10 animate-spin rounded-full border-2 border-slate-200 border-t-purple-600"
-                aria-hidden
-              />
-              <p className="text-sm text-slate-500">Loading bundle details…</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full sm:col-span-2" />
-            </div>
-            <TableRowsSkeleton rows={4} />
-          </div>
-        </SurfaceCard>
-      </div>
+      <FormPageSkeleton aria-label="Loading bundle details" kpiCount={0} blocks={1} />
     )
   }
 
@@ -1025,8 +1000,13 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
       </SurfaceCard>
 
       <div className="flex justify-end">
-        <Button type="submit" variant="brand" disabled={mutating || Boolean(stockFieldError)}>
-          {mutating ? 'Saving…' : isEdit ? 'Save changes' : 'Save bundle'}
+        <Button
+          type="submit"
+          variant="brand"
+          loading={mutating}
+          disabled={Boolean(stockFieldError)}
+        >
+          {isEdit ? 'Save changes' : 'Save bundle'}
         </Button>
       </div>
     </form>

@@ -92,3 +92,68 @@ export function ChartSkeleton({ className }) {
     </div>
   )
 }
+
+export function PageHeaderSkeleton({ className }) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between',
+        className,
+      )}
+      role="status"
+      aria-label="Loading page header"
+    >
+      <div className="min-w-0 space-y-2">
+        <Skeleton className="h-3 w-40" />
+        <Skeleton className="h-7 w-64 max-w-full" />
+        <Skeleton className="h-3 w-72 max-w-full" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Skeleton className="h-10 w-24 rounded-lg" />
+        <Skeleton className="h-10 w-32 rounded-lg" />
+      </div>
+    </div>
+  )
+}
+
+// Form / edit page placeholder — header + KPIs + card blocks
+export function FormPageSkeleton({
+  kpiCount = 4,
+  blocks = 1,
+  className,
+  'aria-label': ariaLabel = 'Loading page',
+}) {
+  return (
+    <div
+      className={cn('space-y-5 pb-10 sm:space-y-6', className)}
+      role="status"
+      aria-live="polite"
+      aria-label={ariaLabel}
+    >
+      <PageHeaderSkeleton />
+      {kpiCount > 0 ? <KpiCardsSkeleton count={kpiCount} /> : null}
+      {Array.from({ length: Math.max(0, blocks) }).map((_, i) => (
+        <div
+          key={i}
+          className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-9 rounded-xl" />
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-4 w-44" />
+              </div>
+            </div>
+            <Skeleton className="h-10 w-56 max-w-full rounded-lg" />
+          </div>
+          <TableRowsSkeleton rows={4} />
+        </div>
+      ))}
+      <div className="max-w-2xl space-y-2 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <Skeleton className="h-3 w-32" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+      </div>
+    </div>
+  )
+}

@@ -4,6 +4,7 @@ import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { StaffAttendanceTab } from '@/components/feature/branch/staff/StaffAttendanceTab'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 export function AttendancePage() {
   const [designations, setDesignations] = useState([])
@@ -42,7 +43,7 @@ export function AttendancePage() {
 
       <MotionReveal>
         {loading ? (
-          <p className="text-center py-8 text-slate-400">Loading attendance system...</p>
+          <TableRowsSkeleton rows={5} />
         ) : (
           <StaffAttendanceTab designations={designations} staff={staff} />
         )}

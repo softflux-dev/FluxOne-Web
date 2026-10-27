@@ -33,6 +33,7 @@ import { resolveInitialApplyDefaultTax } from '@/lib/imTaxProfitPolicy'
 import { toastError, toastSuccess, toastInfo } from '@/lib/toast'
 import { focusFieldById } from '@/lib/validation/fieldErrors'
 import { cn } from '@/lib/utils'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function newId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -550,7 +551,7 @@ export function AddItemPage() {
 
           {tab === 'variantTypes' ? (
             variantsLoading ? (
-              <p className="text-sm text-slate-500">Loading variant types…</p>
+              <TableRowsSkeleton rows={3} />
             ) : (
               <SearchableMultiSelect
                 label="Variant types"
@@ -677,10 +678,10 @@ export function AddItemPage() {
                   type="button"
                   className="cursor-pointer text-white"
                   style={{ background: BRAND.purple }}
-                  disabled={saving}
+                  loading={saving}
                   onClick={() => void handleSave()}
                 >
-                  {saving ? 'Saving…' : 'Save product'}
+                  Save product
                 </Button>
               )}
             </div>

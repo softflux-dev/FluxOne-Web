@@ -377,11 +377,11 @@ export function ProductsPage() {
                 variant="outline"
                 className="cursor-pointer"
                 style={{ color: BRAND.deep }}
-                disabled={mutating}
+                loading={mutating}
                 onClick={handleExport}
               >
                 <Download className="size-4" />
-                {mutating ? 'Exporting…' : 'Export'}
+                Export
               </Button>
               <Button
                 type="button"

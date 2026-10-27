@@ -11,6 +11,7 @@ import { BranchCapsule } from '@/components/shared/BranchRoleCapsules'
 import { displayNotification } from '@/lib/notificationDisplay'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { cn } from '@/lib/utils'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 // Full notification inbox — mark as read only (no wipe / delete from inbox)
 export function NotificationsPage() {
@@ -104,7 +105,7 @@ export function NotificationsPage() {
           </div>
 
           {loading ? (
-            <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
+            <TableRowsSkeleton rows={4} className="px-1" />
           ) : items.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400">No notifications</p>
           ) : (

@@ -642,11 +642,11 @@ export function StaffFormDialog({
             />
             <Button
               type="submit"
-              disabled={loading}
+              loading={loading}
               variant="brand"
               className="w-full sm:w-auto"
             >
-              {loading ? 'Saving…' : isEdit ? 'Save changes' : 'Add Staff'}
+              {isEdit ? 'Save changes' : 'Add Staff'}
             </Button>
           </DialogFooter>
         </form>

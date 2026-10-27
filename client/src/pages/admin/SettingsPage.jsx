@@ -38,6 +38,7 @@ import { useAppDispatch } from '@/rtk/hooks'
 import { setDefaultCurrency } from '@/rtk/features/auth/authSlice'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { Skeleton, TableRowsSkeleton } from '@/components/ui/skeleton'
 import {
   KeyRound,
   Monitor,
@@ -49,7 +50,6 @@ import {
   EyeOff,
   ShieldCheck,
   Search,
-  Loader2,
   MonitorOff,
   Coins,
   Building2,
@@ -411,11 +411,11 @@ export function SettingsPage() {
                   <div className="pt-2">
                     <Button
                       type="submit"
-                      disabled={passwordSaving}
+                      loading={passwordSaving}
                       className="w-full text-white font-semibold cursor-pointer shadow-sm"
                       style={{ background: BRAND.purple }}
                     >
-                      {passwordSaving ? 'Updating…' : 'Update Password'}
+                      Update Password
                     </Button>
                   </div>
                 </form>
@@ -501,9 +501,10 @@ export function SettingsPage() {
                 ) : null}
 
                 {currencyLoading ? (
-                  <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading currency settings…
+                  <div className="space-y-3 py-2">
+                    <Skeleton className="h-10 w-full max-w-md" />
+                    <Skeleton className="h-10 w-full max-w-xs" />
+                    <Skeleton className="h-10 w-28" />
                   </div>
                 ) : (
                   <form onSubmit={handleSaveCurrency} className="space-y-4">
@@ -571,15 +572,12 @@ export function SettingsPage() {
                     <div className="pt-2">
                       <Button
                         type="submit"
-                        disabled={currencySaving || !currencyDirty || currencyLocked}
+                        loading={currencySaving}
+                        disabled={!currencyDirty || currencyLocked}
                         className="w-full text-white font-semibold cursor-pointer shadow-sm disabled:opacity-60"
                         style={{ background: BRAND.purple }}
                       >
-                        {currencyLocked
-                          ? 'Currency locked'
-                          : currencySaving
-                            ? 'Saving…'
-                            : 'Save'}
+                        {currencyLocked ? 'Currency locked' : 'Save'}
                       </Button>
                     </div>
                   </form>
@@ -737,10 +735,7 @@ export function SettingsPage() {
               description="Assigned branch hardware, employee binding and authorization status"
             >
               {loading && systems.length === 0 ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading devices…
-                </div>
+                <TableRowsSkeleton rows={5} />
               ) : systems.length === 0 ? (
                 <EmptyState
                   icon={MonitorOff}

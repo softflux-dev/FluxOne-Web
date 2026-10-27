@@ -101,9 +101,9 @@ export function ScanItemDialog({ open, onOpenChange, loading = false, onScan, on
               type="submit"
               className="cursor-pointer text-white"
               style={{ background: BRAND.purple }}
-              disabled={loading}
+              loading={loading}
             >
-              {loading ? 'Scanning…' : 'Scan'}
+              Scan
             </Button>
           </DialogFooter>
         </form>

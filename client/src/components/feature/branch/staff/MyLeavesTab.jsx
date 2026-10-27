@@ -25,6 +25,7 @@ import {
   DialogTitle,
   DialogCancelButton,
 } from '@/components/ui/dialog'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { apiClient } from '@/api/api'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { formatDateLine, formatDateTime } from '@/lib/formatDateTime'
@@ -153,7 +154,7 @@ export function MyLeavesTab({ createOpen = false, onCreateOpenChange }) {
         description="Your personal leave requests and Admin decisions"
       >
         {loading ? (
-          <p className="py-8 text-center text-sm text-slate-400">Loading...</p>
+          <TableRowsSkeleton rows={5} />
         ) : leaves.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-400">No leave requests yet</p>
         ) : (
@@ -313,8 +314,8 @@ export function MyLeavesTab({ createOpen = false, onCreateOpenChange }) {
           </div>
           <DialogFooter>
             <DialogCancelButton onClick={() => setEditing(null)}>Cancel</DialogCancelButton>
-            <Button onClick={handleUpdateLeave} disabled={mutating} variant="brand">
-              {mutating ? 'Saving…' : 'Save changes'}
+            <Button onClick={handleUpdateLeave} loading={mutating} variant="brand">
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

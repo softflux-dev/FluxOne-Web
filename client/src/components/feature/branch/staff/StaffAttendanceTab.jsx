@@ -14,6 +14,7 @@ import {
   TableCell,
   TablePagination,
 } from '@/components/ui/table'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { apiClient } from '@/api/api'
 import { BRAND } from '@/lib/constants'
 import { formatDateLine } from '@/lib/formatDateTime'
@@ -359,7 +360,7 @@ export function StaffAttendanceTab({ designations = [], staff = [] }) {
               />
 
               {loading ? (
-                <p className="py-8 text-center text-sm text-slate-400">Loading...</p>
+                <TableRowsSkeleton rows={5} />
               ) : filteredLogs.length === 0 ? (
                 <p className="py-8 text-center text-sm text-slate-400">
                   {showAllDates ? 'No logs found' : 'No logs found for this date'}

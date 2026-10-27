@@ -30,6 +30,7 @@ import {
   DialogTitle,
   DialogCancelButton,
 } from '@/components/ui/dialog'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { apiClient } from '@/api/api'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { formatDateLine } from '@/lib/formatDateTime'
@@ -178,7 +179,7 @@ export function StaffLeavesTab({
         </div>
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-slate-400">Loading...</p>
+          <TableRowsSkeleton rows={5} />
         ) : leaves.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-400">No active leave records found</p>
         ) : (
@@ -329,7 +330,8 @@ export function StaffLeavesTab({
             <DialogCancelButton onClick={() => setEditing(null)}>Cancel</DialogCancelButton>
             <Button
               onClick={handleUpdateLeave}
-              disabled={mutating || !canSaveEdit}
+              loading={mutating}
+              disabled={!canSaveEdit}
               variant="brand"
               title={
                 !isLeaveDecision(editStatus)
@@ -337,7 +339,7 @@ export function StaffLeavesTab({
                   : undefined
               }
             >
-              {mutating ? 'Saving…' : 'Save changes'}
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

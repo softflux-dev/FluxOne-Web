@@ -175,11 +175,12 @@ export function ScoreEmployeeDialog({
           <DialogCancelButton disabled={mutating} className="w-full sm:w-auto" />
           <Button
             onClick={handleSubmit}
-            disabled={mutating || !criteria.length}
+            loading={mutating}
+            disabled={!criteria.length}
             variant="brand"
             className="w-full sm:w-auto"
           >
-            {mutating ? 'Saving…' : 'Record Scores'}
+            Record Scores
           </Button>
         </DialogFooter>
       </DialogContent>

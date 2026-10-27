@@ -10,6 +10,7 @@ import { ROLES } from '@/lib/constants'
 import { BranchCapsule } from '@/components/shared/BranchRoleCapsules'
 import { displayNotification } from '@/lib/notificationDisplay'
 import { cn } from '@/lib/utils'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function formatRelative(value) {
   if (!value) return ''
@@ -162,7 +163,7 @@ export function NotificationBell({ className }) {
 
             <div className="max-h-[min(20rem,calc(100dvh-11rem))] overflow-y-auto overscroll-contain sm:max-h-80">
               {loading && !items.length ? (
-                <p className="px-3 py-6 text-center text-xs text-slate-400">Loading…</p>
+                <TableRowsSkeleton rows={3} className="px-2 py-2" />
               ) : items.length === 0 ? (
                 <p className="px-3 py-6 text-center text-xs text-slate-400">No notifications yet</p>
               ) : (

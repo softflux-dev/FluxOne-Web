@@ -1,4 +1,5 @@
 import { ScrollText } from 'lucide-react'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { DataCard, ResponsiveDataShell } from '@/components/shared/ResponsiveDataShell'
 import { Badge } from '@/components/ui/badge'
@@ -57,7 +58,7 @@ export function AdminLogsTable({
   const limit = pagination?.limit || ADMIN_LOGS_PAGE_SIZE
 
   if (loading && items.length === 0) {
-    return <p className="py-10 text-center text-sm text-slate-400">Loading logs…</p>
+    return <TableRowsSkeleton rows={5} />
   }
 
   if (error && items.length === 0) {

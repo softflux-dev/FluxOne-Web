@@ -152,10 +152,11 @@ export function GenerateOrderPage() {
               <Button
                 type="button"
                 variant="brand"
-                disabled={mutating || loadingMeta}
+                loading={mutating}
+                disabled={loadingMeta}
                 onClick={handleSubmit}
               >
-                {mutating ? 'Submitting…' : 'Review & Submit →'}
+                Review & Submit →
               </Button>
             </div>
           }
@@ -224,10 +225,11 @@ export function GenerateOrderPage() {
         <Button
           type="button"
           variant="brand"
-          disabled={mutating || loadingMeta}
+          loading={mutating}
+          disabled={loadingMeta}
           onClick={handleSubmit}
         >
-          {mutating ? 'Submitting…' : 'Review & Submit →'}
+          Review & Submit →
         </Button>
       </div>
     </div>

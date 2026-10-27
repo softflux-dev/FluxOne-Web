@@ -94,7 +94,7 @@ export function ConfirmDialog({
           </Button>
           <Button
             type="button"
-            disabled={loading}
+            loading={loading}
             className={cn(
               'h-11 w-full cursor-pointer px-4 font-semibold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:brightness-110 active:translate-y-0 active:scale-[0.98] sm:h-10 sm:w-auto sm:min-w-[7.5rem]',
               variant === 'destructive'
@@ -105,7 +105,7 @@ export function ConfirmDialog({
             )}
             onClick={() => onConfirm?.()}
           >
-            {loading ? 'Please wait…' : confirmLabel}
+            {confirmLabel}
           </Button>
         </div>
       </DialogContent>

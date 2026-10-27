@@ -168,9 +168,9 @@ export function CategoryDialog({
               type="submit"
               className="cursor-pointer text-white"
               style={{ background: BRAND.purple }}
-              disabled={loading}
+              loading={loading}
             >
-              {loading ? 'Saving…' : isEdit ? 'Save' : 'Create'}
+              {isEdit ? 'Save' : 'Create'}
             </Button>
           </DialogFooter>
         </form>

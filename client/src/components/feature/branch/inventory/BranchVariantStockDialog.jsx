@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ClipboardList, Loader2 } from 'lucide-react'
+import { ClipboardList } from 'lucide-react'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogCancelButton,
@@ -91,10 +92,7 @@ export function BranchVariantStockDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-              <Loader2 className="size-4 animate-spin" />
-              Loading variants…
-            </div>
+            <TableRowsSkeleton rows={4} />
           ) : error ? (
             <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-100">
               {error}

@@ -22,6 +22,7 @@ import { useAppDispatch, useAppSelector } from '@/rtk/hooks'
 import { catalogActiveOnly } from '@/rtk/asResult'
 import { loadControlCatalog } from '@/rtk/features/control/controlSlice'
 import { fetchControlSuppliers } from '@/hooks/useInventoryControl'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function orderToBlocks(order) {
   if (!order) return [emptyCompanyBlock()]
@@ -197,9 +198,10 @@ export function DemandRequestReviewDialog({
           <DialogDescription>
             Submitted by {order.createdByName || 'Inventory Manager'}. Change supplier companies,
             quantities, add or remove items, then approve.
-            {metaLoading ? ' Loading catalogue…' : ''}
           </DialogDescription>
         </DialogHeader>
+
+        {metaLoading ? <TableRowsSkeleton rows={3} /> : null}
 
         <p className="text-xs text-slate-500">
           {summary.companies} compan{summary.companies === 1 ? 'y' : 'ies'} · {summary.itemLines}{' '}
@@ -253,27 +255,27 @@ export function DemandRequestReviewDialog({
               type="button"
               variant="outline"
               className="w-full cursor-pointer sm:w-auto"
-              disabled={loading}
+              loading={loading}
               onClick={() => {
                 const payload = tryPayload()
                 if (payload) onSave?.(payload)
               }}
             >
-              {loading ? 'Saving…' : 'Save changes'}
+              Save changes
             </Button>
           ) : null}
           <Button
             type="button"
             variant="brand"
             className="w-full cursor-pointer sm:w-auto"
-            disabled={loading}
+            loading={loading}
             onClick={() => {
               const payload = dirty ? tryPayload() : null
               if (dirty && !payload) return
               onApprove?.(payload)
             }}
           >
-            {loading ? 'Working…' : dirty ? 'Save & Approve' : 'Approve'}
+            {dirty ? 'Save & Approve' : 'Approve'}
           </Button>
         </DialogFooter>
       </DialogContent>

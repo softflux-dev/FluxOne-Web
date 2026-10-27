@@ -6,6 +6,7 @@ import { StaffHolidaysTab } from '@/components/feature/branch/staff/StaffHoliday
 import { Button } from '@/components/ui/button'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 export function HolidaysPage() {
   const [designations, setDesignations] = useState([])
@@ -56,7 +57,7 @@ export function HolidaysPage() {
 
       <MotionReveal>
         {loading ? (
-          <p className="py-8 text-center text-slate-400">Loading holiday scheduler...</p>
+          <TableRowsSkeleton rows={5} />
         ) : (
           <StaffHolidaysTab
             designations={designations}

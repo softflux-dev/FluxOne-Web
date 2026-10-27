@@ -127,11 +127,11 @@ export function StockRequestDialog({ open, target, onOpenChange, onSent }) {
               <DialogCancelButton disabled={submitting} className="w-full sm:w-auto" />
               <Button
                 type="submit"
-                disabled={submitting}
+                loading={submitting}
                 className="w-full text-white sm:w-auto"
                 style={{ backgroundColor: BRAND.purple }}
               >
-                {submitting ? 'Sending…' : 'Send Request'}
+                Send Request
               </Button>
             </DialogFooter>
           </form>

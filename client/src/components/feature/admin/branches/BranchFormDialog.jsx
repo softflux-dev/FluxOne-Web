@@ -19,7 +19,7 @@ import { WorkingDaysPicker } from '@/components/shared/WorkingDaysPicker'
 import { BRAND } from '@/lib/constants'
 import { displayBranchRef } from '@/lib/formatDisplayId'
 import { fieldErrorClass } from '@/lib/validation/fieldErrors'
-import { KeyRound, Loader2 } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 
 export function BranchFormDialog({
   open,
@@ -326,20 +326,11 @@ export function BranchFormDialog({
                   <DialogCancelButton disabled={mutating} />
                   <Button
                     type="submit"
-                    disabled={mutating}
+                    loading={mutating}
                     className="text-white font-semibold"
                     style={{ background: `linear-gradient(90deg, ${BRAND.purple}, ${BRAND.deep})` }}
                   >
-                    {mutating ? (
-                      <>
-                        <Loader2 className="mr-1.5 size-4 animate-spin" />
-                        Saving…
-                      </>
-                    ) : editingBranch ? (
-                      'Save Changes'
-                    ) : (
-                      'Save'
-                    )}
+                    {editingBranch ? 'Save Changes' : 'Save'}
                   </Button>
                 </DialogFooter>
               </form>

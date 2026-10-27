@@ -225,11 +225,12 @@ export function ProductTable({
           variant="destructive"
           size="sm"
           className="cursor-pointer"
-          disabled={bulkDeleting || !onBulkDelete}
+          loading={bulkDeleting}
+          disabled={!onBulkDelete}
           onClick={() => onBulkDelete?.()}
         >
           <Trash2 className="size-4" />
-          {bulkDeleting ? 'Deleting…' : 'Delete selected'}
+          Delete selected
         </Button>
       </div>
     ) : null

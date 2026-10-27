@@ -7,6 +7,7 @@ import { LeavesPanel } from '@/components/feature/branch/staff/LeavesPanel'
 import { Button } from '@/components/ui/button'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 export function LeavesPage() {
   const [searchParams] = useSearchParams()
@@ -67,7 +68,7 @@ export function LeavesPage() {
 
       <MotionReveal>
         {loading ? (
-          <p className="py-8 text-center text-slate-400">Loading leave roster...</p>
+          <TableRowsSkeleton rows={5} />
         ) : (
           <LeavesPanel
             designations={designations}

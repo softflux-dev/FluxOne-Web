@@ -7,6 +7,7 @@ import { HolidayEmployeesAccordion } from '@/components/feature/branch/staff/Hol
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableHeader,
@@ -183,7 +184,7 @@ export function StaffHolidaysTab({
         </div>
 
         {loading ? (
-          <p className="py-12 text-center text-sm text-slate-400">Loading holiday schedules…</p>
+          <TableRowsSkeleton rows={5} />
         ) : filteredHolidays.length === 0 ? (
           <div className="py-12 text-center">
             <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-purple-50 text-purple-700">

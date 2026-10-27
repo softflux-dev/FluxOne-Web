@@ -20,6 +20,7 @@ import {
   TableCell,
   TablePagination,
 } from '@/components/ui/table'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -267,7 +268,7 @@ export function DiscountsPage() {
           description="Standard discount templates that can be applied to products."
         >
           {loading ? (
-            <p className="py-8 text-center text-sm text-slate-400">Loading campaign offers...</p>
+            <TableRowsSkeleton rows={5} />
           ) : filteredDiscounts.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">No campaigns found</p>
           ) : (
@@ -415,11 +416,11 @@ export function DiscountsPage() {
               <DialogCancelButton disabled={saving} className="w-full sm:w-auto" />
               <Button
                 type="submit"
-                disabled={saving}
+                loading={saving}
                 variant="brand"
                 className="w-full sm:w-auto"
               >
-                {saving ? 'Saving…' : 'Save Discount'}
+                Save Discount
               </Button>
             </DialogFooter>
           </form>

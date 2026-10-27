@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { EntityStatusToggle } from '@/components/shared/EntityStatusToggle'
 import { RowActionButtons } from '@/components/shared/ActionIconButton'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -115,7 +116,7 @@ export function PoliciesTable({
       description="Corporate protocols enforced across branch portals. Select Print on Invoice to show a policy on the customer receipt."
     >
       {loading ? (
-        <p className="py-10 text-center text-sm text-slate-400">Loading policies…</p>
+        <TableRowsSkeleton rows={5} />
       ) : isEmpty ? (
         <EmptyState
           icon={FileText}

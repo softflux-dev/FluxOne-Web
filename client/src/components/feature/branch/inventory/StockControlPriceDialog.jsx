@@ -178,8 +178,13 @@ export function StockControlPriceDialog({ open, onOpenChange }) {
 
         <DialogFooter className="mt-4 sm:mt-4">
           <DialogCancelButton disabled={saving} />
-          <Button type="button" variant="brand" disabled={loading || saving} onClick={() => void handleSave()}>
-            {saving ? 'Saving…' : 'Save Settings'}
+          <Button
+            type="button"
+            variant="brand"
+            loading={loading || saving}
+            onClick={() => void handleSave()}
+          >
+            Save Settings
           </Button>
         </DialogFooter>
       </DialogContent>

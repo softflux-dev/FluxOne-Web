@@ -351,8 +351,8 @@ export function AddStockInDialog({
               <ChevronRight className="size-4" />
             </Button>
           ) : (
-            <Button type="button" variant="brand" disabled={loading} onClick={handleSave}>
-              {loading ? 'Saving…' : 'Save'}
+            <Button type="button" variant="brand" loading={loading} onClick={handleSave}>
+              Save
             </Button>
           )}
         </DialogFooter>

@@ -160,8 +160,8 @@ export function LeaveFormDialog({
               <ArrowLeft className="mr-1 size-4" />
               Back
             </Button>
-            <Button type="button" disabled={mutating} onClick={handleSave} variant="brand">
-              {mutating ? 'Saving…' : 'Apply & Save'}
+            <Button type="button" loading={mutating} onClick={handleSave} variant="brand">
+              Apply & Save
             </Button>
           </>
         )

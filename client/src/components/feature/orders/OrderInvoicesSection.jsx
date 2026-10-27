@@ -1,9 +1,10 @@
 // TL §10 — per-supplier invoices on order detail (IM + BM)
 import { useCallback, useEffect, useState } from 'react'
-import { Download, FileSpreadsheet, Mail, Loader2 } from 'lucide-react'
+import { Download, FileSpreadsheet, Mail } from 'lucide-react'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { Button } from '@/components/ui/button'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import {
   canDownloadPurchaseOrderInvoices,
@@ -173,21 +174,18 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
             variant="outline"
             size="sm"
             className="cursor-pointer"
-            disabled={busy || Boolean(actionKey) || loading}
+            loading={actionKey === 'workbook'}
+            disabled={busy || loading || (Boolean(actionKey) && actionKey !== 'workbook')}
             onClick={() => void handleExportWorkbook()}
           >
-            {actionKey === 'workbook' ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <FileSpreadsheet className="size-3.5" />
-            )}
+            <FileSpreadsheet className="size-3.5" />
             Export Excel workbook
           </Button>
         ) : null}
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading invoices…</p>
+        <TableRowsSkeleton rows={3} />
       ) : error ? (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       ) : invoices.length === 0 ? (
@@ -229,11 +227,12 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
                     size="sm"
                     variant="outline"
                     className="cursor-pointer"
-                    disabled={busy || Boolean(actionKey)}
+                    loading={pdfBusy}
+                    disabled={busy || (Boolean(actionKey) && !pdfBusy)}
                     onClick={() => void handleDownloadPdf(row)}
                     title="Download PDF"
                   >
-                    {pdfBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                    <Download className="size-3.5" />
                     PDF
                   </Button>
                   <Button
@@ -241,15 +240,12 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
                     size="sm"
                     variant="outline"
                     className="cursor-pointer"
-                    disabled={busy || Boolean(actionKey)}
+                    loading={xlsBusy}
+                    disabled={busy || (Boolean(actionKey) && !xlsBusy)}
                     onClick={() => void handleExportItems(row)}
                     title="Export items Excel"
                   >
-                    {xlsBusy ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <FileSpreadsheet className="size-3.5" />
-                    )}
+                    <FileSpreadsheet className="size-3.5" />
                     Excel
                   </Button>
                   <Button
@@ -257,11 +253,12 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
                     size="sm"
                     variant="brand"
                     className="cursor-pointer"
-                    disabled={busy || Boolean(actionKey)}
+                    loading={sendBusy}
+                    disabled={busy || (Boolean(actionKey) && !sendBusy)}
                     onClick={() => void handleSend(row)}
                     title="Send to supplier email"
                   >
-                    {sendBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
+                    <Mail className="size-3.5" />
                     Send
                   </Button>
                 </div>

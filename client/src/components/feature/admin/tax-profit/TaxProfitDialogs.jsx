@@ -79,11 +79,11 @@ export function TaxProfitDefaultsDialog({
             </Button>
             <Button
               type="submit"
-              disabled={mutating}
+              loading={mutating}
               className="text-white font-semibold text-xs cursor-pointer shadow-xs"
               style={{ background: BRAND.purple }}
             >
-              {mutating ? 'Saving…' : 'Set Default'}
+              Set Default
             </Button>
           </DialogFooter>
         </form>

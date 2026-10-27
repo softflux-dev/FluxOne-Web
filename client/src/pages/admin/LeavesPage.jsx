@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import { BRAND } from '@/lib/constants'
 import { referenceFromUuid, displayStaffRef, matchesDisplayRef, normalizeSearchQuery } from '@/lib/formatDisplayId'
 import { formatDateLine } from '@/lib/formatDateTime'
@@ -334,7 +335,7 @@ export function LeavesPage() {
           </div>
 
           {loading ? (
-            <p className="py-10 text-center text-sm text-slate-400">Loading leave requests…</p>
+            <TableRowsSkeleton rows={5} />
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400">No leave requests found</p>
           ) : (

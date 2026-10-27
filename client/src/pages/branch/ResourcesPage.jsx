@@ -40,6 +40,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useFormBaseline } from '@/hooks/useFormBaseline'
 import { validateHardwareForm } from '@/lib/validation/branchForms'
 import { useClientPagination } from '@/hooks/useClientPagination'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 const actionBtnClass =
   'cursor-pointer text-slate-500 transition-colors hover:text-slate-900 active:scale-95'
@@ -381,7 +382,7 @@ export function ResourcesPage() {
           <MotionReveal delay={0.04}>
             <SurfaceCard title="Hardware Assets Registry">
               {loading ? (
-                <p className="py-8 text-center text-sm text-slate-400">Loading hardware…</p>
+                <TableRowsSkeleton rows={5} />
               ) : hardwareList.length === 0 ? (
                 <p className="py-8 text-center text-sm text-slate-400">No hardware assets found</p>
               ) : (
@@ -702,11 +703,11 @@ export function ResourcesPage() {
               <DialogCancelButton disabled={saving} className="w-full sm:w-auto" />
               <Button
                 type="submit"
-                disabled={saving}
+                loading={saving}
                 className="w-full text-white sm:w-auto"
                 style={{ backgroundColor: BRAND.purple }}
               >
-                {saving ? 'Saving…' : 'Save Hardware'}
+                Save Hardware
               </Button>
             </DialogFooter>
           </form>

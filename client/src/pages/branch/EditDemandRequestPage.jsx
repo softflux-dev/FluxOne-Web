@@ -6,6 +6,7 @@ import { GenerateOrderSummaryCards } from '@/components/feature/orders/GenerateO
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
+import { FormPageSkeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { displayOrderRef } from '@/lib/formatDisplayId'
@@ -224,7 +225,11 @@ export function EditDemandRequestPage() {
 
   if (loadingMeta && !order) {
     return (
-      <p className="py-16 text-center text-sm text-slate-500">Loading demand request…</p>
+      <FormPageSkeleton
+        aria-label="Loading demand request"
+        kpiCount={4}
+        blocks={1}
+      />
     )
   }
 
@@ -243,18 +248,20 @@ export function EditDemandRequestPage() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={mutating || loadingMeta}
+                loading={mutating}
+                disabled={loadingMeta}
                 onClick={() => void saveThen(false)}
               >
-                {mutating ? 'Saving…' : 'Save changes'}
+                Save changes
               </Button>
               <Button
                 type="button"
                 variant="brand"
-                disabled={mutating || loadingMeta}
+                loading={mutating}
+                disabled={loadingMeta}
                 onClick={() => void saveThen(true)}
               >
-                {mutating ? 'Working…' : 'Save & Approve'}
+                Save & Approve
               </Button>
             </div>
           }
@@ -323,18 +330,20 @@ export function EditDemandRequestPage() {
         <Button
           type="button"
           variant="outline"
-          disabled={mutating || loadingMeta}
+          loading={mutating}
+          disabled={loadingMeta}
           onClick={() => void saveThen(false)}
         >
-          {mutating ? 'Saving…' : 'Save changes'}
+          Save changes
         </Button>
         <Button
           type="button"
           variant="brand"
-          disabled={mutating || loadingMeta}
+          loading={mutating}
+          disabled={loadingMeta}
           onClick={() => void saveThen(true)}
         >
-          {mutating ? 'Working…' : 'Save & Approve'}
+          Save & Approve
         </Button>
       </div>
     </div>

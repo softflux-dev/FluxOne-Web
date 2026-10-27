@@ -263,11 +263,11 @@ export function ProfileEditDialog({
             <DialogCancelButton disabled={loading} className="w-full sm:w-auto" />
             <Button
               type="submit"
-              disabled={loading}
+              loading={loading}
               variant="brand"
               className="w-full sm:w-auto"
             >
-              {loading ? 'Saving…' : 'Save changes'}
+              Save changes
             </Button>
           </DialogFooter>
         </form>

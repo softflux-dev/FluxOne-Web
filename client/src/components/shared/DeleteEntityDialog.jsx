@@ -89,13 +89,13 @@ export function DeleteEntityDialog({
           {showSoftAction && onSoftDelete ? (
             <Button
               type="button"
-              disabled={loading}
+              loading={loading}
               className="h-11 w-full cursor-pointer px-4 font-semibold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:brightness-110 active:translate-y-0 active:scale-[0.98] sm:h-10 sm:w-auto sm:min-w-[7.5rem]"
               style={{ background: BRAND.purple }}
               onClick={() => onSoftDelete?.()}
             >
               <Ban className="size-4 shrink-0" />
-              <span className="truncate">{loading ? 'Please wait…' : softLabel}</span>
+              <span className="truncate">{softLabel}</span>
             </Button>
           ) : null}
 
@@ -103,7 +103,8 @@ export function DeleteEntityDialog({
             <Button
               type="button"
               variant="destructive"
-              disabled={loading || !canHardDelete}
+              loading={loading}
+              disabled={!canHardDelete}
               title={!canHardDelete ? hardDisabledReason : undefined}
               className={cn(
                 'h-11 w-full cursor-pointer px-4 font-semibold sm:h-10 sm:w-auto sm:min-w-[7.5rem]',
@@ -115,7 +116,7 @@ export function DeleteEntityDialog({
               }}
             >
               <Trash2 className="size-4 shrink-0" />
-              <span className="truncate">{loading ? 'Please wait…' : hardLabel}</span>
+              <span className="truncate">{hardLabel}</span>
             </Button>
           ) : null}
         </div>

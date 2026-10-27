@@ -15,6 +15,7 @@ import { endpoints } from '@/api/endpoints'
 import { BRAND } from '@/lib/constants'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 // Override Dialog defaults (md:max-w-xl) so price columns stay visible.
 const DIALOG_WIDTH =
@@ -110,7 +111,7 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
         ) : null}
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-slate-500">Loading…</p>
+          <TableRowsSkeleton rows={4} />
         ) : count === 0 ? (
           <p className="rounded-xl border border-dashed border-border bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
             No products need daily price updates right now. Enable &quot;Daily price change&quot;
@@ -167,11 +168,11 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                       variant="brand"
                       className="mt-3 w-full"
                       style={{ background: BRAND.purple }}
-                      disabled={savingId === row.id}
+                      loading={savingId === row.id}
                       onClick={() => void handleSaveRow(row)}
                     >
                       <Check className="size-4" />
-                      {savingId === row.id ? 'Saving…' : 'Save'}
+                      Save
                     </Button>
                   </li>
                 )
@@ -245,11 +246,11 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                             size="sm"
                             className="h-9"
                             style={{ background: BRAND.purple }}
-                            disabled={savingId === row.id}
+                            loading={savingId === row.id}
                             onClick={() => void handleSaveRow(row)}
                           >
                             <Check className="size-4" />
-                            {savingId === row.id ? 'Saving…' : 'Save'}
+                            Save
                           </Button>
                         </td>
                       </tr>

@@ -287,9 +287,9 @@ export function SupplierFormDialog({
               type="submit"
               className="cursor-pointer text-white"
               style={{ background: BRAND.purple }}
-              disabled={busy}
+              loading={busy}
             >
-              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add supplier'}
+              {isEdit ? 'Save changes' : 'Add supplier'}
             </Button>
           </DialogFooter>
         </form>

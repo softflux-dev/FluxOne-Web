@@ -1,4 +1,4 @@
-import { FileDown, Calendar, Loader2 } from 'lucide-react'
+import { FileDown, Calendar } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { BranchKpiCards } from '@/components/feature/branch/dashboard/BranchKpiCards'
 import { BranchWelcomeBanner } from '@/components/feature/branch/dashboard/BranchWelcomeBanner'
@@ -105,17 +105,12 @@ export function DashboardPage() {
               <Button
                 type="button"
                 onClick={handleDownloadPDF}
-                disabled={pdfBusy}
-                aria-busy={pdfBusy}
+                loading={pdfBusy}
                 className="text-white font-semibold cursor-pointer shadow-xs gap-1.5 disabled:cursor-not-allowed disabled:opacity-70"
                 style={{ background: `linear-gradient(90deg, ${BRAND.purple}, ${BRAND.deep})` }}
               >
-                {pdfBusy ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <FileDown className="size-4" />
-                )}
-                {pdfBusy ? 'Downloading…' : 'Download Report (PDF)'}
+                <FileDown className="size-4" />
+                Download Report (PDF)
               </Button>
             </div>
           }

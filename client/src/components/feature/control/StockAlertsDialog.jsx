@@ -12,6 +12,7 @@ import { endpoints } from '@/api/endpoints'
 import { BRAND } from '@/lib/constants'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { cn } from '@/lib/utils'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 const STATUS_META = {
   low: { label: 'Low stock', className: 'bg-amber-50 text-amber-700' },
@@ -90,7 +91,7 @@ export function StockAlertsDialog({
         </p>
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-slate-500">Loading…</p>
+          <TableRowsSkeleton rows={4} />
         ) : count === 0 ? (
           <p className="rounded-xl border border-dashed border-border bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
             All clear — no low or out-of-stock alerts.

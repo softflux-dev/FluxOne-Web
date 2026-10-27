@@ -133,7 +133,8 @@ export function LeaveDetailDialog({
             <Button
               type="button"
               variant="brand"
-              disabled={confirmDisabled}
+              loading={submitting}
+              disabled={confirmDisabled && !submitting}
               onClick={handleConfirm}
               title={
                 !hasDecision
@@ -148,7 +149,7 @@ export function LeaveDetailDialog({
                   : undefined
               }
             >
-              {submitting ? 'Saving…' : 'Confirm'}
+              Confirm
             </Button>
           </>
         ) : (

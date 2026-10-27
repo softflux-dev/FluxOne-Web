@@ -12,6 +12,7 @@ import { DateTimeLines } from '@/components/shared/DateTimeLines'
 import { displayItemCode } from '@/lib/formatDisplayId'
 import { formatDateTimeInline } from '@/lib/formatDateTime'
 import { mapStockMovement, MOVEMENT_TYPES } from '@/lib/mapStockMovement'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 const LIST_PATH = {
   [MOVEMENT_TYPES.IN]: endpoints.control.stockIn,
@@ -131,7 +132,7 @@ export function ViewMovementDetailsDialog({ open, onOpenChange, row = null, tab 
             Recent ledger rows for this product on the current tab.
           </p>
           {loadingHistory ? (
-            <p className="mt-3 text-sm text-slate-500">Loading history…</p>
+            <TableRowsSkeleton rows={3} className="mt-3" />
           ) : shownHistory.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">No history rows found.</p>
           ) : (

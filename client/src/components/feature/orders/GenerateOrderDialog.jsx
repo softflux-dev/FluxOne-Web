@@ -295,16 +295,16 @@ export function GenerateOrderDialog({
             type="button"
             variant="outline"
             className="cursor-pointer"
-            disabled={loading}
+            loading={loading}
             onClick={() => handleSave(false)}
           >
-            {loading ? 'Saving…' : 'Save'}
+            Save
           </Button>
           <Button
             type="button"
             className="cursor-pointer text-white"
             style={{ background: BRAND.purple }}
-            disabled={loading}
+            loading={loading}
             onClick={() => handleSave(true)}
           >
             Save & PDF

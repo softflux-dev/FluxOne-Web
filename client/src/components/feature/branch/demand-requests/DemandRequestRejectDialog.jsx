@@ -66,10 +66,10 @@ export function DemandRequestRejectDialog({
             type="button"
             variant="destructive"
             className="w-full cursor-pointer sm:w-auto"
-            disabled={loading}
+            loading={loading}
             onClick={() => onConfirm?.(notes.trim())}
           >
-            {loading ? 'Rejecting…' : 'Reject request'}
+            Reject request
           </Button>
         </DialogFooter>
       </DialogContent>

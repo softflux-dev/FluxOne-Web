@@ -45,6 +45,7 @@ import {
   downloadInvoicesTablePdf,
 } from '@/lib/invoiceExport'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import {
   FileText,
   FileSpreadsheet,
@@ -54,7 +55,6 @@ import {
   Receipt,
   Search,
   Building,
-  Loader2,
   ReceiptText,
 } from 'lucide-react'
 
@@ -345,10 +345,7 @@ export function InvoicesPage() {
           }
         >
           {loading && invoices.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
-              <Loader2 className="size-4 animate-spin" />
-              Loading invoices…
-            </div>
+            <TableRowsSkeleton rows={5} />
           ) : invoices.length === 0 ? (
             <EmptyState
               icon={ReceiptText}

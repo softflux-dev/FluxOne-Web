@@ -23,12 +23,13 @@ export function AdminLogsExportBar({
         type="button"
         size="sm"
         variant="outline"
-        disabled={!canExport}
+        loading={loading}
+        disabled={disabled || selectedCount === 0}
         onClick={onExport}
         className="gap-1.5"
       >
         <Download className="size-3.5" />
-        {loading ? 'Exporting…' : 'Export Selected'}
+        Export Selected
       </Button>
     </div>
   )

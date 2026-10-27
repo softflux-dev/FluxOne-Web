@@ -5,6 +5,7 @@ import { ProductImageCell } from '@/components/feature/products/ProductStatusTog
 import { WholeNumberInput } from '@/components/shared/WholeNumberInput'
 import { money, PRODUCT_TYPES } from '@/lib/mapProduct'
 import { cn } from '@/lib/utils'
+import { TableRowsSkeleton } from '@/components/ui/skeleton'
 
 function productLabel(product) {
   return product.productName || product.name || 'Item'
@@ -22,11 +23,7 @@ export function ProductStockPickerList({
   const list = Array.isArray(products) ? products : []
 
   if (loading) {
-    return (
-      <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-slate-500">
-        Loading products…
-      </p>
-    )
+    return <TableRowsSkeleton rows={4} className={className} />
   }
 
   if (!list.length) {

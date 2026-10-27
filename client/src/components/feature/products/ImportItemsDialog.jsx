@@ -156,9 +156,9 @@ export function ImportItemsDialog({ open, onOpenChange, loading = false, onSubmi
               type="submit"
               className="cursor-pointer text-white"
               style={{ background: BRAND.purple }}
-              disabled={loading}
+              loading={loading}
             >
-              {loading ? 'Importing…' : 'Import'}
+              Import
             </Button>
           </DialogFooter>
         </form>
