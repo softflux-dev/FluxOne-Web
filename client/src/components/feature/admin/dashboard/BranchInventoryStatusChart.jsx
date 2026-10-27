@@ -41,24 +41,6 @@ export function BranchInventoryStatusChart({ data = {} }) {
     <SurfaceCard
       title="Branch Inventory Status"
       description={data.timestamp || "Today's stock health across each branch"}
-      actions={
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700"
-          >
-            <CheckCircle2 className="mr-1 size-3" />
-            {optimal}% Optimal Stock
-          </Badge>
-          <Badge
-            variant="outline"
-            className="hidden border-purple-200 bg-purple-50 text-xs font-semibold text-purple-700 sm:inline-flex"
-          >
-            <Layers className="mr-1 size-3" />
-            Valuation: {valuationLabel}
-          </Badge>
-        </div>
-      }
     >
       <div className="h-64 w-full pt-2">
         {!chartData.length ? (
