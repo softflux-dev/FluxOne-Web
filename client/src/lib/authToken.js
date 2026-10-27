@@ -1,19 +1,17 @@
-// Decode JWT `exp` without a library (payload only; not verified).
+// Session expiry helpers for opaque tokens (no JWT decode).
 import { formatDateTimeInline } from '@/lib/formatDateTime'
+import { tokenStorage } from '@/api/tokenStorage'
 
-export function getTokenExpiryDate(token) {
-  if (!token || typeof token !== 'string') return null
-  try {
-    const parts = token.split('.')
-    if (parts.length < 2) return null
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
-    const payload = JSON.parse(atob(padded))
-    if (!payload?.exp) return null
-    return new Date(payload.exp * 1000)
-  } catch {
-    return null
-  }
+export function getSessionExpiryDate(expiresAt = tokenStorage.getExpiresAt()) {
+  if (!expiresAt) return null
+  const date = new Date(expiresAt)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
+
+// Kept name used by profile pages; now reads stored expiresAt, not JWT exp.
+export function getTokenExpiryDate(_tokenIgnored) {
+  return getSessionExpiryDate()
 }
 
 export function formatLoginExpires(date) {

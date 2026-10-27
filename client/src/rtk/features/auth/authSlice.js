@@ -7,12 +7,14 @@ import { invalidateProductCatalog } from '@/lib/productCatalogCache'
 
 const storedUser = tokenStorage.getUser()
 const storedToken = tokenStorage.getToken()
-const storedRefreshToken = tokenStorage.getRefreshToken()
+const storedSessionId = tokenStorage.getSessionId()
+const storedExpiresAt = tokenStorage.getExpiresAt()
 
 function clearSessionState(state) {
   state.user = null
   state.token = null
-  state.refreshToken = null
+  state.sessionId = null
+  state.expiresAt = null
   state.role = null
   state.isAuthenticated = false
   state.status = 'idle'
@@ -32,13 +34,24 @@ export const loginUser = createAsyncThunk('auth/login', async (credentials, { re
   return result.data
 })
 
-// Optimistic logout: UI signs out on pending; tokens stay in storage until revoke API runs.
+// Optimistic logout: UI signs out on pending; token stays until revoke API runs.
 export const logoutUser = createAsyncThunk('auth/logout', async () => {
-  const refreshToken = tokenStorage.getRefreshToken()
   try {
-    await apiClient.post(endpoints.auth.logout, refreshToken ? { refreshToken } : {})
+    // Bearer comes from tokenStorage via apiClient.
+    await apiClient.post(endpoints.auth.logout, {}, { skipSessionClear: true })
   } catch {
     // Ignore network errors — local session is cleared either way
+  } finally {
+    tokenStorage.clear()
+  }
+})
+
+// Revoke every device/session for this user.
+export const logoutAllDevices = createAsyncThunk('auth/logoutAll', async () => {
+  try {
+    await apiClient.post(endpoints.auth.logoutAll, {}, { skipSessionClear: true })
+  } catch {
+    // Still clear local session
   } finally {
     tokenStorage.clear()
   }
@@ -98,7 +111,8 @@ const authSlice = createSlice({
   initialState: {
     user: storedUser,
     token: storedToken,
-    refreshToken: storedRefreshToken,
+    sessionId: storedSessionId,
+    expiresAt: storedExpiresAt,
     role: storedUser?.role || null,
     isAuthenticated: Boolean(storedToken && storedUser),
     status: 'idle',
@@ -106,10 +120,11 @@ const authSlice = createSlice({
   },
   reducers: {
     hydrateSession(state, action) {
-      const { user, token, refreshToken } = action.payload || {}
+      const { user, token, sessionId, expiresAt } = action.payload || {}
       if (user !== undefined) state.user = user
       if (token !== undefined) state.token = token
-      if (refreshToken !== undefined) state.refreshToken = refreshToken
+      if (sessionId !== undefined) state.sessionId = sessionId
+      if (expiresAt !== undefined) state.expiresAt = expiresAt
       state.role = (user || state.user)?.role || null
       state.isAuthenticated = Boolean((token ?? state.token) && (user ?? state.user))
     },
@@ -137,14 +152,17 @@ const authSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         invalidateProductCatalog()
         state.status = 'succeeded'
+        const token = action.payload.token || action.payload.accessToken
         state.user = action.payload.user
-        state.token = action.payload.token
-        state.refreshToken = action.payload.refreshToken || null
+        state.token = token
+        state.sessionId = action.payload.sessionId || null
+        state.expiresAt = action.payload.expiresAt || null
         state.role = action.payload.user?.role || null
         state.isAuthenticated = true
         tokenStorage.setSession({
-          token: action.payload.token,
-          refreshToken: action.payload.refreshToken,
+          token,
+          sessionId: action.payload.sessionId,
+          expiresAt: action.payload.expiresAt,
           user: action.payload.user,
         })
       })
@@ -157,7 +175,7 @@ const authSlice = createSlice({
           'Login failed'
       })
       .addCase(logoutUser.pending, (state) => {
-        // Optimistic UI only — keep tokenStorage so revoke can send refreshToken
+        // Optimistic UI only — keep tokenStorage so revoke can send Bearer
         invalidateProductCatalog()
         clearSessionState(state)
       })
@@ -170,9 +188,29 @@ const authSlice = createSlice({
         invalidateProductCatalog()
         clearSessionState(state)
       })
+      .addCase(logoutAllDevices.pending, (state) => {
+        invalidateProductCatalog()
+        clearSessionState(state)
+      })
+      .addCase(logoutAllDevices.fulfilled, (state) => {
+        tokenStorage.clear()
+        clearSessionState(state)
+      })
+      .addCase(logoutAllDevices.rejected, (state) => {
+        tokenStorage.clear()
+        invalidateProductCatalog()
+        clearSessionState(state)
+      })
       .addCase(updateProfile.fulfilled, (state, action) => {
         const payload = action.payload || {}
-        const { passwordUpdated: _passwordUpdated, ...user } = payload
+        const { passwordUpdated, ...user } = payload
+        if (passwordUpdated) {
+          // Server revoked all sessions — force re-login on this device too.
+          tokenStorage.clear()
+          invalidateProductCatalog()
+          clearSessionState(state)
+          return
+        }
         state.user = user
         state.role = user?.role || state.role
         tokenStorage.setUser(user)

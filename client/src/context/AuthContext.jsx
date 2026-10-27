@@ -5,6 +5,7 @@ import {
   fetchCurrentUser,
   hydrateSession,
   loginUser,
+  logoutAllDevices,
   logoutUser,
   sessionExpired,
 } from '@/rtk/features/auth/authSlice'
@@ -20,19 +21,19 @@ export function AuthProvider({ children }) {
     void dispatch(fetchCurrentUser())
   }, [dispatch, auth.token, auth.isAuthenticated])
 
-  // Other tabs share localStorage. Pick up their refresh, and sign out if they do.
+  // Other tabs share localStorage. Adopt their login, or sign out if they clear.
   useEffect(() => {
     function onStorage(event) {
       if (!isAuthStorageKey(event.key)) return
       const token = tokenStorage.getToken()
-      const refreshToken = tokenStorage.getRefreshToken()
+      const sessionId = tokenStorage.getSessionId()
+      const expiresAt = tokenStorage.getExpiresAt()
       const user = tokenStorage.getUser()
-      // Ignore a half-written session. Login and refresh update the keys one by one.
       if (token && user) {
-        dispatch(hydrateSession({ token, refreshToken, user }))
+        dispatch(hydrateSession({ token, sessionId, expiresAt, user }))
         return
       }
-      if (!token && !refreshToken && !user) dispatch(sessionExpired())
+      if (!token && !user) dispatch(sessionExpired())
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
@@ -43,6 +44,7 @@ export function AuthProvider({ children }) {
       ...auth,
       login: (credentials) => dispatch(loginUser(credentials)).unwrap(),
       logout: () => dispatch(logoutUser()),
+      logoutAll: () => dispatch(logoutAllDevices()),
     }),
     [auth, dispatch],
   )

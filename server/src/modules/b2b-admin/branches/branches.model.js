@@ -6,7 +6,7 @@ import {
   displayRefSearchHex,
   normalizeSearchQuery,
 } from '../../../utils/displayRef.util.js'
-import { revokeRefreshTokensForBranch } from '../../auth/refresh_tokens.model.js'
+import { revokeForBranch } from '../../auth/auth_sessions.model.js'
 
 function httpError(status, message) {
   const error = new Error(message)
@@ -503,7 +503,7 @@ export async function setBranchStatus(tenantId, id, status) {
 
   // Drop open web/desktop sessions so blocked users cannot keep calling APIs.
   if (status === BRANCH_STATUS.BLOCKED) {
-    await revokeRefreshTokensForBranch(tenantId, id)
+    await revokeForBranch(tenantId, id)
   }
 
   return row

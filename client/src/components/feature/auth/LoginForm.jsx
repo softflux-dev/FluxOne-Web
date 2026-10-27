@@ -157,12 +157,21 @@ export function LoginForm() {
           return
         }
         const demoToken = 'mock-demo-token-' + Date.now()
+        const expiresAt = new Date(Date.now() + 14 * 86_400_000).toISOString()
         tokenStorage.setSession({
           token: demoToken,
-          refreshToken: demoToken,
+          sessionId: crypto.randomUUID(),
+          expiresAt,
           user: demoUser,
         })
-        dispatch(hydrateSession({ user: demoUser, token: demoToken }))
+        dispatch(
+          hydrateSession({
+            user: demoUser,
+            token: demoToken,
+            sessionId: tokenStorage.getSessionId(),
+            expiresAt,
+          }),
+        )
         clearAdminSession()
         toastSuccess(`Welcome, ${demoUser.name}`)
         navigate(homePathForRole(demoUser.role), { replace: true })
@@ -181,7 +190,7 @@ export function LoginForm() {
 
   return (
     <div className="flex w-full flex-col items-center">
-      <BrandLogo size="xl"/>
+      <BrandLogo size="xl" />
       <h1 className="text-center text-xl font-bold tracking-tight text-foreground sm:text-2xl">
         FluxOne Login
       </h1>

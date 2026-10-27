@@ -23,18 +23,14 @@ export const loginSchema = z
     }
   })
 
-export const refreshSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(10),
-  }),
-  query: z.object({}).optional(),
-  params: z.object({}).optional(),
-})
-
+// Body optional — logout resolves the session from Authorization Bearer.
 export const logoutSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(10).optional(),
-  }),
+  body: z
+    .object({
+      sessionId: z.string().uuid().optional(),
+    })
+    .optional()
+    .default({}),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
 })

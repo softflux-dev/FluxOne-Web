@@ -1,10 +1,10 @@
 export const endpoints = {
   auth: {
     login: '/auth/login',
-    refresh: '/auth/refresh',
     me: '/auth/me',
     update: '/auth/me',
     logout: '/auth/logout',
+    logoutAll: '/auth/logout-all',
     changePassword: '/auth/change-password',
   },
   admin: {

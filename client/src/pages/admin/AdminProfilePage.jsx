@@ -10,7 +10,7 @@ import { toastSuccess, toastError } from '@/lib/toast'
 
 export function AdminProfilePage() {
   const dispatch = useAppDispatch()
-  const { user, token } = useAuthSession()
+  const { user, expiresAt } = useAuthSession()
   const [name, setName] = useState(user?.name || 'Admin')
   const [loginId, setLoginId] = useState(user?.email || user?.id || '')
   const [editOpen, setEditOpen] = useState(false)
@@ -18,8 +18,8 @@ export function AdminProfilePage() {
   // Prefer live session (updates after save via authSlice)
   const imageUrl = user?.imageUrl || null
   const loginExpires = useMemo(() => {
-    return formatLoginExpires(getTokenExpiryDate(token))
-  }, [token])
+    return formatLoginExpires(getTokenExpiryDate())
+  }, [expiresAt])
 
   async function handleSave(fields) {
     setSaving(true)

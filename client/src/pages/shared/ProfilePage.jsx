@@ -17,7 +17,7 @@ import { toastError, toastSuccess } from '@/lib/toast'
 //
 export function ProfilePage() {
   const dispatch = useAppDispatch()
-  const { user, role, token, isAuthenticated } = useAuthSession()
+  const { user, role, expiresAt, isAuthenticated } = useAuthSession()
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const imageUrl = user?.imageUrl || null
@@ -27,8 +27,8 @@ export function ProfilePage() {
     PHASE2_ROLES.includes(role)
 
   const loginExpires = useMemo(() => {
-    return formatLoginExpires(getTokenExpiryDate(token))
-  }, [token])
+    return formatLoginExpires(getTokenExpiryDate())
+  }, [expiresAt])
 
   if (!isAuthenticated) {
     return <Navigate to={PATHS.login} replace />

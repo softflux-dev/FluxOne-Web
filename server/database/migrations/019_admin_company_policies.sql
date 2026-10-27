@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS policies (
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+)
 
 CREATE INDEX IF NOT EXISTS idx_policies_tenant
   ON policies (tenant_id);

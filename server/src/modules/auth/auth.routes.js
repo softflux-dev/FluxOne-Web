@@ -1,5 +1,12 @@
 import { Router } from 'express'
-import { changePassword, login, logout, me, refresh, updateMe } from './auth.controller.js'
+import {
+  changePassword,
+  login,
+  logout,
+  logoutAll,
+  me,
+  updateMe,
+} from './auth.controller.js'
 import { authMiddleware } from '../../middlewares/auth.middleware.js'
 import { asyncHandler } from '../../middlewares/error.middleware.js'
 import { upload } from '../../middlewares/upload.middleware.js'
@@ -8,7 +15,6 @@ import {
   changePasswordSchema,
   loginSchema,
   logoutSchema,
-  refreshSchema, 
   updateProfileSchema,
 } from './auth.validator.js'
 
@@ -25,9 +31,10 @@ function clearEmptyMultipartFields(req, _res, next) {
 }
 
 router.post('/login', validate(loginSchema), asyncHandler(login))
-router.post('/refresh', validate(refreshSchema), asyncHandler(refresh))
-// No authMiddleware: client clears access token before logout; revoke via refreshToken body
+// Bearer optional — revoke current opaque session when present.
 router.post('/logout', validate(logoutSchema), asyncHandler(logout))
+// Explicit logout from all devices.
+router.post('/logout-all', authMiddleware, asyncHandler(logoutAll))
 router.get('/me', authMiddleware, asyncHandler(me))
 router.patch(
   '/me',

@@ -1,43 +1,46 @@
-import { pool } from '../config/db.js'
-import { verifyAccessToken } from '../utils/jwt.util.js'
+import {
+  findActiveByTokenHash,
+  touchSession,
+} from '../modules/auth/auth_sessions.model.js'
+import {
+  computeSlidingExpiresAt,
+  hashesEqual,
+  hashToken,
+} from '../utils/sessionToken.util.js'
 import { error } from '../utils/response.util.js'
 
 export async function authMiddleware(req, res, next) {
   try {
     const header = req.headers.authorization || ''
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null
 
     if (!token) {
       return error(res, 'Authentication required', 401)
     }
 
-    const decoded = verifyAccessToken(token)
-    if (!decoded.tenantId) {
-      return error(res, 'Token is missing tenant_id', 403)
-    }
+    const tokenHash = hashToken(token)
+    const session = await findActiveByTokenHash(tokenHash)
 
-    const { rows } = await pool.query(
-      `
-        SELECT
-          u.is_active AS "isActive",
-          b.status AS "branchStatus"
-        FROM users u
-        LEFT JOIN branches b
-          ON b.id = u.branch_id
-         AND b.tenant_id = u.tenant_id
-        WHERE u.id = $1 AND u.tenant_id = $2
-        LIMIT 1
-      `,
-      [decoded.sub, decoded.tenantId],
-    )
-    const userRow = rows[0]
-    if (!userRow) {
+    if (!session || !hashesEqual(session.tokenHash, tokenHash)) {
       return error(res, 'Invalid or expired token', 401)
     }
-    if (!userRow.isActive) {
+
+    if (session.revokedAt) {
+      return error(res, 'Invalid or expired token', 401)
+    }
+
+    const now = Date.now()
+    if (new Date(session.expiresAt).getTime() <= now) {
+      return error(res, 'Invalid or expired token', 401)
+    }
+    if (new Date(session.absoluteExpiresAt).getTime() <= now) {
+      return error(res, 'Invalid or expired token', 401)
+    }
+
+    if (!session.isActive) {
       return error(res, 'Account deactivated. Contact your Branch Manager.', 401)
     }
-    if (userRow.branchStatus === 'blocked') {
+    if (session.branchStatus === 'blocked') {
       return error(
         res,
         'This branch is blocked. Contact your administrator.',
@@ -45,20 +48,26 @@ export async function authMiddleware(req, res, next) {
       )
     }
 
+    // Same shape as JWT era so inventory/branch/admin/sync stay unchanged.
     req.user = {
-      id: decoded.sub,
-      role: decoded.role,
-      tenantId: decoded.tenantId,
-      branchId: decoded.branchId || null,
+      id: session.userId,
+      role: session.role,
+      tenantId: session.tenantId,
+      branchId: session.branchId || null,
     }
-    req.tenantId = decoded.tenantId
+    req.tenantId = session.tenantId
+    req.sessionId = session.id
+
+    // Sliding expiry — best-effort; auth still succeeds if touch fails.
+    const nextExpiresAt = computeSlidingExpiresAt(session)
+    touchSession(session.id, {
+      expiresAt: nextExpiresAt,
+      lastSeenAt: new Date(),
+    }).catch(() => {})
+
     next()
   } catch (err) {
-    // Expired or forged JWT only. A database blip must not look like a logout.
-    const name = err?.name
-    if (name === 'TokenExpiredError' || name === 'JsonWebTokenError' || name === 'NotBeforeError') {
-      return error(res, 'Invalid or expired token', 401)
-    }
+    // DB blips must not look like a logout to the client.
     return next(err)
   }
 }

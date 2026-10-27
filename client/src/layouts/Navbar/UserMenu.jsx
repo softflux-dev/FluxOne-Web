@@ -18,7 +18,7 @@ import { PATHS, profilePathForRole } from '@/router/paths'
 
 export function UserMenu({ className }) {
   const navigate = useNavigate()
-  const { user, role, logout } = useAuthSession()
+  const { user, role, logout, logoutAll } = useAuthSession()
   const { theme, toggleTheme } = useTheme()
   const name = user?.name || 'User'
   const roleLabel = roleDisplayName(role)
@@ -126,6 +126,16 @@ export function UserMenu({ className }) {
             >
               <LogOut className="size-4" />
               Logout
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-slate-700 dark:text-slate-200"
+              onClick={() => {
+                logoutAll()
+                navigate(PATHS.login, { replace: true })
+              }}
+            >
+              <LogOut className="size-4" />
+              Logout from all devices
             </DropdownMenuItem>
           </div>
         </DropdownMenuContent>
