@@ -88,6 +88,14 @@ export function mapPurchaseOrder(row = {}) {
     itemsNumber: Number(
       row.itemsNumber ?? row.items_number ?? lines.length ?? 0,
     ),
+    hasRemainingQuantity: (() => {
+      if (row.hasRemainingQuantity != null) return Boolean(row.hasRemainingQuantity)
+      if (row.has_remaining_quantity != null) return Boolean(row.has_remaining_quantity)
+      if (lines.length) {
+        return lines.some((line) => Number(line.receivedQuantity || 0) < Number(line.quantity || 0))
+      }
+      return null
+    })(),
     companies,
     lines,
     events,

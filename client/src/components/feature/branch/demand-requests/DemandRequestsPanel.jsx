@@ -6,6 +6,7 @@ import { MotionReveal } from '@/components/shared/MotionReveal'
 import { DemandRequestRejectDialog } from '@/components/feature/branch/demand-requests/DemandRequestRejectDialog'
 import { DemandRequestsStats } from '@/components/feature/branch/demand-requests/DemandRequestsStats'
 import { DemandRequestsTable } from '@/components/feature/branch/demand-requests/DemandRequestsTable'
+import { useOrderDetail } from '@/hooks/useOrderDetail'
 import { usePurchaseOrders } from '@/hooks/usePurchaseOrders'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
@@ -37,22 +38,28 @@ export function DemandRequestsPanel() {
     loading,
     mutating,
     error,
-    selected,
     filters,
     updateFilters,
     setPage,
-    fetchDetail,
-    clearDetail,
     approveOrder,
     rejectOrder,
-    printOrder,
     reload,
   } = usePurchaseOrders()
 
   const [counts, setCounts] = useState(EMPTY_COUNTS)
-  const [detailOpen, setDetailOpen] = useState(false)
+  const [viewOrderId, setViewOrderId] = useState(null)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
+
+  const detailOpen = Boolean(viewOrderId)
+  const {
+    order: selected,
+    loading: detailLoading,
+    error: detailError,
+    refetch: refetchDetail,
+    clear: clearDetail,
+    printOrder,
+  } = useOrderDetail(viewOrderId, { autoFetch: detailOpen })
 
   const refreshCounts = useCallback(async () => {
     try {
@@ -72,16 +79,12 @@ export function DemandRequestsPanel() {
     void refreshCounts()
   }, [refreshCounts, items])
 
-  // Notification deep-link: open detail for ?highlight=
+  // Notification deep-link: open detail for ?highlight= (skeleton while loading)
   useEffect(() => {
     if (!highlightId || openedHighlightRef.current === highlightId) return
     openedHighlightRef.current = highlightId
-    void (async () => {
-      const result = await fetchDetail(highlightId)
-      if (result.success) setDetailOpen(true)
-      else toastError(result.error || 'Failed to open highlighted order')
-    })()
-  }, [highlightId, fetchDetail])
+    setViewOrderId(highlightId)
+  }, [highlightId])
 
   function clearHighlightParam() {
     if (!highlightId) return
@@ -90,10 +93,10 @@ export function DemandRequestsPanel() {
     setSearchParams(next, { replace: true })
   }
 
-  async function handleView(row) {
-    const result = await fetchDetail(row.id)
-    if (result.success) setDetailOpen(true)
-    else toastError(result.error || 'Failed to load detail')
+  function handleView(row) {
+    if (!row?.id) return
+    // Open immediately — OrderDetailBody shows skeleton; one shared detail GET
+    setViewOrderId(row.id)
   }
 
   function handleEdit(row) {
@@ -191,15 +194,18 @@ export function DemandRequestsPanel() {
 
       <OrderDetailPanel
         open={detailOpen}
+        orderId={viewOrderId}
+        order={selected}
+        loading={detailLoading}
+        error={detailError || ''}
+        onRetry={() => void refetchDetail(viewOrderId)}
         onOpenChange={(open) => {
-          setDetailOpen(open)
           if (!open) {
+            setViewOrderId(null)
             clearDetail()
             clearHighlightParam()
           }
         }}
-        order={selected}
-        loading={mutating}
         onPrint={handlePrint}
       />
 

@@ -79,8 +79,8 @@ export function ControlCatalogFilters({
   const isVariantProduct = selectedProduct?.type === PRODUCT_TYPES.VARIANT
   const hasSubcategories = Boolean(categoryId) && subs.length > 0
   const subEnabled = hasSubcategories
-  const productEnabled =
-    Boolean(categoryId) && (!hasSubcategories || Boolean(subcategoryId))
+  // Sub category optional — category alone is enough to load products
+  const productEnabled = Boolean(categoryId)
 
   const variantAxes = useMemo(() => deriveVariantAxes(variantOptions), [variantOptions])
   const selectedTypeValues = useMemo(() => {

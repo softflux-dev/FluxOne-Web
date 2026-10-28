@@ -1,4 +1,4 @@
-import { CheckCircle2, ClipboardList, Eye, History, PackageCheck, Printer } from 'lucide-react'
+import { ClipboardList, Eye, History, Printer } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
 import { Button } from '@/components/ui/button'
@@ -19,24 +19,8 @@ import { displayOrderRef } from '@/lib/formatDisplayId'
 import { OrderStatusBadge } from '@/lib/orderStatus'
 import { cn } from '@/lib/utils'
 
-function canRecordReceival(status) {
-  return status === 'approved' || status === 'partially_received'
-}
-
-function canMarkComplete(status) {
-  return status === 'partially_received'
-}
-
-// Icon-only row actions (Details / Receival / Complete / History / PDF)
-function OrderActions({
-  row,
-  mutating,
-  onView,
-  onHistory,
-  onPrint,
-  onRecordReceival,
-  onMarkComplete,
-}) {
+// QA Bug 5 — list actions: View / History / Print only (Receival + Complete on detail page)
+function OrderActions({ row, onView, onHistory, onPrint }) {
   return (
     <div className="flex items-center justify-start gap-0.5">
       <Button
@@ -44,40 +28,12 @@ function OrderActions({
         size="icon"
         variant="ghost"
         className="size-8 cursor-pointer text-purple-700 hover:bg-purple-50 hover:text-purple-900 hover:scale-110 active:scale-95"
-        title="Details"
-        aria-label="Details"
+        title="View details"
+        aria-label="View details"
         onClick={() => onView?.(row)}
       >
         <Eye className="size-4 transition-transform duration-200" />
       </Button>
-      {canRecordReceival(row.status) && onRecordReceival ? (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          disabled={mutating}
-          className="size-8 cursor-pointer text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 hover:scale-110 active:scale-95"
-          title="Record Receival"
-          aria-label="Record Receival"
-          onClick={() => onRecordReceival?.(row)}
-        >
-          <PackageCheck className="size-4 transition-transform duration-200" />
-        </Button>
-      ) : null}
-      {canMarkComplete(row.status) && onMarkComplete ? (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          disabled={mutating}
-          className="size-8 cursor-pointer text-sky-700 hover:bg-sky-50 hover:text-sky-900 hover:scale-110 active:scale-95"
-          title="Mark Complete"
-          aria-label="Mark Complete"
-          onClick={() => onMarkComplete?.(row)}
-        >
-          <CheckCircle2 className="size-4 transition-transform duration-200" />
-        </Button>
-      ) : null}
       <Button
         type="button"
         size="icon"
@@ -108,7 +64,6 @@ function OrderActions({
 export function OrderTable({
   items = [],
   loading = false,
-  mutating = false,
   highlightId = '',
   pagination,
   onPageChange,
@@ -116,8 +71,6 @@ export function OrderTable({
   onView,
   onHistory,
   onPrint,
-  onRecordReceival,
-  onMarkComplete,
   className,
 }) {
   const list = Array.isArray(items) ? items : []
@@ -131,7 +84,7 @@ export function OrderTable({
     <SurfaceCard
       className={className}
       title="Orders"
-      description="Your order requests — Pending until BM approval, then Record Receival"
+      description="Your order requests — open View for details, receival, and completion"
     >
       {loading ? (
         <TableRowsSkeleton rows={5} />
@@ -169,12 +122,9 @@ export function OrderTable({
                 <div className="mt-3">
                   <OrderActions
                     row={row}
-                    mutating={mutating}
                     onView={onView}
                     onHistory={onHistory}
                     onPrint={onPrint}
-                    onRecordReceival={onRecordReceival}
-                    onMarkComplete={onMarkComplete}
                   />
                 </div>
               </article>
@@ -220,12 +170,9 @@ export function OrderTable({
                     <TableActionsCell className="px-2 py-3">
                       <OrderActions
                         row={row}
-                        mutating={mutating}
                         onView={onView}
                         onHistory={onHistory}
                         onPrint={onPrint}
-                        onRecordReceival={onRecordReceival}
-                        onMarkComplete={onMarkComplete}
                       />
                     </TableActionsCell>
                   </TableRow>

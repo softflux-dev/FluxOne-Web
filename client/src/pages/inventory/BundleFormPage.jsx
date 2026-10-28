@@ -223,18 +223,18 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
 
   const selectedIds = useMemo(() => new Set(lines.map((row) => row.itemId)), [lines])
 
-  // Parents for picker: singles + variant parents (not bundles)
+  // Parents for picker: singles + variant parents (not bundles).
+  // Sub category is optional — category alone lists all products under that category.
   const productChoices = useMemo(() => {
     if (!categoryId) return []
-    if (subcategories.length && !subcategoryId) return []
     return bundleOptions.filter((item) => {
       if (item.type === PRODUCT_TYPES.BUNDLE) return false
       if (item.parentId) return false
       if (item.categoryId !== categoryId) return false
-      if (subcategories.length && item.subcategoryId !== subcategoryId) return false
+      if (subcategoryId && item.subcategoryId !== subcategoryId) return false
       return true
     })
-  }, [bundleOptions, categoryId, subcategoryId, subcategories.length])
+  }, [bundleOptions, categoryId, subcategoryId])
 
   const selectedParent = useMemo(
     () => productChoices.find((p) => p.id === productId) || null,
@@ -727,7 +727,10 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
               </NativeSelect>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="bundle-subcategory">Sub category</Label>
+              <Label htmlFor="bundle-subcategory">
+                Sub category{' '}
+                <span className="font-normal text-slate-400">(optional)</span>
+              </Label>
               <NativeSelect
                 id="bundle-subcategory"
                 value={subcategoryId}
@@ -738,7 +741,11 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
                 disabled={!categoryId || subcategories.length === 0}
               >
                 <option value="">
-                  {subcategories.length ? 'Select sub category' : 'No sub categories'}
+                  {!categoryId
+                    ? 'Select category first'
+                    : subcategories.length
+                      ? 'All — category only'
+                      : 'No sub categories'}
                 </option>
                 {subcategories.map((row) => (
                   <option key={row.id} value={row.id}>
@@ -756,11 +763,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
                   setProductId(event.target.value)
                   setVariantSkuId('')
                 }}
-                disabled={
-                  !categoryId ||
-                  (subcategories.length > 0 && !subcategoryId) ||
-                  bundleOptionsLoading
-                }
+                disabled={!categoryId || bundleOptionsLoading}
               >
                 <option value="">
                   {bundleOptionsLoading ? 'Loading products…' : 'Select product'}

@@ -103,8 +103,11 @@ async function insertOrderEvent(client, tenantId, { purchaseOrderId, eventType, 
       break
     case PURCHASE_ORDER_EVENT_TYPES.RECEIVAL_RECORDED:
       action = 'order_receival'
-      orderStatus = PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED
-      actionText = `Recorded receival round on ${orderRef}: ${payload.lineCount ?? '—'} line(s), ${payload.totalUnits ?? '—'} units stocked in. Status → Partially Received.`
+      orderStatus = payload.orderStatus || PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED
+      actionText =
+        orderStatus === PURCHASE_ORDER_STATUS.RECEIVED
+          ? `Recorded final receival on ${orderRef}: ${payload.lineCount ?? '—'} line(s), ${payload.totalUnits ?? '—'} units stocked in. All quantities received — Status → Received.`
+          : `Recorded receival round on ${orderRef}: ${payload.lineCount ?? '—'} line(s), ${payload.totalUnits ?? '—'} units stocked in. Status → Partially Received.`
       break
     case PURCHASE_ORDER_EVENT_TYPES.COMPLETED:
       action = 'order_complete'
@@ -364,6 +367,13 @@ export async function listPurchaseOrders(
           FROM purchase_order_items poi
           WHERE poi.tenant_id = po.tenant_id AND poi.purchase_order_id = po.id
         ) AS "itemsNumber",
+        EXISTS (
+          SELECT 1
+          FROM purchase_order_items poi
+          WHERE poi.tenant_id = po.tenant_id
+            AND poi.purchase_order_id = po.id
+            AND poi.received_quantity < poi.quantity
+        ) AS "hasRemainingQuantity",
         count(*) OVER()::int AS "_total"
       FROM purchase_orders po
       LEFT JOIN users creator
@@ -451,77 +461,87 @@ export async function getPurchaseOrderById(tenantId, id, { branchId = null } = {
   const order = orders[0]
   if (!order) return null
 
-  const { rows: companyRows } = await tenantQuery(
-    tenantId,
-    `
-      SELECT
-        pos.id,
-        pos.supplier_id AS "supplierId",
-        pos.sort_order AS "sortOrder",
-        s.company_name AS "companyName",
-        s.image_url AS "imageUrl",
-        s.representative_name AS "representativeName",
-        s.representative_phone AS "representativePhone",
-        s.company_phone AS "companyPhone"
-      FROM purchase_order_suppliers pos
-      JOIN suppliers s ON s.id = pos.supplier_id AND s.tenant_id = pos.tenant_id
-      WHERE pos.tenant_id = $1 AND pos.purchase_order_id = $2
-      ORDER BY pos.sort_order ASC, pos.created_at ASC
-    `,
-    [id],
-  )
+  // Parallel child reads — cuts detail latency vs sequential round-trips
+  const [companiesResult, linesResult, eventsResult] = await Promise.all([
+    tenantQuery(
+      tenantId,
+      `
+        SELECT
+          pos.id,
+          pos.supplier_id AS "supplierId",
+          pos.sort_order AS "sortOrder",
+          s.company_name AS "companyName",
+          s.image_url AS "imageUrl",
+          s.representative_name AS "representativeName",
+          s.representative_phone AS "representativePhone",
+          s.company_phone AS "companyPhone"
+        FROM purchase_order_suppliers pos
+        JOIN suppliers s ON s.id = pos.supplier_id AND s.tenant_id = pos.tenant_id
+        WHERE pos.tenant_id = $1 AND pos.purchase_order_id = $2
+        ORDER BY pos.sort_order ASC, pos.created_at ASC
+      `,
+      [id],
+    ),
+    tenantQuery(
+      tenantId,
+      `
+        SELECT
+          poi.id,
+          poi.supplier_id AS "supplierId",
+          poi.product_id AS "productId",
+          p.name,
+          p.item_code AS "itemCode",
+          poi.scale,
+          poi.quantity,
+          poi.received_quantity AS "receivedQuantity",
+          poi.unit_cost AS "unitCost",
+          poi.last_purchase_price AS "lastPurchasePrice",
+          s.company_name AS "supplierCompanyName"
+        FROM purchase_order_items poi
+        JOIN products p ON p.id = poi.product_id AND p.tenant_id = poi.tenant_id
+        LEFT JOIN suppliers s ON s.id = poi.supplier_id AND s.tenant_id = poi.tenant_id
+        WHERE poi.tenant_id = $1 AND poi.purchase_order_id = $2
+        ORDER BY s.company_name NULLS LAST, p.name
+      `,
+      [id],
+    ),
+    tenantQuery(
+      tenantId,
+      `
+        SELECT
+          e.id,
+          e.event_type AS "eventType",
+          e.actor_id AS "actorId",
+          u.full_name AS "actorName",
+          e.payload,
+          e.created_at AS "createdAt"
+        FROM purchase_order_events e
+        LEFT JOIN users u ON u.id = e.actor_id AND u.tenant_id = e.tenant_id
+        WHERE e.tenant_id = $1 AND e.purchase_order_id = $2
+        ORDER BY e.created_at ASC
+      `,
+      [id],
+    ),
+  ])
 
-  const { rows: lines } = await tenantQuery(
-    tenantId,
-    `
-      SELECT
-        poi.id,
-        poi.supplier_id AS "supplierId",
-        poi.product_id AS "productId",
-        p.name,
-        p.item_code AS "itemCode",
-        poi.scale,
-        poi.quantity,
-        poi.received_quantity AS "receivedQuantity",
-        poi.unit_cost AS "unitCost",
-        poi.last_purchase_price AS "lastPurchasePrice",
-        s.company_name AS "supplierCompanyName"
-      FROM purchase_order_items poi
-      JOIN products p ON p.id = poi.product_id AND p.tenant_id = poi.tenant_id
-      LEFT JOIN suppliers s ON s.id = poi.supplier_id AND s.tenant_id = poi.tenant_id
-      WHERE poi.tenant_id = $1 AND poi.purchase_order_id = $2
-      ORDER BY s.company_name NULLS LAST, p.name
-    `,
-    [id],
-  )
-
-  const { rows: events } = await tenantQuery(
-    tenantId,
-    `
-      SELECT
-        e.id,
-        e.event_type AS "eventType",
-        e.actor_id AS "actorId",
-        u.full_name AS "actorName",
-        e.payload,
-        e.created_at AS "createdAt"
-      FROM purchase_order_events e
-      LEFT JOIN users u ON u.id = e.actor_id AND u.tenant_id = e.tenant_id
-      WHERE e.tenant_id = $1 AND e.purchase_order_id = $2
-      ORDER BY e.created_at ASC
-    `,
-    [id],
-  )
+  const companyRows = companiesResult.rows
+  const lines = linesResult.rows
+  const events = eventsResult.rows
 
   const companies = companyRows.map((company) => ({
     ...company,
     lines: lines.filter((line) => line.supplierId === company.supplierId),
   }))
 
+  const hasRemainingQuantity = lines.some(
+    (line) => Number(line.receivedQuantity || 0) < Number(line.quantity || 0),
+  )
+
   return {
     ...order,
     companiesNumber: companies.length || (order.supplierId ? 1 : 0),
     itemsNumber: lines.length,
+    hasRemainingQuantity,
     companies,
     lines,
     events,
@@ -851,17 +871,49 @@ export async function recordPurchaseOrderReceival(
       )
     }
 
-    // Always partially_received until IM Mark Complete (even if remaining is 0)
-    await tenantClientQuery(
+    // otherwise stay Partially Received (Mark Complete still closes early when short).
+    const { rows: remainRows } = await tenantClientQuery(
       client,
       tenantId,
       `
-        UPDATE purchase_orders
-        SET status = $3
-        WHERE tenant_id = $1 AND id = $2
+        SELECT EXISTS (
+          SELECT 1
+          FROM purchase_order_items
+          WHERE tenant_id = $1
+            AND purchase_order_id = $2
+            AND received_quantity < quantity
+        ) AS "hasRemaining"
       `,
-      [purchaseOrderId, PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED],
+      [purchaseOrderId],
     )
+    const hasRemaining = Boolean(remainRows[0]?.hasRemaining)
+    const nextStatus = hasRemaining
+      ? PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED
+      : PURCHASE_ORDER_STATUS.RECEIVED
+
+    if (hasRemaining) {
+      await tenantClientQuery(
+        client,
+        tenantId,
+        `
+          UPDATE purchase_orders
+          SET status = $3
+          WHERE tenant_id = $1 AND id = $2
+        `,
+        [purchaseOrderId, nextStatus],
+      )
+    } else {
+      await tenantClientQuery(
+        client,
+        tenantId,
+        `
+          UPDATE purchase_orders
+          SET status = $3, received_at = now(), completed_by = $4
+          WHERE tenant_id = $1 AND id = $2
+        `,
+        [purchaseOrderId, nextStatus, actorId || null],
+      )
+    }
 
     await insertOrderEvent(client, tenantId, {
       purchaseOrderId,
@@ -872,15 +924,28 @@ export async function recordPurchaseOrderReceival(
         lineCount: normalized.length,
         totalUnits,
         notes,
+        orderStatus: nextStatus,
+        autoCompleted: !hasRemaining,
       },
     })
+
+    if (!hasRemaining) {
+      await insertOrderEvent(client, tenantId, {
+        purchaseOrderId,
+        eventType: PURCHASE_ORDER_EVENT_TYPES.COMPLETED,
+        actorId,
+        payload: { autoCompleted: true },
+      })
+    }
 
     return {
       receivalId: receival.id,
       createdAt: receival.createdAt,
       purchaseOrderId,
       orderNumber: order.orderNumber,
-      status: PURCHASE_ORDER_STATUS.PARTIALLY_RECEIVED,
+      status: nextStatus,
+      autoCompleted: !hasRemaining,
+      hasRemainingQuantity: hasRemaining,
       branchId: order.branchId,
       createdBy: order.createdBy,
       lineCount: normalized.length,

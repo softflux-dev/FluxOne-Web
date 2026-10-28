@@ -126,14 +126,15 @@ export function NotificationBell({ className }) {
           />
           <div
             className={cn(
-              'z-50 overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-card',
-              // Mobile: fixed sheet under header (avoids viewport overflow)
-              'fixed top-14 right-3 left-3 max-h-[min(28rem,calc(100dvh-4.5rem))]',
+              // Flex column so header + footer stay pinned; only the list scrolls
+              'z-50 flex max-h-[min(28rem,calc(100dvh-4.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-card',
+              // Mobile: fixed sheet under header
+              'fixed top-14 right-3 left-3',
               // Desktop: anchored to bell
               'sm:absolute sm:top-full sm:right-0 sm:left-auto sm:mt-2 sm:w-[min(26rem,calc(100vw-1.5rem))] sm:max-h-96',
             )}
           >
-            <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2.5">
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 Notifications
               </p>
@@ -161,7 +162,7 @@ export function NotificationBell({ className }) {
               </div>
             </div>
 
-            <div className="max-h-[min(20rem,calc(100dvh-11rem))] overflow-y-auto overscroll-contain sm:max-h-80">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {loading && !items.length ? (
                 <TableRowsSkeleton rows={3} className="px-2 py-2" />
               ) : items.length === 0 ? (
@@ -206,7 +207,7 @@ export function NotificationBell({ className }) {
 
             <button
               type="button"
-              className="w-full cursor-pointer border-t border-border px-3 py-2.5 text-center text-xs font-semibold text-[#8E238F] hover:bg-slate-50 dark:text-[#c084c1] dark:hover:bg-muted"
+              className="w-full shrink-0 cursor-pointer border-t border-border bg-white px-3 py-3 text-center text-xs font-semibold text-[#8E238F] hover:bg-slate-50 dark:bg-card dark:text-[#c084c1] dark:hover:bg-muted"
               onClick={() => {
                 setOpen(false)
                 navigate(notificationsPath)

@@ -24,6 +24,7 @@ import { EditItemPage } from '@/pages/inventory/EditItemPage'
 import { InventoryControlPage } from '@/pages/inventory/InventoryControlPage'
 import { SuppliersPage } from '@/pages/inventory/SuppliersPage'
 import { PurchaseOrdersPage } from '@/pages/inventory/PurchaseOrdersPage'
+import { OrderDetailPage } from '@/pages/inventory/OrderDetailPage'
 import { GenerateOrderPage } from '@/pages/inventory/GenerateOrderPage'
 import { DashboardPage as BranchDashboardPage } from '@/pages/branch/DashboardPage'
 import { StaffPage } from '@/pages/branch/StaffPage'
@@ -123,6 +124,7 @@ const router = createBrowserRouter([
               { path: 'suppliers', element: <SuppliersPage /> },
               { path: 'orders', element: <PurchaseOrdersPage /> },
               { path: 'orders/generate', element: <GenerateOrderPage /> },
+              { path: 'orders/:id', element: <OrderDetailPage /> },
               { path: 'categories', element: <CategoriesPage /> },
               { path: 'notifications', element: <NotificationsPage /> },
               { path: 'profile', element: <ProfilePage /> },

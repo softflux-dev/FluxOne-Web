@@ -244,7 +244,7 @@ export async function notifyInventoryManagerOfOrderApproved(
     type: 'order_request_approved',
     title: 'Order Request Approved',
     body: `Your order request (Order #${orderRef}) has been approved by ${bmName}. You can now proceed with receiving the items.`,
-    linkPath: `/inventory/orders?highlight=${order.id}`,
+    linkPath: `/inventory/orders/${order.id}`,
     entityType: 'purchase_order',
     entityId: order.id,
     meta: {
@@ -272,7 +272,7 @@ export async function notifyInventoryManagerOfOrderRejected(
     type: 'order_request_rejected',
     title: 'Order Request Rejected',
     body: `Your order request (Order #${orderRef}) has been rejected by ${bmName}. Please create a new order request if needed.${notes}`,
-    linkPath: `/inventory/orders?highlight=${order.id}`,
+    linkPath: `/inventory/orders/${order.id}`,
     entityType: 'purchase_order',
     entityId: order.id,
     meta: {

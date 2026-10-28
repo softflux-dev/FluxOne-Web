@@ -103,8 +103,8 @@ export function CatalogCascadeFilters({
   const isVariantProduct = selectedProduct?.type === PRODUCT_TYPES.VARIANT
   const hasSubcategories = Boolean(categoryId) && subcategories.length > 0
   const subEnabled = hasSubcategories
-  const productEnabled =
-    Boolean(categoryId) && (!hasSubcategories || Boolean(subcategoryId))
+  // Sub category optional — category alone is enough to load products
+  const productEnabled = Boolean(categoryId)
 
   const variantAxes = useMemo(
     () => deriveVariantAxes(variantOptions),
@@ -287,11 +287,7 @@ export function CatalogCascadeFilters({
       ? 'No sub-categories'
       : 'All Sub-categories'
 
-  const productPlaceholder = !categoryId
-    ? 'Select category first'
-    : hasSubcategories && !subcategoryId
-      ? 'Select sub-category first'
-      : 'All Products'
+  const productPlaceholder = !categoryId ? 'Select category first' : 'All Products'
 
   const variantTypePlaceholder = !productId
     ? 'Select product first'

@@ -351,7 +351,7 @@ export function EditItemPage() {
     if (tabId === 'basic') {
       if (!form.name.trim()) return 'Product name is required'
       if (!form.categoryId) return 'Category is required'
-      if (!form.subcategoryId) return 'Sub category is required'
+      // Sub category is optional (parent category alone is enough)
     }
     if (tabId === 'variantTypes') {
       if (!selectedTypeIds.length) return 'Select at least one variant type'
@@ -580,14 +580,23 @@ export function EditItemPage() {
                 </NativeSelect>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-sub">Sub category</Label>
+                <Label htmlFor="edit-sub">
+                  Sub category{' '}
+                  <span className="font-normal text-slate-400">(optional)</span>
+                </Label>
                 <NativeSelect
                   id="edit-sub"
                   value={form.subcategoryId}
                   onChange={(e) => patch('subcategoryId', e.target.value)}
                   disabled={!form.categoryId}
                 >
-                  <option value="">Select sub category</option>
+                  <option value="">
+                    {!form.categoryId
+                      ? 'Select category first'
+                      : subcategories.length
+                        ? 'None — category only'
+                        : 'No sub categories'}
+                  </option>
                   {subcategories.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}

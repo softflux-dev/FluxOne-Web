@@ -37,6 +37,10 @@ const initialState = {
   mutating: false,
   error: null,
   selected: null,
+  // Dedicated detail fetch state (page + popup share this — avoids double fire)
+  detailLoading: false,
+  detailLoadingId: null,
+  detailError: null,
   history: null,
   supplierOptions: [],
   productOptions: [],
@@ -103,12 +107,32 @@ export const loadOrderFormOptions = createAsyncThunk('orders/loadFormOptions', a
   return { suppliers, products: prodCollected }
 })
 
+function resolveDetailArg(arg) {
+  if (arg && typeof arg === 'object') {
+    return { id: arg.id, force: Boolean(arg.force) }
+  }
+  return { id: arg, force: false }
+}
+
 export const fetchOrderDetail = createAsyncThunk(
   'orders/fetchDetail',
-  async (id, { rejectWithValue }) => {
+  async (arg, { rejectWithValue }) => {
+    const { id } = resolveDetailArg(arg)
     const result = await apiClient.get(endpoints.orders.detail(id))
     if (!result.success) return rejectWithValue(result.error || 'Not found')
     return { success: true, data: mapPurchaseOrder(result.data) }
+  },
+  {
+    // Skip duplicate GETs (Strict Mode remount / double click). Pass { id, force: true } to refresh.
+    condition: (arg, { getState }) => {
+      const { id, force } = resolveDetailArg(arg)
+      if (!id) return false
+      if (force) return true
+      const { detailLoading, detailLoadingId, selected } = getState().orders
+      if (detailLoading && detailLoadingId === id) return false
+      if (selected?.id === id) return false
+      return true
+    },
   },
 )
 
@@ -271,6 +295,9 @@ const ordersSlice = createSlice({
     clearOrderDetail(state) {
       state.selected = null
       state.history = null
+      state.detailLoading = false
+      state.detailLoadingId = null
+      state.detailError = null
     },
   },
   extraReducers: (builder) => {
@@ -293,8 +320,24 @@ const ordersSlice = createSlice({
         state.supplierOptions = action.payload.suppliers
         state.productOptions = action.payload.products
       })
+      .addCase(fetchOrderDetail.pending, (state, action) => {
+        const { id } = resolveDetailArg(action.meta.arg)
+        state.detailLoading = true
+        state.detailLoadingId = id
+        state.detailError = null
+      })
       .addCase(fetchOrderDetail.fulfilled, (state, action) => {
+        state.detailLoading = false
+        state.detailLoadingId = null
+        state.detailError = null
         state.selected = action.payload.data
+      })
+      .addCase(fetchOrderDetail.rejected, (state, action) => {
+        // Skipped by condition — do not clear loading/error from a real in-flight request
+        if (action.error?.name === 'ConditionError') return
+        state.detailLoading = false
+        state.detailLoadingId = null
+        state.detailError = action.payload || action.error?.message || 'Failed to load order'
       })
       .addCase(fetchOrderHistory.fulfilled, (state, action) => {
         state.history = action.payload.data

@@ -64,11 +64,11 @@ export async function runMigrations() {
   let ran = 0
   for (const file of files) {
     if (done.has(file)) {
-      console.log(`Skip ${file} (already applied)`)
+      // console.log(`Skip ${file} (already applied)`)
       continue
     }
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8')
-    console.log(`Running ${file}`)
+    // console.log(`Running ${file}`)
     await query(sql)
     await query(`INSERT INTO schema_migrations (filename) VALUES ($1)`, [file])
     ran += 1

@@ -1,6 +1,7 @@
 // TL §10 — per-supplier invoices on order detail (IM + BM)
+// QA Bug 5 — Send removed; PDF + Excel download/export retained
 import { useCallback, useEffect, useState } from 'react'
-import { Download, FileSpreadsheet, Mail } from 'lucide-react'
+import { Download, FileSpreadsheet } from 'lucide-react'
 import { apiClient } from '@/api/api'
 import { endpoints } from '@/api/endpoints'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,6 @@ import {
   downloadPurchaseOrderInvoicePdf,
   exportPurchaseOrderInvoiceItemsExcel,
   exportPurchaseOrderInvoicesWorkbook,
-  purchaseOrderInvoicePdfBase64,
 } from '@/lib/purchaseOrderInvoiceExport'
 import { toastError, toastSuccess } from '@/lib/toast'
 
@@ -126,39 +126,6 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
     })
   }
 
-  async function handleSend(row) {
-    await withAction(`send:${row.id}`, async () => {
-      try {
-        const detail = await fetchInvoiceDetail(orderId, row.id)
-        const email = detail.supplier?.representativeEmail
-        if (!email) {
-          toastError('Supplier representative email is missing')
-          return
-        }
-        const { base64, filename } = await purchaseOrderInvoicePdfBase64(detail)
-        const result = await apiClient.post(endpoints.orders.invoiceSend(orderId, row.id), {
-          pdfBase64: base64,
-          filename,
-        })
-        if (!result.success) {
-          toastError(result.error || 'Failed to send invoice')
-          return
-        }
-        const data = result.data || {}
-        if (data.stubbed) {
-          toastSuccess(`SMTP off — invoice prepared for ${data.sentTo || email} (stubbed)`)
-        } else if (data.sent) {
-          toastSuccess(`Invoice emailed to ${data.sentTo || email}`)
-        } else {
-          toastError(data.error || 'Email was not delivered')
-        }
-        void reload()
-      } catch (err) {
-        toastError(err?.message || 'Failed to send invoice')
-      }
-    })
-  }
-
   return (
     <section className="space-y-3 rounded-xl border border-border bg-white p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -197,7 +164,6 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
           {invoices.map((row) => {
             const pdfBusy = actionKey === `pdf:${row.id}`
             const xlsBusy = actionKey === `xls:${row.id}`
-            const sendBusy = actionKey === `send:${row.id}`
             return (
               <li
                 key={row.id}
@@ -213,12 +179,6 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
                   </p>
                   <p className="text-xs text-slate-500">
                     Date <DateTimeLines value={row.invoiceDate} className="inline-flex" />
-                    {row.lastSentAt ? (
-                      <>
-                        {' · '}Last sent <DateTimeLines value={row.lastSentAt} className="inline-flex" />
-                        {row.lastSentTo ? ` → ${row.lastSentTo}` : ''}
-                      </>
-                    ) : null}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -247,19 +207,6 @@ export function OrderInvoicesSection({ order, busy = false, onBusyChange }) {
                   >
                     <FileSpreadsheet className="size-3.5" />
                     Excel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="brand"
-                    className="cursor-pointer"
-                    loading={sendBusy}
-                    disabled={busy || (Boolean(actionKey) && !sendBusy)}
-                    onClick={() => void handleSend(row)}
-                    title="Send to supplier email"
-                  >
-                    <Mail className="size-3.5" />
-                    Send
                   </Button>
                 </div>
               </li>

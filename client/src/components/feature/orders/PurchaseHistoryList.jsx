@@ -9,15 +9,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { money } from '@/lib/mapProduct'
 
-// Price direction history for an order (last vs current unit cost).
+// Price history for an order (last vs current unit cost).
+// QA Bug 2 — "same" is not in TL; only show ↑/↓ when price actually changed.
+function directionLabel(direction) {
+  if (direction === 'up') return { text: '↑ up', className: 'text-red-600' }
+  if (direction === 'down') return { text: '↓ down', className: 'text-emerald-600' }
+  return null
+}
+
 export function PurchaseHistoryList({ open, onOpenChange, history = null }) {
   const lines = history?.lines || []
-
-  function directionLabel(direction) {
-    if (direction === 'up') return { text: '↑ up', className: 'text-red-600' }
-    if (direction === 'down') return { text: '↓ down', className: 'text-emerald-600' }
-    return { text: 'same', className: 'text-slate-500' }
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,7 +46,9 @@ export function PurchaseHistoryList({ open, onOpenChange, history = null }) {
                       <p className="font-medium text-slate-800">{line.name}</p>
                       <p className="font-mono text-[11px] text-slate-400">{line.itemCode}</p>
                     </div>
-                    <span className={`text-xs font-semibold ${dir.className}`}>{dir.text}</span>
+                    {dir ? (
+                      <span className={`text-xs font-semibold ${dir.className}`}>{dir.text}</span>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-xs text-slate-600">
                     Last {money(line.lastPurchasePrice)} → Current{' '}

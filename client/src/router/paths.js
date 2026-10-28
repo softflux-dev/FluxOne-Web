@@ -16,6 +16,8 @@ export const PATHS = {
     suppliers: '/inventory/suppliers',
     orders: '/inventory/orders',
     ordersGenerate: '/inventory/orders/generate',
+    // QA Bug 5 — dedicated order details page (View no longer opens a popup)
+    ordersDetail: (id) => `/inventory/orders/${id}`,
     categories: '/inventory/categories',
     notifications: '/inventory/notifications',
     profile: '/inventory/profile',

@@ -380,7 +380,7 @@ export async function recordReceival(req, res) {
         inventoryManagerName: req.user?.name || req.user?.fullName || 'Inventory Manager',
         lineCount: data.lineCount,
         totalUnits: data.totalUnits,
-        completed: false,
+        completed: Boolean(data.autoCompleted),
       })
     } catch (notifyErr) {
       console.error('Order receival notification failed:', notifyErr.message)
