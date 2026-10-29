@@ -117,7 +117,7 @@ export function BranchVariantStockDialog({
                 <TableBody>
                   {variants.map((sku) => {
                     const label = variantSkuLabel(sku)
-                    const stock = formatShelfQuantity(sku.quantity, sku.scale || detail?.scale)
+                    const stock = formatShelfQuantity(sku.quantity)
                     const status = getShelfStockStatus(sku.quantity, sku.reorderPoint)
                     const inactive = sku.status === PRODUCT_STATUS.INACTIVE
 

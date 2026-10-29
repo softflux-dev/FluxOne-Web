@@ -138,7 +138,7 @@ export async function buildPurchaseOrderInvoicePdf(invoice) {
   doc.setFontSize(9)
   const cols = [
     { label: 'Item', x: margin, w: 62 },
-    { label: 'Variant', x: margin + 64, w: 28 },
+    { label: 'Variant Type', x: margin + 64, w: 28 },
     { label: 'Qty', x: margin + 94, w: 18 },
     { label: 'Prev. price', x: margin + 114, w: 28 },
     { label: 'Line total', x: margin + 144, w: 30 },
@@ -234,17 +234,17 @@ export async function purchaseOrderInvoicePdfBase64(invoice) {
 }
 
 function invoiceItemRows(invoice) {
+  // QA TC-ORDER DEMAND-983A — Scale removed; Variant Type replaces it (values from variantLabel)
   return invoiceItems(invoice).map((line) => [
     line.itemName || '',
     line.variantLabel || '',
-    line.scale || '',
     line.quantity ?? '',
     money(line.previousUnitPrice),
     money(line.lineTotal),
   ])
 }
 
-const ITEM_HEADERS = ['Item', 'Variant', 'Scale', 'Qty', 'Previous unit price', 'Line total']
+const ITEM_HEADERS = ['Item', 'Variant Type', 'Qty', 'Previous unit price', 'Line total']
 
 // Single-invoice items Excel — INV-2026-00143-items.xls
 export function exportPurchaseOrderInvoiceItemsExcel(invoice) {
@@ -294,7 +294,8 @@ export function exportPurchaseOrderInvoicesWorkbook(invoices = [], { orderNumber
         .map((row) => {
           const cells = row
             .map((cell, i) => {
-              const isNum = i >= 3
+              // Qty / Previous unit price / Line total (indices after Item + Variant Type)
+              const isNum = i >= 2
               const type = isNum && cell !== '' && !Number.isNaN(Number(cell)) ? 'Number' : 'String'
               return `<Cell><Data ss:Type="${type}">${escapeXml(cell)}</Data></Cell>`
             })

@@ -52,7 +52,7 @@ export function PurchaseHistoryList({ open, onOpenChange, history = null }) {
                   </div>
                   <p className="mt-1 text-xs text-slate-600">
                     Last {money(line.lastPurchasePrice)} → Current{' '}
-                    {money(line.currentPurchasePrice)} ({line.scale})
+                    {money(line.currentPurchasePrice)}
                   </p>
                 </li>
               )

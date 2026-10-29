@@ -66,7 +66,7 @@ export function StockRequestDialog({ open, target, onOpenChange, onSent }) {
     onSent?.(res.data)
   }
 
-  const stock = formatShelfQuantity(target?.quantity, target?.scale || 'pcs')
+  const stock = formatShelfQuantity(target?.quantity)
   const price = resolveProductPrice(target)
   const skuCode = target ? displayItemCode(target) : ''
 

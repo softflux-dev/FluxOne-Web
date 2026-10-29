@@ -209,7 +209,11 @@ export const recordOrderReceival = createAsyncThunk(
       lines,
       notes: notes || undefined,
     })
-    if (!result.success) return rejectWithValue(result.error || 'Receival failed')
+    if (!result.success) {
+      // Backend is source of truth — pull fresh remaining after validation failure
+      void dispatch(fetchOrderDetail({ id, force: true }))
+      return rejectWithValue(result.error || 'Receival failed')
+    }
     void dispatch(fetchOrders(getState().orders.filters))
     const order = result.data?.order
       ? mapPurchaseOrder(result.data.order)
@@ -387,6 +391,11 @@ const ordersSlice = createSlice({
       .addCase(recordOrderReceival.fulfilled, (state, action) => {
         state.mutating = false
         state.selected = action.payload.data
+        // Keep list row in sync (status / remaining) even if user left mid-request
+        const next = action.payload.data
+        if (next?.id) {
+          state.items = state.items.map((row) => (row.id === next.id ? { ...row, ...next } : row))
+        }
       })
       .addCase(recordOrderReceival.rejected, (state) => {
         state.mutating = false

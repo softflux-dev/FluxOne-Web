@@ -1166,6 +1166,9 @@ export async function approvePurchaseOrder(tenantId, id, userId, { branchId = nu
         invoiceNumbers: invoices.map((row) => row.invoiceNumber),
       },
     })
+
+    // Give withTransaction a useful summary log (was "undefined")
+    return { id, status: PURCHASE_ORDER_STATUS.APPROVED, invoicesCreated: invoices.length }
   })
 
   return getPurchaseOrderById(tenantId, id, { branchId })
@@ -1249,7 +1252,6 @@ export async function buildPurchaseOrderPrint(tenantId, id, { branchId = null } 
         <tr>
           <td>${escapeHtml(line.name)} (${escapeHtml(line.itemCode)})</td>
           <td>${escapeHtml(line.supplierCompanyName || '')}</td>
-          <td>${escapeHtml(line.scale)}</td>
           <td>${escapeHtml(line.quantity)}</td>
           <td>${escapeHtml(line.unitCost)}</td>
         </tr>
@@ -1280,7 +1282,6 @@ export async function buildPurchaseOrderPrint(tenantId, id, { branchId = null } 
         <tr>
           <th>Item</th>
           <th>Supplier</th>
-          <th>Scale</th>
           <th>Quantity</th>
           <th>Unit Cost</th>
         </tr>

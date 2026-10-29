@@ -121,7 +121,7 @@ export function StockAlertsDialog({
                           </p>
                           <p className="truncate text-xs text-slate-400">
                             {[
-                              row.variantLabel || row.scale,
+                              row.variantLabel || '',
                               displayItemCode({
                                 itemCode: row.itemCode,
                                 productId: row.id,

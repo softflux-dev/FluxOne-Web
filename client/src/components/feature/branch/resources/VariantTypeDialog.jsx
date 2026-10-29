@@ -87,7 +87,7 @@ export function VariantTypeDialog({
                 setName(event.target.value)
                 clearField('name')
               }}
-              placeholder="e.g. Color, Flavour, Scale / Weight"
+              placeholder="e.g. Color, Flavour, Size, Weight"
               aria-invalid={Boolean(fieldErrors.name)}
               className={fieldErrorClass(fieldErrors.name)}
             />

@@ -34,10 +34,9 @@ export function getShelfStockStatus(quantity, reorderPoint = DEFAULT_REORDER_POI
   }
 }
 
-export function formatShelfQuantity(quantity, scale = 'pcs') {
+export function formatShelfQuantity(quantity) {
   const qty = Number(quantity ?? 0)
-  const unit = !scale || scale === 'unit' ? 'units' : scale
-  return { qty, unit, display: `${qty.toLocaleString()} ${unit}` }
+  return { qty, unit: 'units', display: `${qty.toLocaleString()} units` }
 }
 
 /** Suggested replenishment qty (gap to reorder point, min 1). */

@@ -15,6 +15,8 @@ export function OrderDetailBody({
   footer = null,
   onRetry,
   emptyLabel = 'Order not found.',
+  receivalEnabled = false,
+  onSubmitReceival,
 }) {
   if (loading && !order) {
     return <TableRowsSkeleton rows={6} className="py-2" />
@@ -43,6 +45,8 @@ export function OrderDetailBody({
       loading={mutating || loading}
       headerActions={headerActions}
       footer={footer}
+      receivalEnabled={receivalEnabled}
+      onSubmitReceival={onSubmitReceival}
     />
   )
 }

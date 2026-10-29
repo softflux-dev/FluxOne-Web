@@ -154,11 +154,7 @@ export function VariantSkusDialog({
                       disc,
                       taxPercent,
                     )
-                    const stock = formatInventoryStock(
-                      sku.quantity,
-                      sku.reorderPoint,
-                      sku.scale || detail?.scale || 'unit',
-                    )
+                    const stock = formatInventoryStock(sku.quantity, sku.reorderPoint)
                     const inactive = sku.status === PRODUCT_STATUS.INACTIVE
                     const hasPromo =
                       disc > 0 || sku.offerName || Number(sku.offerPercent) > 0

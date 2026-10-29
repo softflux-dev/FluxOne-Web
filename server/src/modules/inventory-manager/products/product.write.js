@@ -20,6 +20,10 @@ import {
 } from './product.shared.js'
 import { getProductDeleteEligibility } from './product.read.js'
 import { writeAdminActivity } from '../../../utils/adminActivityLog.util.js'
+import {
+  formatMoneyLabel,
+  getTenantCurrencyCode,
+} from '../../../utils/currency.util.js'
 
 /** Admin Logs — products / bundles / pricing / variants from product writes. */
 async function logProductActivity(client, tenantId, payload) {
@@ -2162,31 +2166,37 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
       const newBuy =
         payload.purchasePrice !== undefined ? Number(payload.purchasePrice) : oldBuy
 
-      if (payload.sellingPrice !== undefined && newSell !== oldSell) {
-        await logProductActivity(client, tenantId, {
-          branchId: branchIdForLog,
-          actorUserId,
-          category: isBundleType ? 'bundles' : 'pricing',
-          action: isBundleType ? 'bundle_price_change' : 'selling_price_change',
-          entityType: 'product',
-          entityId: id,
-          actionText: isBundleType
-            ? `Changed price of bundle "${displayName}" from £${oldSell} to £${newSell}.`
-            : `Changed selling price of ${displayName} from £${oldSell} to £${newSell}.`,
-          affectedItem: displayName,
-        })
-      }
-      if (!isBundleType && payload.purchasePrice !== undefined && newBuy !== oldBuy) {
-        await logProductActivity(client, tenantId, {
-          branchId: branchIdForLog,
-          actorUserId,
-          category: 'pricing',
-          action: 'purchase_price_change',
-          entityType: 'product',
-          entityId: id,
-          actionText: `Changed purchase price of ${displayName} from £${oldBuy} to £${newBuy}.`,
-          affectedItem: displayName,
-        })
+      if (
+        (payload.sellingPrice !== undefined && newSell !== oldSell) ||
+        (!isBundleType && payload.purchasePrice !== undefined && newBuy !== oldBuy)
+      ) {
+        const currency = await getTenantCurrencyCode(tenantId)
+        if (payload.sellingPrice !== undefined && newSell !== oldSell) {
+          await logProductActivity(client, tenantId, {
+            branchId: branchIdForLog,
+            actorUserId,
+            category: isBundleType ? 'bundles' : 'pricing',
+            action: isBundleType ? 'bundle_price_change' : 'selling_price_change',
+            entityType: 'product',
+            entityId: id,
+            actionText: isBundleType
+              ? `Changed price of bundle "${displayName}" from ${formatMoneyLabel(oldSell, currency)} to ${formatMoneyLabel(newSell, currency)}.`
+              : `Changed selling price of ${displayName} from ${formatMoneyLabel(oldSell, currency)} to ${formatMoneyLabel(newSell, currency)}.`,
+            affectedItem: displayName,
+          })
+        }
+        if (!isBundleType && payload.purchasePrice !== undefined && newBuy !== oldBuy) {
+          await logProductActivity(client, tenantId, {
+            branchId: branchIdForLog,
+            actorUserId,
+            category: 'pricing',
+            action: 'purchase_price_change',
+            entityType: 'product',
+            entityId: id,
+            actionText: `Changed purchase price of ${displayName} from ${formatMoneyLabel(oldBuy, currency)} to ${formatMoneyLabel(newBuy, currency)}.`,
+            affectedItem: displayName,
+          })
+        }
       }
 
       if ('offerId' in payload) {
@@ -2209,7 +2219,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
         }
       }
 
-      // Generic edit when non-price/status fields changed
+      // Generic edit when non-price/status fields changed (scale removed from product UX)
       const editedKeys = Object.keys(payload).filter(
         (k) =>
           ![
@@ -2226,6 +2236,7 @@ export async function updateProduct(tenantId, id, payload, { branchId = null } =
             'status',
             'taxIds',
             'taxPercent',
+            'scale',
           ].includes(k) && payload[k] !== undefined,
       )
       if (editedKeys.length && !becomingInactive) {

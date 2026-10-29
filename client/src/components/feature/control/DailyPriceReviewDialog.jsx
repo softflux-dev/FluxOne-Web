@@ -123,7 +123,6 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
             <ul className="max-h-[60vh] space-y-2 overflow-y-auto md:hidden">
               {items.map((row) => {
                 const draft = drafts[row.id] || { purchasePrice: '', sellingPrice: '' }
-                const scaleLabel = row.variantLabel || row.scale || ''
                 return (
                   <li
                     key={row.id}
@@ -135,7 +134,7 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                         <p className="truncate font-medium text-slate-900">{row.name}</p>
                         <p className="truncate text-xs text-slate-400">
                           {[
-                            scaleLabel,
+                            row.variantLabel || '',
                             displayItemCode({ itemCode: row.itemCode, productId: row.id }),
                           ]
                             .filter(Boolean)
@@ -193,7 +192,6 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                 <tbody>
                   {items.map((row) => {
                     const draft = drafts[row.id] || { purchasePrice: '', sellingPrice: '' }
-                    const scaleLabel = row.variantLabel || row.scale || ''
                     return (
                       <tr key={row.id} className="border-t border-border bg-white">
                         <td className="px-3 py-2.5 align-middle">
@@ -205,7 +203,7 @@ export function DailyPriceReviewDialog({ open, onOpenChange, onChanged }) {
                               </p>
                               <p className="truncate text-xs text-slate-400">
                                 {[
-                                  scaleLabel,
+                                  row.variantLabel || '',
                                   displayItemCode({
                                     itemCode: row.itemCode,
                                     productId: row.id,

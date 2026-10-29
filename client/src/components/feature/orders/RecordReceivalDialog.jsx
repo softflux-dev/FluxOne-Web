@@ -71,17 +71,17 @@ function groupReceivalBySupplier(order, rows) {
 // QA TC-ORDER RECEVAL-93A — Serial No. instead of non-functional checkboxes
 function ReceivalLinesTable({ rows, loading, patchRow }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-white">
-      <Table className="min-w-[560px] text-left text-sm">
+    <div className="rounded-lg border border-border bg-white">
+      <Table className="w-full table-fixed text-left text-sm">
         <TableHeader>
           <TableRow className="bg-slate-50 text-xs uppercase text-slate-400">
-            <TableHead className="w-14 px-3 py-2">S. No.</TableHead>
-            <TableHead className="px-3 py-2">Item</TableHead>
-            <TableHead className="px-3 py-2">Ordered</TableHead>
-            <TableHead className="px-3 py-2">Already</TableHead>
-            <TableHead className="px-3 py-2">Remaining</TableHead>
-            <TableHead className="px-3 py-2">Prev. price</TableHead>
-            <TableHead className="px-3 py-2">Receive now</TableHead>
+            <TableHead className="w-12 px-2 py-2 sm:w-14 sm:px-3">S. No.</TableHead>
+            <TableHead className="px-2 py-2 sm:px-3">Item</TableHead>
+            <TableHead className="w-16 px-1 py-2 sm:w-20 sm:px-3">Ordered</TableHead>
+            <TableHead className="w-16 px-1 py-2 sm:w-20 sm:px-3">Already</TableHead>
+            <TableHead className="w-16 px-1 py-2 sm:w-20 sm:px-3">Remaining</TableHead>
+            <TableHead className="hidden w-24 px-2 py-2 sm:table-cell sm:px-3">Prev. price</TableHead>
+            <TableHead className="w-24 px-2 py-2 sm:px-3">Receive now</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,17 +101,17 @@ function ReceivalLinesTable({ rows, loading, patchRow }) {
               <TableCell className="px-3 py-2 font-medium text-slate-800">
                 {row.remaining}
               </TableCell>
-              <TableCell className="px-3 py-2 text-slate-600">
+              <TableCell className="hidden px-2 py-2 text-slate-600 sm:table-cell sm:px-3">
                 {money(row.lastPurchasePrice)}
               </TableCell>
-              <TableCell className="px-3 py-2">
+              <TableCell className="px-2 py-2 sm:px-3">
                 <WholeNumberInput
                   min={0}
                   max={row.remaining}
                   allowEmpty
                   value={row.quantity}
                   disabled={loading}
-                  className="h-8 w-20"
+                  className="h-8 w-full max-w-[5.5rem]"
                   onChange={(e) => {
                     const raw = e.target.value
                     if (raw === '' || raw == null) {
@@ -201,7 +201,8 @@ export function RecordReceivalDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      {/* Wider + responsive — leftover modal path; IM detail page uses inline table instead */}
+      <DialogContent className="flex max-h-[92vh] w-[min(96vw,72rem)] max-w-6xl flex-col gap-4 overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Record Receival · {displayOrderRef(order)}</DialogTitle>
           <DialogDescription>
@@ -209,59 +210,60 @@ export function RecordReceivalDialog({
             remaining. Stock In is written to the ledger against this Order ID.
           </DialogDescription>
         </DialogHeader>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
+          {rows.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">
+              No remaining quantities on this order.
+              {order.status === 'partially_received'
+                ? ' Use Mark Complete to finalize the order as Received.'
+                : ' Record Stock In is unavailable.'}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {companyBlocks.map((company) => (
+                <section
+                  key={company.key}
+                  className="rounded-xl border border-border bg-slate-50/40 p-3"
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    {company.imageUrl ? (
+                      <img
+                        src={company.imageUrl}
+                        alt=""
+                        className="size-8 rounded-lg object-cover"
+                      />
+                    ) : null}
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      {company.companyName}
+                    </h3>
+                  </div>
+                  <ReceivalLinesTable
+                    rows={company.rows}
+                    loading={loading}
+                    patchRow={patchRow}
+                  />
+                </section>
+              ))}
+            </div>
+          )}
 
-        {rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-500">
-            No remaining quantities on this order.
-            {order.status === 'partially_received'
-              ? ' Use Mark Complete to finalize the order as Received.'
-              : ' Record Stock In is unavailable.'}
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {companyBlocks.map((company) => (
-              <section
-                key={company.key}
-                className="rounded-xl border border-border bg-slate-50/40 p-3"
-              >
-                <div className="mb-2 flex items-center gap-2">
-                  {company.imageUrl ? (
-                    <img
-                      src={company.imageUrl}
-                      alt=""
-                      className="size-8 rounded-lg object-cover"
-                    />
-                  ) : null}
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    {company.companyName}
-                  </h3>
-                </div>
-                <ReceivalLinesTable
-                  rows={company.rows}
-                  loading={loading}
-                  patchRow={patchRow}
-                />
-              </section>
-            ))}
-          </div>
-        )}
+          {rows.length > 0 ? (
+            <div className="space-y-2">
+              <Label htmlFor="receival-notes">Notes (optional)</Label>
+              <Textarea
+                id="receival-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Delivery batch, invoice ref, etc."
+                className="min-h-20"
+                maxLength={2000}
+                disabled={loading}
+              />
+            </div>
+          ) : null}
+        </div>
 
-        {rows.length > 0 ? (
-          <div className="space-y-2">
-            <Label htmlFor="receival-notes">Notes (optional)</Label>
-            <Textarea
-              id="receival-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Delivery batch, invoice ref, etc."
-              className="min-h-20"
-              maxLength={2000}
-              disabled={loading}
-            />
-          </div>
-        ) : null}
-
-        <DialogFooter className="flex-wrap gap-2">
+        <DialogFooter className="shrink-0 flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"

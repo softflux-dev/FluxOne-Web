@@ -106,7 +106,7 @@ export function VariantValueDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit variant value' : 'Add variant value'}</DialogTitle>
           <DialogDescription>
-            Map a value to a variant type (e.g. Red under Color, 250g under Scale / Weight).
+            Map a value to a variant type (e.g. Red under Color, 250g under Weight).
           </DialogDescription>
         </DialogHeader>
 

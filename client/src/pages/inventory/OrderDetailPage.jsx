@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, PackageCheck } from 'lucide-react'
+import { ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { OrderDetailBody } from '@/components/feature/orders/OrderDetailBody'
-import { RecordReceivalDialog } from '@/components/feature/orders/RecordReceivalDialog'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
@@ -22,7 +21,7 @@ function canMarkComplete(order) {
   return order?.status === 'partially_received'
 }
 
-// QA Bug 5 — dedicated IM Order Details page (shared body with BM popup)
+// QA Bug 5 + rework 092A — dedicated page; receival qty edited inline in the lines table
 export function OrderDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -32,12 +31,18 @@ export function OrderDetailPage() {
     error,
     mutating,
     refetch,
+    clear,
     recordReceival,
     completeReceival,
     printOrder,
   } = useOrderDetail(id)
 
-  const [receivalOpen, setReceivalOpen] = useState(false)
+  // Drop cached detail on leave so a mid-flight receival cannot leave stale remaining qty
+  useEffect(() => {
+    return () => {
+      clear()
+    }
+  }, [clear])
 
   async function handlePrint() {
     if (!order) return
@@ -59,6 +64,8 @@ export function OrderDetailPage() {
     const result = await recordReceival(order.id, payload)
     if (!result.success) {
       toastError(result.error || 'Receival failed')
+      // Slice already force-refetches on API validation failure; refresh draft from latest
+      void refetch(order.id)
       return
     }
     const status = result.data?.status
@@ -68,7 +75,6 @@ export function OrderDetailPage() {
     } else {
       toastSuccess('Receival recorded — stock in linked to this order')
     }
-    setReceivalOpen(false)
     void refetch(order.id)
   }
 
@@ -117,35 +123,21 @@ export function OrderDetailPage() {
             error={error || ''}
             mutating={mutating}
             onRetry={() => void refetch(id)}
+            receivalEnabled={showReceival}
+            onSubmitReceival={handleReceivalConfirm}
             headerActions={
-              order ? (
-                <>
-                  {showReceival ? (
-                    <Button
-                      type="button"
-                      variant="brand"
-                      className="cursor-pointer"
-                      disabled={mutating}
-                      onClick={() => setReceivalOpen(true)}
-                    >
-                      <PackageCheck className="size-4" />
-                      Record Receival
-                    </Button>
-                  ) : null}
-                  {showComplete ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer"
-                      disabled={mutating}
-                      loading={mutating}
-                      onClick={() => void handleMarkComplete()}
-                    >
-                      <CheckCircle2 className="size-4" />
-                      Mark Complete
-                    </Button>
-                  ) : null}
-                </>
+              order && showComplete ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={mutating}
+                  loading={mutating}
+                  onClick={() => void handleMarkComplete()}
+                >
+                  <CheckCircle2 className="size-4" />
+                  Mark Complete
+                </Button>
               ) : null
             }
             footer={
@@ -180,14 +172,6 @@ export function OrderDetailPage() {
           />
         </SurfaceCard>
       </MotionReveal>
-
-      <RecordReceivalDialog
-        open={receivalOpen}
-        onOpenChange={setReceivalOpen}
-        order={order}
-        loading={mutating}
-        onConfirm={handleReceivalConfirm}
-      />
     </div>
   )
 }

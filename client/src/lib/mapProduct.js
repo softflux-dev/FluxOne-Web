@@ -49,13 +49,12 @@ export function getInventoryStockStatus(quantity, reorderPoint = DEFAULT_REORDER
   }
 }
 
-// e.g. "125 units — In Stock" / "8 pack — Low Stock"
-export function formatInventoryStock(quantity, reorderPoint, scale = 'unit') {
+// e.g. "125 units — In Stock" (Scale unit field removed — always "units")
+export function formatInventoryStock(quantity, reorderPoint) {
   const status = getInventoryStockStatus(quantity, reorderPoint)
-  const unitLabel = !scale || scale === 'unit' ? 'units' : scale
   return {
     ...status,
-    display: `${status.quantity} ${unitLabel} — ${status.label}`,
+    display: `${status.quantity} units — ${status.label}`,
   }
 }
 

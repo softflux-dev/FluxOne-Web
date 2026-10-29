@@ -46,8 +46,8 @@ function categoryCell(row) {
   )
 }
 
-function scaleVariantCell(row) {
-  const label = row.variantLabel || row.scale || '—'
+function variantTypeCell(row) {
+  const label = row.variantLabel || '—'
   return <span className="capitalize text-slate-700">{label}</span>
 }
 
@@ -104,9 +104,9 @@ export function controlSharedColumns() {
       render: (row) => <DateTimeLines value={row.createdAt} />,
     },
     {
-      key: 'scale',
-      label: 'Scale / Variant',
-      render: scaleVariantCell,
+      key: 'variantType',
+      label: 'Variant Type',
+      render: variantTypeCell,
     },
   ]
 }

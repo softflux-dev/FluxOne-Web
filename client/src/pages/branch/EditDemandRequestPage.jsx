@@ -143,8 +143,11 @@ export function EditDemandRequestPage() {
     setLoadingMeta(true)
     void (async () => {
       void dispatch(loadControlCatalog())
+      // force:true — Demand Requests View caches the same id; without force RTK
+      // condition aborts ("Aborted due to condition callback returning false")
+      // and BM cannot edit quantities (TL Pending edit).
       const [detailRes, suppliersRes] = await Promise.all([
-        asResult(dispatch(fetchOrderDetail(id)).unwrap()),
+        asResult(dispatch(fetchOrderDetail({ id, force: true })).unwrap()),
         fetchControlSuppliers(),
       ])
       if (cancelled) return

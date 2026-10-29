@@ -8,7 +8,6 @@ export const PRODUCT_EXCEL_HEADERS = [
   'Barcode',
   'Row Type',
   'Product Type',
-  'Scale',
   'Variant Attributes',
   'Category',
   'Subcategory',
@@ -32,12 +31,6 @@ const ROW_BG = {
   variant: '#D6EAF8',
   bundleItem: '#FDEBD0',
   single: '#FFFFFF',
-}
-
-function titleCase(value) {
-  const text = String(value || '').trim()
-  if (!text) return ''
-  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()
 }
 
 function rowTypeLabel(rowKind) {
@@ -122,7 +115,6 @@ function mapProductExportCells(row = {}) {
     row.barcode || '',
     rowTypeLabel(row.rowKind),
     productTypeLabel(row.type),
-    titleCase(row.scale) || row.scale || '',
     formatVariantAttributes(row.variantOptions),
     row.category || '',
     row.subcategory || '',

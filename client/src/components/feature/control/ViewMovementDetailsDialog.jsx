@@ -100,8 +100,8 @@ export function ViewMovementDetailsDialog({ open, onOpenChange, row = null, tab 
           <DetailRow label="Product name" value={row?.productName} />
           <DetailRow label="Category" value={categoryLine || '—'} />
           <DetailRow
-            label="Variant / Scale"
-            value={row?.variantLabel || row?.scale}
+            label="Variant Type"
+            value={row?.variantLabel || '—'}
           />
           <DetailRow
             label="Item type"

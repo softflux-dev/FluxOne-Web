@@ -107,8 +107,7 @@ export function downloadPurchaseOrderPdf(order) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   const cols = [
-    { label: 'Item', x: margin, w: 80 },
-    { label: 'Scale', x: margin + 82, w: 22 },
+    { label: 'Item', x: margin, w: 100 },
     { label: 'Qty', x: margin + 106, w: 22 },
     { label: 'Unit cost', x: margin + 130, w: 30 },
   ]
@@ -140,11 +139,10 @@ export function downloadPurchaseOrderPdf(order) {
       y = 18
     }
     const title = `${line._company ? `[${line._company}] ` : ''}${line.name || 'Item'}${line.itemCode ? ` (${line.itemCode})` : ''}`
-    const titleLines = doc.splitTextToSize(title, 78)
+    const titleLines = doc.splitTextToSize(title, 98)
     doc.text(titleLines, cols[0].x, y)
-    doc.text(String(line.scale || '—'), cols[1].x, y)
-    doc.text(String(line.quantity ?? '—'), cols[2].x, y)
-    doc.text(String(line.unitCost ?? line.lastPurchasePrice ?? '—'), cols[3].x, y)
+    doc.text(String(line.quantity ?? '—'), cols[1].x, y)
+    doc.text(String(line.unitCost ?? line.lastPurchasePrice ?? '—'), cols[2].x, y)
     y += Math.max(titleLines.length * 5, 7)
   }
 

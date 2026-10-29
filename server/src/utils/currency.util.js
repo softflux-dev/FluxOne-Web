@@ -1,3 +1,5 @@
+import { tenantQuery } from '../config/db.js'
+
 // Supported system currencies (ISO 4217 codes)
 
 export const SUPPORTED_CURRENCIES = [
@@ -40,4 +42,53 @@ export function formatMoney(amount, currencyCode = DEFAULT_CURRENCY) {
   } catch {
     return `${meta.symbol}${n.toLocaleString()}`
   }
+}
+
+/**
+ * Compact money for activity / admin log sentences.
+ * PKR → "Rs. 50" (QA tc-logs-01a); other codes use their symbol.
+ */
+export function formatMoneyLabel(amount, currencyCode = DEFAULT_CURRENCY) {
+  const n = Number(amount)
+  const code = normalizeCurrency(currencyCode)
+  const value = Number.isFinite(n) ? n : 0
+  const amountStr =
+    Math.trunc(value) === value
+      ? String(Math.trunc(value))
+      : value.toFixed(2).replace(/\.?0+$/, '')
+  if (code === 'PKR') return `Rs. ${amountStr}`
+  const meta = getCurrencyMeta(code)
+  return `${meta.symbol}${amountStr}`
+}
+
+export async function getTenantCurrencyCode(tenantId) {
+  const { rows } = await tenantQuery(
+    tenantId,
+    `
+      SELECT COALESCE(default_currency, $2) AS "defaultCurrency"
+      FROM tenants
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [DEFAULT_CURRENCY],
+  )
+  return normalizeCurrency(rows[0]?.defaultCurrency || DEFAULT_CURRENCY)
+}
+
+/**
+ * Rewrite legacy hardcoded £ amounts in stored activity action text when tenant is PKR
+ * (older writers used £ regardless of settings — QA tc-logs-01a).
+ */
+export function rewriteLegacyLogCurrencyText(text, currencyCode = DEFAULT_CURRENCY) {
+  const raw = String(text || '')
+  if (!raw) return raw
+  const code = normalizeCurrency(currencyCode)
+  if (code === 'PKR') {
+    return raw.replace(/£(\d+(?:\.\d+)?)/g, 'Rs. $1')
+  }
+  const meta = getCurrencyMeta(code)
+  if (meta.symbol && meta.symbol !== '£') {
+    return raw.replace(/£(\d+(?:\.\d+)?)/g, `${meta.symbol}$1`)
+  }
+  return raw
 }

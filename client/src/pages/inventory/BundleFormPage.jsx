@@ -63,8 +63,8 @@ function catalogName(catalog, id) {
 function variantDisplay(item) {
   if (!item) return '—'
   if (item.variantLabel) return item.variantLabel
-  if (item.parentId) return item.scale || 'Variant'
-  return item.scale || '—'
+  if (item.parentId) return 'Variant'
+  return '—'
 }
 
 function findInsufficientComponent(lineDetails, bundleQty) {
@@ -829,7 +829,7 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
                   <TableHead>Image</TableHead>
                   <TableHead>Item name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Variant / Scale</TableHead>
+                  <TableHead>Variant Type</TableHead>
                   <TableHead>Qty in bundle</TableHead>
                   <TableHead>Item price</TableHead>
                   {!isEdit ? <TableHead /> : null}

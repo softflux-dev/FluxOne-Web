@@ -198,7 +198,7 @@ function buildApiRow(fields) {
     name: fields.name || '',
     barcode: fields.barcode || undefined,
     type: mapProductType(fields.type),
-    scale: fields.scale ? String(fields.scale).trim().toLowerCase() : undefined,
+    // Scale unit removed from product model UX — server defaults silently
     status: mapStatus(fields.status),
     category: fields.category || undefined,
     subcategory: fields.subcategory || undefined,
@@ -281,7 +281,7 @@ function parseProductsFromCsvText(raw) {
   const firstKeys = firstCells.map(normalizeHeaderKey)
   const headerMode = looksLikeHeaderRow(firstKeys) && hasIdentityHeader(firstKeys)
 
-  // Legacy positional: name,quantity?,scale? (no item code column)
+  // Legacy positional: name,quantity? (no item code column; scale ignored)
   if (!headerMode) {
     const rows = []
     for (const line of lines) {
@@ -293,7 +293,6 @@ function parseProductsFromCsvText(raw) {
         rowKind: 'product',
         name: name || '',
         stockQuantity: cells[1] ? cells[2] : cells[1],
-        scale: cells[1] ? cells[3] : cells[2],
         type: 'single',
       })
       if (isValidImportRow(row)) rows.push(row)

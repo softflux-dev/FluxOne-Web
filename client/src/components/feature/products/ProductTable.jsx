@@ -101,7 +101,7 @@ function ProductRowActions({
 
 //
 // Single / Bundle → qty + status label; Variant parent → View (SKU modal).
-// Scale is not its own column — only used as the unit label inside stock text.
+// Stock text always uses "units" — Scale field removed from product UX.
 //
 function InventoryStockCell({ row, onViewVariants, className = '' }) {
   if (row.type === PRODUCT_TYPES.VARIANT) {
@@ -119,7 +119,7 @@ function InventoryStockCell({ row, onViewVariants, className = '' }) {
       </Button>
     )
   }
-  const stock = formatInventoryStock(row.quantity, row.reorderPoint, row.scale)
+  const stock = formatInventoryStock(row.quantity, row.reorderPoint)
   return (
     <span
       className={`text-xs font-medium whitespace-nowrap ${stock.className} ${className}`.trim()}
@@ -252,7 +252,7 @@ export function ProductTable({
         />
       ) : (
         <>
-          {/* Mobile cards — Scale is not shown as its own field */}
+          {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
             <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2">
               {selectAllCheckbox}

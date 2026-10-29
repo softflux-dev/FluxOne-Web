@@ -263,12 +263,11 @@ export function GenerateOrderDialog({
                     >
                       <Trash2 className="size-4" />
                     </Button>
-                    <p className="text-[11px] text-slate-400 sm:col-span-4">
-                      Scale: {line.scale}
-                      {product
-                        ? ` · Catalog last purchase ${money(product.purchasePrice)}`
-                        : ''}
-                    </p>
+                    {product ? (
+                      <p className="text-[11px] text-slate-400 sm:col-span-4">
+                        Catalog last purchase {money(product.purchasePrice)}
+                      </p>
+                    ) : null}
                   </div>
                 )
               })}

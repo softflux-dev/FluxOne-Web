@@ -62,7 +62,7 @@ export function usePurchaseOrders(initialFilters = EMPTY_FILTERS) {
   )
 
   const fetchDetail = useCallback(
-    (id) => asResult(dispatch(fetchOrderDetail(id)).unwrap()),
+    (id) => asResult(dispatch(fetchOrderDetail({ id, force: true })).unwrap()),
     [dispatch],
   )
 

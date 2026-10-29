@@ -142,23 +142,14 @@ export async function approve(req, res) {
     })
     if (!order) return fail(res, 'Purchase order not found', 404)
 
-    // Attach generated invoices for BM/IM clients (TL §10)
-    let invoices = null
-    try {
-      invoices = await listInvoicesForOrder(tenantId, orderId, { branchId })
-    } catch (invoiceErr) {
-      console.error('Order approve invoice list failed:', invoiceErr.message)
-    }
-
-    try {
-      await notifyInventoryManagerOfOrderApproved(tenantId, order, {
-        branchManagerName: order.approvedByName || 'Branch Manager',
-      })
-    } catch (notifyErr) {
+    // Respond immediately — do not await invoice re-list or IM notify (UX latency).
+    void notifyInventoryManagerOfOrderApproved(tenantId, order, {
+      branchManagerName: order.approvedByName || 'Branch Manager',
+    }).catch((notifyErr) => {
       console.error('Order approve notification failed:', notifyErr.message)
-    }
+    })
 
-    return success(res, { ...order, invoices })
+    return success(res, order)
   } catch (err) {
     return failFromError(res, err)
   }

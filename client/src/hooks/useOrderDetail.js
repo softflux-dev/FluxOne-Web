@@ -21,9 +21,11 @@ export function useOrderDetail(orderId, { autoFetch = true } = {}) {
   const detailError = useAppSelector((state) => state.orders.detailError)
   const mutating = useAppSelector((state) => state.orders.mutating)
 
+  // TC-RECEVAL STOCK-92A — always force-refresh on open so remaining qty matches backend
+  // (cached selected after a mid-flight leave caused "exceeds remaining (0)" while UI showed 1)
   useEffect(() => {
     if (!autoFetch || !orderId) return undefined
-    void dispatch(fetchOrderDetail(orderId))
+    void dispatch(fetchOrderDetail({ id: orderId, force: true }))
     return undefined
   }, [orderId, autoFetch, dispatch])
 

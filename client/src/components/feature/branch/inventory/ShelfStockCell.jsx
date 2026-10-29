@@ -18,7 +18,7 @@ export function ShelfStockCell({ product, onViewVariants, className }) {
     )
   }
 
-  const stock = formatShelfQuantity(product?.quantity, product?.scale || 'pcs')
+  const stock = formatShelfQuantity(product?.quantity)
   return (
     <span className={`font-mono font-bold whitespace-nowrap text-slate-900 ${className || ''}`.trim()}>
       {stock.qty.toLocaleString()}{' '}

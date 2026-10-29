@@ -11,12 +11,24 @@ function httpError(status, message) {
   return error
 }
 
-// INV-2026-00143 — tenant + calendar-year sequence (row locked in tx)
-async function allocateInvoiceNumber(client, tenantId, invoiceDate = new Date()) {
-  const year = invoiceDate instanceof Date ? invoiceDate.getUTCFullYear() : new Date(invoiceDate).getUTCFullYear()
+function invoiceYearFromDate(invoiceDate = new Date()) {
+  const year =
+    invoiceDate instanceof Date
+      ? invoiceDate.getUTCFullYear()
+      : new Date(invoiceDate).getUTCFullYear()
   if (!Number.isFinite(year) || year < 2000) {
     throw httpError(500, 'Invalid invoice year for number allocation')
   }
+  return year
+}
+
+// INV-2026-00143 — tenant + calendar-year sequence (row locked in tx).
+// Allocate `count` numbers in one counter bump (avoids N round-trips on multi-supplier approve).
+async function allocateInvoiceNumbers(client, tenantId, invoiceDate = new Date(), count = 1) {
+  const n = Math.max(0, Math.trunc(Number(count) || 0))
+  if (n <= 0) return []
+
+  const year = invoiceYearFromDate(invoiceDate)
 
   await tenantClientQuery(
     client,
@@ -34,17 +46,21 @@ async function allocateInvoiceNumber(client, tenantId, invoiceDate = new Date())
     tenantId,
     `
       UPDATE purchase_order_invoice_counters
-      SET last_value = last_value + 1
+      SET last_value = last_value + $3
       WHERE tenant_id = $1 AND year = $2
       RETURNING last_value AS "lastValue", year
     `,
-    [year],
+    [year, n],
   )
-  const seq = rows[0]?.lastValue
-  if (!seq) throw httpError(500, 'Failed to allocate invoice number')
-
-  const padded = String(seq).padStart(5, '0')
-  return `INV-${year}-${padded}`
+  const end = Number(rows[0]?.lastValue)
+  if (!Number.isFinite(end) || end < n) {
+    throw httpError(500, 'Failed to allocate invoice number')
+  }
+  const start = end - n + 1
+  return Array.from({ length: n }, (_, i) => {
+    const seq = start + i
+    return `INV-${year}-${String(seq).padStart(5, '0')}`
+  })
 }
 
 function money4(value) {
@@ -209,6 +225,9 @@ async function loadApproveSnapshot(client, tenantId, purchaseOrderId) {
  * Create one invoice per supplier company for an approved order.
  * Idempotent: existing (order, supplier) rows are left unchanged.
  * Call inside the same transaction as approve (B2 wiring).
+ *
+ * Perf: one existing-invoice lookup, one counter bump for all new numbers,
+ * one multi-row INSERT for each invoice's line items (was N+1 per line).
  */
 export async function createInvoicesForApprovedOrder(
   client,
@@ -226,38 +245,56 @@ export async function createInvoicesForApprovedOrder(
     throw httpError(400, 'Cannot create invoices for rejected or cancelled orders')
   }
 
-  const effectiveDate =
-    invoiceDate ||
-    order.approvedAt ||
-    new Date()
+  const effectiveDate = invoiceDate || order.approvedAt || new Date()
+  const branchContact = order.branchManagerPhone || null
+
+  const { rows: existingRows } = await tenantClientQuery(
+    client,
+    tenantId,
+    `
+      SELECT
+        id,
+        supplier_id AS "supplierId",
+        invoice_number AS "invoiceNumber"
+      FROM purchase_order_invoices
+      WHERE tenant_id = $1 AND purchase_order_id = $2
+    `,
+    [purchaseOrderId],
+  )
+  const existingBySupplier = new Map(
+    existingRows.map((row) => [row.supplierId, row]),
+  )
 
   const created = []
+  const toCreate = []
 
   for (const company of companies) {
     const companyLines = lines.filter((line) => line.supplierId === company.supplierId)
     if (!companyLines.length) continue
 
-    // Skip if this company already has an invoice (locked snapshot)
-    const { rows: existing } = await tenantClientQuery(
-      client,
-      tenantId,
-      `
-        SELECT id, invoice_number AS "invoiceNumber"
-        FROM purchase_order_invoices
-        WHERE tenant_id = $1
-          AND purchase_order_id = $2
-          AND supplier_id = $3
-        LIMIT 1
-      `,
-      [purchaseOrderId, company.supplierId],
-    )
-    if (existing[0]) {
-      created.push({ id: existing[0].id, invoiceNumber: existing[0].invoiceNumber, skipped: true })
+    const existing = existingBySupplier.get(company.supplierId)
+    if (existing) {
+      created.push({
+        id: existing.id,
+        invoiceNumber: existing.invoiceNumber,
+        skipped: true,
+      })
       continue
     }
+    toCreate.push({ company, companyLines })
+  }
 
-    const invoiceNumber = await allocateInvoiceNumber(client, tenantId, effectiveDate)
-    const branchContact = order.branchManagerPhone || null
+  const invoiceNumbers = await allocateInvoiceNumbers(
+    client,
+    tenantId,
+    effectiveDate,
+    toCreate.length,
+  )
+
+  for (let i = 0; i < toCreate.length; i += 1) {
+    const { company, companyLines } = toCreate[i]
+    const invoiceNumber = invoiceNumbers[i]
+    if (!invoiceNumber) throw httpError(500, 'Failed to allocate invoice number')
 
     const { rows: inserted } = await tenantClientQuery(
       client,
@@ -307,11 +344,11 @@ export async function createInvoicesForApprovedOrder(
     const invoice = inserted[0]
     if (!invoice) throw httpError(500, 'Failed to insert purchase order invoice')
 
+    const itemRows = []
     let sortOrder = 0
     for (const line of companyLines) {
       const qty = Number(line.quantity) || 0
       if (qty <= 0) continue
-      // Prefer last purchase (previous) price; fall back to unit cost on the line
       const unitPrice = money4(
         line.lastPurchasePrice != null && line.lastPurchasePrice !== ''
           ? line.lastPurchasePrice
@@ -319,10 +356,44 @@ export async function createInvoicesForApprovedOrder(
       )
       const lineTotal = money4(qty * unitPrice)
       sortOrder += 1
+      itemRows.push({
+        purchaseOrderItemId: line.purchaseOrderItemId,
+        productId: line.productId,
+        itemName: line.itemName || 'Item',
+        variantLabel: line.variantLabel || null,
+        scale: line.scale || null,
+        qty,
+        unitPrice,
+        lineTotal,
+        sortOrder,
+      })
+    }
 
-      await tenantClientQuery(
-        client,
-        tenantId,
+    if (itemRows.length) {
+      const params = []
+      const valueSql = itemRows
+        .map((row, idx) => {
+          const base = idx * 11
+          params.push(
+            tenantId,
+            invoice.id,
+            row.purchaseOrderItemId,
+            row.productId,
+            row.itemName,
+            row.variantLabel,
+            row.scale,
+            row.qty,
+            row.unitPrice,
+            row.lineTotal,
+            row.sortOrder,
+          )
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11})`
+        })
+        .join(',\n          ')
+
+      // tenantClientQuery prefixes tenantId as $1 — build absolute placeholders carefully.
+      // Use a plain client.query with tenant_id already in VALUES to avoid double-prefix issues.
+      await client.query(
         `
           INSERT INTO purchase_order_invoice_items (
             tenant_id,
@@ -337,20 +408,10 @@ export async function createInvoicesForApprovedOrder(
             line_total,
             sort_order
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          VALUES
+          ${valueSql}
         `,
-        [
-          invoice.id,
-          line.purchaseOrderItemId,
-          line.productId,
-          line.itemName || 'Item',
-          line.variantLabel || null,
-          line.scale || null,
-          qty,
-          unitPrice,
-          lineTotal,
-          sortOrder,
-        ],
+        params,
       )
     }
 

@@ -326,7 +326,7 @@ export function AddStockInDialog({
                 <li key={row.productId} className="rounded-lg border border-border px-3 py-2">
                   <p className="font-semibold text-slate-900">{row.productName}</p>
                   <p className="text-xs text-slate-500">
-                    Qty {row.quantity} · {row.scale}
+                    Qty {row.quantity}
                     {row.purchasePrice !== '' ? ` · Purchase ${row.purchasePrice}` : ''}
                     {row.sellingPrice !== '' ? ` · Selling ${row.sellingPrice}` : ''}
                   </p>

@@ -3,10 +3,18 @@ import {
   formatActivityMessage,
   formatAffectedItem,
 } from '../../../utils/activityLog.util.js'
+import {
+  getTenantCurrencyCode,
+  rewriteLegacyLogCurrencyText,
+} from '../../../utils/currency.util.js'
 import { buildAdminLogsListQuery } from './logs.filterSql.js'
 
-function mapRow(row) {
+function mapRow(row, currencyCode) {
   const details = row.details || {}
+  const message = rewriteLegacyLogCurrencyText(
+    formatActivityMessage(row.actorName, row.action, details),
+    currencyCode,
+  )
   return {
     id: row.id,
     branchId: row.branchId,
@@ -21,7 +29,7 @@ function mapRow(row) {
     entityId: row.entityId,
     details,
     createdAt: row.createdAt,
-    message: formatActivityMessage(row.actorName, row.action, details),
+    message,
     affectedItem: formatAffectedItem(details, row.entityType, row.entityId),
   }
 }
@@ -32,6 +40,7 @@ function mapRow(row) {
  */
 export async function listAdminActivityLogs(tenantId, filters = {}) {
   const { params, whereSql, limit, offset, page } = buildAdminLogsListQuery(filters)
+  const currencyCode = await getTenantCurrencyCode(tenantId)
 
   const { rows: countRows } = await tenantQuery(
     tenantId,
@@ -75,7 +84,7 @@ export async function listAdminActivityLogs(tenantId, filters = {}) {
   )
 
   return {
-    items: rows.map(mapRow),
+    items: rows.map((row) => mapRow(row, currencyCode)),
     total: countRows[0]?.total || 0,
     page,
     limit,

@@ -9,6 +9,10 @@ import {
   stockActionFromMovement,
   writeAdminActivity,
 } from '../../../utils/adminActivityLog.util.js'
+import {
+  formatMoneyLabel,
+  getTenantCurrencyCode,
+} from '../../../utils/currency.util.js'
 
 // products.quantity = on-hand for that branch-scoped product row (IM source of truth).
 // branch_inventory = per-branch allocation — must stay in sync when IM adjusts stock
@@ -1440,6 +1444,7 @@ export async function updateDailyPrice(
     const row = rows[0] || null
     if (row && before) {
       const label = row.variantLabel ? `${row.name} (${row.variantLabel})` : row.name
+      const currency = await getTenantCurrencyCode(tenantId)
       if (
         sellingPrice != null &&
         Number(before.sellingPrice) !== Number(row.sellingPrice)
@@ -1453,7 +1458,7 @@ export async function updateDailyPrice(
             action: 'daily_price_change',
             entityType: 'product',
             entityId: productId,
-            actionText: `Changed selling price of ${label} from £${before.sellingPrice} to £${row.sellingPrice}.`,
+            actionText: `Changed selling price of ${label} from ${formatMoneyLabel(before.sellingPrice, currency)} to ${formatMoneyLabel(row.sellingPrice, currency)}.`,
             affectedItem: label,
           },
           client,
@@ -1472,7 +1477,7 @@ export async function updateDailyPrice(
             action: 'purchase_price_change',
             entityType: 'product',
             entityId: productId,
-            actionText: `Changed purchase price of ${label} from £${before.purchasePrice} to £${row.purchasePrice}.`,
+            actionText: `Changed purchase price of ${label} from ${formatMoneyLabel(before.purchasePrice, currency)} to ${formatMoneyLabel(row.purchasePrice, currency)}.`,
             affectedItem: label,
           },
           client,
