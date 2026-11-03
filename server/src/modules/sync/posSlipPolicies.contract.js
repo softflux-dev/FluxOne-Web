@@ -1,3 +1,8 @@
+// posSlipPolicies.contract.js — POS receipt slip/policy contract (bootstrap + delta).
+// Purpose: field names + helpers so POS prints enabled Admin policies on invoices.
+// Prefer company.slipPolicies[]; fallback returnInstructions on older payloads.
+// Read next: sync.mapper.js (slipPolicies), docs/SYNC_FLOW.md § contracts.
+
 /**
  * FluxOne-POS slip / invoice policy contract (bootstrap + delta)
  *

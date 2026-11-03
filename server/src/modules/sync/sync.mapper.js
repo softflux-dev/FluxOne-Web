@@ -1,11 +1,8 @@
-// Dual cloud + POS field names for bootstrap/delta responses.
-//
-// FluxOne-POS invoice slip policies:
-// See ./posSlipPolicies.contract.js — after sync, print company.slipPolicies
-// (or returnInstructions fallback) on the sale receipt footer.
-//
-// FluxOne-POS offline login:
-// See ./posOfflineAuth.contract.js
+// sync.mapper.js — dual cloud + POS field names for bootstrap/delta responses.
+// Purpose: mapSnapshotForPos so desktop POS gets sku/price, user hashes, slipPolicies, etc.
+// Slip policies: see ./posSlipPolicies.contract.js (print on sale receipt footer).
+// Offline login: see ./posOfflineAuth.contract.js (bcrypt hashes in users[]).
+// Read next: those contracts, then sync.controller.js bootstrap/delta handlers.
 
 import {
   POS_SLIP_POLICY_FIELDS,

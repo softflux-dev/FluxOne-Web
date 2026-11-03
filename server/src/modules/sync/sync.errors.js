@@ -1,3 +1,8 @@
+// sync.errors.js — stable error codes + rejected[] builders for POS sync.
+// Purpose: shared contract for push failures and request-level sync errors.
+// Shape: code, reason, retryable, hint, optional fieldPaths/details/context.
+// Read next: sync.controller.js (buildRejectedPushEvent), docs/SYNC_FLOW.md.
+
 /**
  * Sync error contract for POS ↔ cloud.
  *

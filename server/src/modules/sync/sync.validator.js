@@ -1,3 +1,8 @@
+// sync.validator.js — Zod schemas + POS payload normalizers for /api/sync.
+// Purpose: validate push body, bootstrap/delta/sales queries, and per-event payloads.
+// Also strips null quirks and maps alternate POS field names before model ingest.
+// Read next: sync.controller.js (parseSchemaOrThrow), sync.model.js (validate* helpers).
+
 import { z } from 'zod'
 import { SALE_STATUS } from '../../config/constants.js'
 

@@ -1,6 +1,5 @@
 import nodemailer from 'nodemailer'
 import { buildLoginCredentialsEmail } from './templates/login.email.js'
-import { buildLeaveDecisionEmail } from './templates/leave-decision.email.js'
 import { buildPasswordResetOtpEmail } from './templates/password-reset-otp.email.js'
 import {
   buildPurchaseOrderInvoiceEmail,
@@ -84,12 +83,6 @@ export async function sendLoginCredentialsEmail(payload) {
   return result
 }
 
-// Notify BM by email when Admin approves/rejects their leave (non-blocking).
-export async function sendLeaveDecisionEmail(payload) {
-  const { subject, text, html } = buildLeaveDecisionEmail(payload)
-  return sendMail({ to: payload.toEmail, subject, text, html })
-}
-
 // TL §10.3 — send invoice PDF to supplier representative (non-blocking / SMTP stub)
 export async function sendPurchaseOrderInvoiceEmail(payload) {
   const { subject, text, html } = buildPurchaseOrderInvoiceEmail(payload)
@@ -127,6 +120,7 @@ export async function sendPurchaseOrderInvoiceSentBmEmail(payload) {
   const { subject, text, html } = buildPurchaseOrderInvoiceSentBmEmail(payload)
   return sendMail({ to: payload.toEmail, subject, text, html })
 }
+
 // Password reset OTP (non-blocking; SMTP na ho to stub)
 export async function sendPasswordResetOtpEmail(payload) {
   const { subject, text, html } = buildPasswordResetOtpEmail(payload)

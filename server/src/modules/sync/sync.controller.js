@@ -1,3 +1,9 @@
+// sync.controller.js — HTTP handlers for POS sync endpoints.
+// Purpose: validate input, resolve branch access, call model, return { success, data }.
+// Push always responds 202 when the outer body is valid — check data.rejected[].
+// Read next: sync.model.js (SQL/ingest), sync.access.js (branch lock), docs/SYNC_FLOW.md.
+// /pull is legacy and must keep current behavior (delegates like events today).
+
 import {
   buildBootstrapSnapshot,
   buildDeltaSnapshot,

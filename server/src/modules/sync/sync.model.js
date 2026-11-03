@@ -1,3 +1,8 @@
+// sync.model.js — raw SQL + transactions for POS sync ingest and snapshots.
+// Purpose: store pos_sync_events; apply sale/refund/price/cashier_log; build bootstrap/delta.
+// Cashier logs: ingestCashierLogEvent → activityLog.util.js → activity_logs (source: pos).
+// Read next: sync.errors.js (codes), sync.mapper.js (POS response shape), docs/SYNC_FLOW.md.
+
 import { tenantClientQuery, tenantQuery, withTransaction } from '../../config/db.js'
 import { INVOICE_TYPES, MOVEMENT_TYPES, ROLES, SALE_STATUS } from '../../config/constants.js'
 import { insertLedgerEventInTx } from '../inventory-manager/control/control.model.js'

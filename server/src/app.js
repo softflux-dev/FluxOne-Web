@@ -74,9 +74,9 @@ app.use(globalLimiter)
 app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1')
-    return res.json({ status: true, data: { status: 'ok' }, error: null })
+    return res.json({ success: true, data: { status: 'ok' }, error: null })
   } catch {
-    return res.status(503).json({ status: false, error: 'Database unreachable' })
+    return res.status(503).json({ success: false, data: null, error: 'Database unreachable' })
   }
 })
 

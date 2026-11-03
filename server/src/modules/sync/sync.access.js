@@ -1,3 +1,8 @@
+// sync.access.js — branch resolution + role lock for sync push/pull/events.
+// Purpose: cashiers/BM/IM/branch_admin only touch their own branchId; admins wider on events.
+// Throws syncHttpError with BRANCH_* codes when branch missing or mismatched.
+// Read next: sync.controller.js (call sites), sync.errors.js (code catalog).
+
 import { ROLES } from '../../config/constants.js'
 import { isTenantWideAdmin } from '../../utils/branchScope.util.js'
 import { SYNC_ERROR_CODES, syncHttpError } from './sync.errors.js'
