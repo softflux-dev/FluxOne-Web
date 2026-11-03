@@ -1,3 +1,8 @@
+// posOfflineAuth.contract.js — POS offline login contract (bootstrap + delta users[]).
+// Purpose: document + name fields for bcrypt passwordHash sync (not an HTTP route).
+// Cloud includes branch_manager + cashier hashes; POS stores locally for offline verify.
+// Read next: sync.mapper.js (mapUser), docs/SYNC_FLOW.md § contracts.
+
 /**
  * FluxOne-POS offline auth contract (bootstrap + delta)
  *

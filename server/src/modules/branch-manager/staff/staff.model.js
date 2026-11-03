@@ -824,6 +824,3 @@ export async function deleteStaff(tenantId, id, { branchId } = {}) {
     return existing
   })
 }
-
-// @deprecated Prefer createStaffUser — kept for any legacy imports
-export const createStaff = createStaffUser

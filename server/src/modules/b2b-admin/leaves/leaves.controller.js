@@ -4,10 +4,8 @@ import {
   decideLeave,
 } from '../../branch-manager/leaves/leaves.model.js'
 import { notifyBmOfLeaveDecision } from '../../notifications/notifications.service.js'
-// import { sendLeaveDecisionEmail } from '../../../mail/mail.service.js'
 import { normalizeImageUrl } from '../../../utils/uploadUrl.util.js'
 import { matchesDisplayRef, normalizeSearchQuery } from '../../../utils/displayRef.util.js'
-import { tenantQuery } from '../../../config/db.js'
 import { success, fail, failFromError } from '../../../utils/response.util.js'
 
 // Admin inbox of BM self-leave requests
@@ -59,44 +57,13 @@ export async function decideManagerLeave(req, res) {
       return fail(res, 'Leave request could not be updated', 409)
     }
 
-    // In-app + email notify BM (non-blocking)
+    // In-app notify BM (non-blocking) — email path removed; notifications.service owns this
     try {
-      const { rows: bmRows } = await tenantQuery(
-        req.tenantId,
-        `
-          SELECT
-            u.full_name AS "managerName",
-            u.email AS "managerEmail",
-            b.name AS "branchName"
-          FROM users u
-          LEFT JOIN branches b ON b.id = $2 AND b.tenant_id = u.tenant_id
-          WHERE u.tenant_id = $1 AND u.id = $3
-          LIMIT 1
-        `,
-        [updated.branchId, updated.requestedBy],
-      )
-      const bm = bmRows[0] || {}
-
-      // await notifyBmOfLeaveDecision(req.tenantId, updated, {
-      //   status,
-      //   decisionReason: updated.decisionReason,
-      //   decidedByName: req.user.name || 'Admin',
-      // })
-
-      // if (bm.managerEmail) {
-      //   await sendLeaveDecisionEmail({
-      //     toEmail: bm.managerEmail,
-      //     recipientName: bm.managerName,
-      //     status,
-      //     startDate: updated.startDate,
-      //     endDate: updated.endDate,
-      //     reason: updated.reason,
-      //     decisionReason: updated.decisionReason,
-      //     branchName: bm.branchName || existing.branchName,
-      //     companyName: null,
-      //     decidedByName: req.user.name || 'Admin',
-      //   })
-      // }
+      await notifyBmOfLeaveDecision(req.tenantId, updated, {
+        status,
+        decisionReason: updated.decisionReason,
+        decidedByName: req.user.name || 'Admin',
+      })
     } catch (notifyErr) {
       console.error('[admin/leaves] Failed to notify BM:', notifyErr?.message || notifyErr)
     }
