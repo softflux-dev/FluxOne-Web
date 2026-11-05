@@ -182,7 +182,12 @@ export function BranchesPage() {
     const nextStatus = targetBranch.status === 'open' ? 'blocked' : 'open'
     const result = await setBranchStatus(targetBranch.id, nextStatus)
     if (!result.success) {
-      toastError(result.error || 'Failed to update branch status')
+      toastError(
+        result.error ||
+          (nextStatus === 'open'
+            ? 'Could not reopen this branch. Check Inventory Managers for this branch, then try again.'
+            : 'Failed to update branch status'),
+      )
       return
     }
     toastSuccess(
