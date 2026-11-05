@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ClipboardList, Settings2 } from 'lucide-react'
+import { ChevronDown, ClipboardList, Settings2 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { MotionHeader, MotionReveal } from '@/components/shared/MotionReveal'
 import { SurfaceCard } from '@/components/shared/SurfaceCard'
@@ -33,6 +33,8 @@ import {
   ShelfStockCell,
 } from '@/components/feature/branch/inventory/ShelfStockCell'
 import { DemandRequestsPanel } from '@/components/feature/branch/demand-requests/DemandRequestsPanel'
+import { getPricingBreakdown, formatMoney } from '@/lib/products/pricingBreakdown'
+import { PricingBreakdown } from '@/components/feature/branch/inventory/PricingBreakdown'
 
 const INVENTORY_TABS = [
   { id: 'stock', label: 'Stock Overview' },
@@ -66,6 +68,7 @@ export function BranchInventoryPage() {
 
   const [priceRuleOpen, setPriceRuleOpen] = useState(false)
   const [variantsTarget, setVariantsTarget] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
 
   useEffect(() => {
     const params = { limit: 100, status: 'active' }
@@ -231,6 +234,9 @@ export function BranchInventoryPage() {
                       const subcat =
                         subcategories.find((s) => s.id === prod.subcategoryId)?.name || '—'
 
+                        const pricing = variantParent ? null : getPricingBreakdown(prod)
+                        const expanded = expandedId === prod.id
+
                       return (
                         <article
                           key={prod.id}
@@ -291,6 +297,29 @@ export function BranchInventoryPage() {
                                   onViewVariants={setVariantsTarget}
                                 />
                               </div>
+
+                            {pricing ? (
+                            <div className="mt-2">
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="text-slate-500">
+                                  Final: <b className="font-mono text-slate-900">{formatMoney(pricing.final)}</b>
+                                  <span className="ml-1 text-slate-400">· Disc {pricing.discountPct}%</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedId(expanded ? null : prod.id)}
+                                  className="cursor-pointer font-semibold text-violet-700"
+                                >
+                                  {expanded ? 'Hide' : 'Show'} breakdown
+                                </button>
+                              </div>
+                              {expanded ? (
+                                <div className="mt-2">
+                                  <PricingBreakdown pricing={pricing} />
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                               {!variantParent ? (
                                 <Button
                                   size="sm"
@@ -312,14 +341,24 @@ export function BranchInventoryPage() {
                   <div className="hidden overflow-x-auto md:block">
                     <Table className="w-full min-w-[44rem] table-fixed text-left text-sm">
                       <TableHeader>
-                        <TableRow className="text-xs text-slate-500 uppercase">
-                          <TableHead className="w-14 px-2 py-3 whitespace-nowrap">Image</TableHead>
-                          <TableHead className="w-[10rem] px-2 py-3 whitespace-nowrap">Name</TableHead>
-                          <TableHead className="px-2 py-3 whitespace-nowrap">Category</TableHead>
-                          <TableHead className="w-[9rem] px-2 py-3 whitespace-nowrap">In Stock</TableHead>
-                          <TableHead className="w-[7rem] px-2 py-3 whitespace-nowrap">Status</TableHead>
-                          <TableHead className="w-[9rem] px-2 py-3 whitespace-nowrap">Actions</TableHead>
-                        </TableRow>
+                      <TableRow className="text-xs text-slate-500 uppercase">
+                        <TableHead className="w-14 px-2 py-3 whitespace-nowrap">Image</TableHead>
+                        <TableHead className="w-[8rem] px-2 py-3 whitespace-nowrap">Name</TableHead>
+                        <TableHead className="w-[7rem] px-2 py-3 whitespace-nowrap">Category</TableHead>
+                        <TableHead className="w-[10rem] px-2 py-3 whitespace-nowrap">In Stock</TableHead>
+                        <TableHead className="w-[5.5rem] px-2 py-3 whitespace-nowrap">Status</TableHead>
+                        <TableHead className="w-[5rem] px-2 py-3 whitespace-nowrap">Purchase</TableHead>
+                        <TableHead className="w-[4rem] px-2 py-3 whitespace-nowrap">Profit %</TableHead>
+                        <TableHead className="w-[5rem] px-2 py-3 whitespace-nowrap">Selling</TableHead>
+                        <TableHead className="w-[5rem] px-2 py-3 whitespace-nowrap">Discount %</TableHead>
+                        <TableHead className="w-[3.5rem] px-2 py-3 whitespace-nowrap">Tax %</TableHead>
+                        <TableHead className="w-[6rem] px-2 py-3">
+                          Final Price <span className="block normal-case">(Incl. Tax)</span>
+                        </TableHead>
+                        <TableHead className="w-[10.5rem] px-2 py-3 whitespace-nowrap">Actions</TableHead>
+                      </TableRow>
+
+                        
                       </TableHeader>
                       <TableBody>
                         {pagedProducts.map((prod) => {
@@ -331,8 +370,12 @@ export function BranchInventoryPage() {
                           const subcat =
                             subcategories.find((s) => s.id === prod.subcategoryId)?.name || '—'
 
+                            const pricing = variantParent ? null : getPricingBreakdown(prod)
+                            const expanded = expandedId === prod.id
+
                           return (
-                            <TableRow key={prod.id} className="group">
+                            <Fragment key={prod.id}>
+                            <TableRow className="group">
                               <TableCell className="px-2 py-3">
                                 {prod.imageUrl ? (
                                   <img
@@ -378,25 +421,71 @@ export function BranchInventoryPage() {
                                   <span className="text-xs text-slate-400">—</span>
                                 )}
                               </TableCell>
+
+
+                              <TableCell className="px-2 py-3 font-mono text-xs">
+                                {pricing ? formatMoney(pricing.purchase) : '—'}
+                                </TableCell>
+
+                              <TableCell className="px-2 py-3 text-xs">
+                                {pricing ? `${pricing.profitPct}%` : '—'}
+                                </TableCell>
+
+                              <TableCell className="px-2 py-3 font-mono text-xs">
+                                {pricing ? formatMoney(pricing.selling) : '—'}
+                                </TableCell>
+                              <TableCell className="px-2 py-3 text-xs">
+                                {pricing ? `${pricing.discountPct}%` : '—'}
+                                </TableCell>
+                              <TableCell className="px-2 py-3 text-xs">
+                                {pricing ? `${pricing.taxPct}%` : '—'}
+                                </TableCell>
+                              <TableCell className="px-2 py-3 font-mono text-xs font-bold">
+                                {pricing ? formatMoney(pricing.final) : '—'}
+                                </TableCell>
+
                               <TableCell className="px-2 py-3">
                                 {variantParent ? (
                                   <span className="text-xs text-slate-400">Via variants</span>
                                 ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={openDemandRequests}
-                                    className="h-8 text-xs"
-                                  >
-                                    <ClipboardList className="mr-1.5 size-3" />
-                                    Stock Request
-                                  </Button>
+                                  <div className="flex items-center gap-1.5">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={openDemandRequests}
+                                      className="h-8 text-xs"
+                                    >
+                                      <ClipboardList className="mr-1.5 size-3" />
+                                      Stock Request
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      aria-label="Toggle pricing breakdown"
+                                      aria-expanded={expanded}
+                                      onClick={() => setExpandedId(expanded ? null : prod.id)}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
+                                    </Button>
+                                  </div>
                                 )}
                               </TableCell>
                             </TableRow>
+
+                            
+                            {expanded && pricing ? (
+                              <TableRow>
+                                <TableCell colSpan={12} className="bg-slate-50/60 px-4 py-3">
+                                  <PricingBreakdown pricing={pricing} />
+                                </TableCell>
+                              </TableRow>
+                            ) : null}
+                          </Fragment>
                           )
                         })}
                       </TableBody>
+                          )
                     </Table>
                   </div>
                 </>

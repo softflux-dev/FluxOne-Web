@@ -27,7 +27,7 @@ export function OrderCatalogueResults({
 
   return (
     <div className={cn('space-y-2', className)}>
-      <p className="text-xs font-medium text-slate-500">
+      <p className="ml-2 mt-3 text-xs font-medium text-slate-500">
         {items.length} matching item{items.length === 1 ? '' : 's'} from the catalogue
       </p>
       {/* Fixed max height + internal scroll — keeps filters / order lines on-screen */}

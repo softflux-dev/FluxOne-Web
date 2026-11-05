@@ -61,6 +61,7 @@ export function OrderLinesTable({
   lines = [],
   onQuantityChange,
   onRemove,
+  readOnly = false,
   className,
 }) {
   if (!lines.length) {
@@ -80,12 +81,12 @@ export function OrderLinesTable({
             <TableHead className="px-3 py-3 font-semibold">Category / Sub Category</TableHead>
             <TableHead className="px-3 py-3 font-semibold">Previous Purchase Price</TableHead>
             <TableHead className="px-3 py-3 font-semibold">Required Quantity</TableHead>
-            <TableHead className="px-3 py-3 font-semibold">Action</TableHead>
+            {!readOnly ? <TableHead className="px-3 py-3 font-semibold">Action</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
           {lines.map((line) => (
-            <TableRow key={line.productId} className="align-middle">
+            <TableRow key={line.productId || line.itemId} className="align-middle">
               <TableCell className="px-3 py-3">
                 <span className="block font-medium text-slate-900">{line.name}</span>
                 {line.itemCode ? (
@@ -99,23 +100,29 @@ export function OrderLinesTable({
                 </span>
               </TableCell>
               <TableCell className="px-3 py-3">
-                <QtyStepper
-                  value={line.quantity}
-                  onChange={(qty) => onQuantityChange?.(line.productId, qty)}
-                />
+                {readOnly ? (
+                  <span className="text-sm font-medium text-slate-800">{line.quantity}</span>
+                ) : (
+                  <QtyStepper
+                    value={line.quantity}
+                    onChange={(qty) => onQuantityChange?.(line.productId || line.itemId, qty)}
+                  />
+                )}
               </TableCell>
-              <TableCell className="px-3 py-3">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="size-8 text-rose-600 hover:bg-rose-50"
-                  aria-label={`Remove ${line.name}`}
-                  onClick={() => onRemove?.(line.productId)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </TableCell>
+              {!readOnly ? (
+                <TableCell className="px-3 py-3">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 text-rose-600 hover:bg-rose-50"
+                    aria-label={`Remove ${line.name}`}
+                    onClick={() => onRemove?.(line.productId || line.itemId)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </TableCell>
+              ) : null}
             </TableRow>
           ))}
         </TableBody>

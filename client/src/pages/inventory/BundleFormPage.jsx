@@ -43,6 +43,8 @@ import { fieldErrorClass } from '@/lib/validation/fieldErrors'
 import { finalPriceFromSelling } from '@/lib/products/pricing'
 import { useFieldErrors } from '@/hooks/shared/useFieldErrors'
 import { cn } from '@/lib/utils'
+import { OrderItemFilters } from '@/components/feature/orders/OrderItemFilters'
+import { OrderCatalogueResults } from '@/components/feature/orders/OrderCatalogueResults'
 
 const BUNDLE_FIELD_IDS = {
   name: 'bundle-name',
@@ -112,6 +114,12 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
   const [subcategoryId, setSubcategoryId] = useState('')
   const [productId, setProductId] = useState('')
   const [variantSkuId, setVariantSkuId] = useState('')
+
+  const [productSearch, setProductSearch] = useState('')
+  const [productTypeFilter, setProductTypeFilter] = useState('')
+  const [variantTypeFilter, setVariantTypeFilter] = useState('')
+  const [variantValueFilter, setVariantValueFilter] = useState('')
+
   const [variantSkus, setVariantSkus] = useState([])
   const [variantsLoading, setVariantsLoading] = useState(false)
   const [lines, setLines] = useState([])
@@ -220,26 +228,149 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
     return (catalog.childrenByParent.get(categoryId) || []).filter((row) => row.isActive !== false)
   }, [catalog.childrenByParent, categoryId])
 
+  const categoryFilterOptions = useMemo(
+  () =>
+    parents.map((row) => ({
+      id: row.id,
+      label: row.name,
+    })),
+  [parents],
+)
+
+const subcategoryFilterOptions = useMemo(
+  () =>
+    subcategories.map((row) => ({
+      id: row.id,
+      label: row.name,
+    })),
+  [subcategories],
+)
+
   const selectedIds = useMemo(() => new Set(lines.map((row) => row.itemId)), [lines])
 
   // Parents for picker: singles + variant parents (not bundles).
   // Sub category is optional — category alone lists all products under that category.
   const productChoices = useMemo(() => {
-    if (!categoryId) return []
-    return bundleOptions.filter((item) => {
-      if (item.type === PRODUCT_TYPES.BUNDLE) return false
-      if (item.parentId) return false
-      if (item.categoryId !== categoryId) return false
-      if (subcategoryId && item.subcategoryId !== subcategoryId) return false
-      return true
-    })
-  }, [bundleOptions, categoryId, subcategoryId])
+  const search = productSearch.trim().toLowerCase()
+
+  return bundleOptions.filter((item) => {
+    // Bundle products cannot be added inside another bundle
+    if (item.type === PRODUCT_TYPES.BUNDLE) return false
+
+    // Show parent products only
+    if (item.parentId) return false
+
+    // Optional category filter
+    if (categoryId && item.categoryId !== categoryId) return false
+
+    // Optional subcategory filter
+    if (subcategoryId && item.subcategoryId !== subcategoryId) {
+      return false
+    }
+
+    // Optional product type filter
+    if (productTypeFilter && item.type !== productTypeFilter) {
+      return false
+    }
+
+    // Search by product name or item code
+    if (
+      search &&
+      !String(item.name || '').toLowerCase().includes(search) &&
+      !String(item.itemCode || '').toLowerCase().includes(search)
+    ) {
+      return false
+    }
+
+    return true
+  })
+}, [
+  bundleOptions,
+  categoryId,
+  subcategoryId,
+  productTypeFilter,
+  productSearch,
+])
+
+const productFilterOptions = useMemo(
+  () =>
+    productChoices.map((item) => ({
+      id: item.id,
+      label: item.name,
+    })),
+  [productChoices],
+)
 
   const selectedParent = useMemo(
     () => productChoices.find((p) => p.id === productId) || null,
     [productChoices, productId],
   )
   const isVariantParent = selectedParent?.type === PRODUCT_TYPES.VARIANT
+
+ const variantTypeOptions = useMemo(() => {
+  const values = new Set()
+
+  variantSkus.forEach((sku) => {
+    ;(sku.parts || []).forEach((part) => {
+      const type = part.typeName || part.type_name
+      if (type) values.add(type)
+    })
+  })
+
+  return [...values].map((value) => ({
+    id: value,
+    label: value,
+  }))
+}, [variantSkus]) 
+
+const variantValueOptions = useMemo(() => {
+  const values = new Set()
+
+  variantSkus.forEach((sku) => {
+    ;(sku.parts || []).forEach((part) => {
+      const type = part.typeName || part.type_name
+      const value = part.valueName || part.value_name
+
+      if (value && (!variantTypeFilter || type === variantTypeFilter)) {
+        values.add(value)
+      }
+    })
+  })
+
+  return [...values].map((value) => ({
+    id: value,
+    label: value,
+  }))
+}, [variantSkus, variantTypeFilter])
+
+
+const filteredVariantSkus = useMemo(() => {
+  return variantSkus.filter((sku) => {
+    const parts = sku.parts || []
+
+    if (
+      variantTypeFilter &&
+      !parts.some(
+        (part) =>
+          (part.typeName || part.type_name) === variantTypeFilter,
+      )
+    ) {
+      return false
+    }
+
+    if (
+      variantValueFilter &&
+      !parts.some(
+        (part) =>
+          (part.valueName || part.value_name) === variantValueFilter,
+      )
+    ) {
+      return false
+    }
+
+    return true
+  })
+}, [variantSkus, variantTypeFilter, variantValueFilter])
 
   // Load variant SKUs when a variant parent is selected (create only)
   useEffect(() => {
@@ -365,6 +496,54 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
     setSubcategoryId('')
     resetPicker()
   }
+
+  function handleOrderFiltersChange(next) {
+  setCategoryId(next.categoryId || '')
+  setSubcategoryId(next.subcategoryId || '')
+  setProductTypeFilter(next.productType || '')
+  setProductId(next.productId || '')
+  setVariantTypeFilter(next.variantTypeId || '')
+  setVariantValueFilter(next.variantValueId || '')
+}
+
+    function addProductChoice(item) {
+  // Variant parent needs an exact SKU selection first
+  if (item.type === PRODUCT_TYPES.VARIANT) {
+    setProductId(item.id)
+    setVariantSkuId('')
+    setVariantTypeFilter('')
+    setVariantValueFilter('')
+    return
+  }
+
+  // Prevent duplicate products
+  if (selectedIds.has(item.id)) {
+    applyErrors(
+      {
+        items: 'This item is already in the bundle. Increase its quantity instead.',
+      },
+      BUNDLE_FIELD_IDS,
+      BUNDLE_FIELD_ORDER,
+    )
+    return
+  }
+
+  setItemCache((prev) => ({
+    ...prev,
+    [item.id]: item,
+  }))
+
+  resetErrors()
+  clearField('items')
+
+  setLines((prev) => [
+    ...prev,
+    {
+      itemId: item.id,
+      quantity: 1,
+    },
+  ])
+}
 
   function addItem() {
     if (!productId) {
@@ -708,113 +887,187 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
           <FieldError message={fieldErrors.items} />
         </div>
         {!isEdit ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-category">Category</Label>
-              <NativeSelect
-                id="bundle-category"
-                value={categoryId}
-                onChange={(event) => handleCategoryChange(event.target.value)}
-                disabled={catalogLoading}
-              >
-                <option value="">Select category</option>
-                {parents.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-subcategory">
-                Sub category{' '}
-                <span className="font-normal text-slate-400">(optional)</span>
-              </Label>
-              <NativeSelect
-                id="bundle-subcategory"
-                value={subcategoryId}
-                onChange={(event) => {
-                  setSubcategoryId(event.target.value)
-                  resetPicker()
-                }}
-                disabled={!categoryId || subcategories.length === 0}
-              >
-                <option value="">
-                  {!categoryId
-                    ? 'Select category first'
-                    : subcategories.length
-                      ? 'All — category only'
-                      : 'No sub categories'}
+  <div className="space-y-4">
+
+   {/* Reusable Product Filters */}
+<OrderItemFilters
+  filters={{
+    categoryId,
+    subcategoryId,
+    productType: productTypeFilter,
+    productId,
+    variantTypeId: variantTypeFilter,
+    variantValueId: variantValueFilter,
+  }}
+  categoryOptions={categoryFilterOptions}
+  subcategoryOptions={subcategoryFilterOptions}
+  productOptions={productFilterOptions}
+  variantTypeOptions={variantTypeOptions}
+  variantValueOptions={variantValueOptions}
+  showVariantFilters={isVariantParent}
+  onChange={handleOrderFiltersChange}
+  onClear={() => {
+    setCategoryId('')
+    setSubcategoryId('')
+    setProductTypeFilter('')
+    setProductId('')
+    setVariantTypeFilter('')
+    setVariantValueFilter('')
+    setProductSearch('')
+    setVariantSkuId('')
+    setVariantSkus([])
+  }}
+/>
+
+{/* Product search */}
+<div className="space-y-1.5">
+  <Label htmlFor="bundle-product-search">
+    Search Product
+  </Label>
+
+  <Input
+    id="bundle-product-search"
+    value={productSearch}
+    onChange={(event) =>
+      setProductSearch(event.target.value)
+    }
+    placeholder="Search name or item code..."
+  />
+</div>
+
+    {/* Scrollable product list */}
+    <div className="overflow-hidden rounded-xl border border-border">
+
+      <div className="border-b bg-slate-50 px-4 py-3">
+        <h3 className="text-sm font-semibold text-slate-800">
+          Available Products
+        </h3>
+      </div>
+
+      <div className="max-h-72 overflow-y-auto">
+
+        {bundleOptionsLoading ? (
+          <p className="p-5 text-center text-sm text-slate-500">
+            Loading products...
+          </p>
+        ) : productChoices.length === 0 ? (
+          <p className="p-5 text-center text-sm text-slate-500">
+            No products found.
+          </p>
+        ) : (
+          
+          <OrderCatalogueResults
+  items={productChoices}
+  addedProductIds={selectedIds}
+  loading={bundleOptionsLoading}
+  onAdd={addProductChoice}
+/>
+        )}
+
+      </div>
+    </div>
+
+    {/* Variant filters: visible only for selected variant product */}
+    {isVariantParent ? (
+      <div className="space-y-3 rounded-xl border border-border p-4">
+
+        <p className="text-sm font-semibold text-slate-800">
+          Select Product Variant
+        </p>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bundle-variant-type">
+              Variant Type
+            </Label>
+
+            <NativeSelect
+              id="bundle-variant-type"
+              value={variantTypeFilter}
+              onChange={(event) => {
+                setVariantTypeFilter(event.target.value)
+                setVariantValueFilter('')
+              }}
+              disabled={variantsLoading}
+            >
+              <option value="">All variant types</option>
+
+              {variantTypeOptions.map((type) => (
+                <option key={type} value={type}>
+                  {type}
                 </option>
-                {subcategories.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-product">Product</Label>
-              <NativeSelect
-                id="bundle-product"
-                value={productId}
-                onChange={(event) => {
-                  setProductId(event.target.value)
-                  setVariantSkuId('')
-                }}
-                disabled={!categoryId || bundleOptionsLoading}
-              >
-                <option value="">
-                  {bundleOptionsLoading ? 'Loading products…' : 'Select product'}
-                </option>
-                {productChoices.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                    {item.type === PRODUCT_TYPES.VARIANT ? ' (Variant)' : ''}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bundle-variant">Product variant</Label>
-              <NativeSelect
-                id="bundle-variant"
-                value={variantSkuId}
-                onChange={(event) => setVariantSkuId(event.target.value)}
-                disabled={!isVariantParent || variantsLoading || variantSkus.length === 0}
-              >
-                <option value="">
-                  {!productId
-                    ? 'Select product first'
-                    : !isVariantParent
-                      ? 'Not a variant product'
-                      : variantsLoading
-                        ? 'Loading…'
-                        : variantSkus.length === 0
-                          ? 'No combinations'
-                          : 'Select combination'}
-                </option>
-                {variantSkus.map((sku) => (
-                  <option key={sku.id} value={sku.id}>
-                    {sku.variantLabel || sku.name}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            <div className="flex items-end">
-              <Button
-                type="button"
-                variant="brand"
-                className="w-full"
-                onClick={addItem}
-                disabled={!productId || (isVariantParent && !variantSkuId)}
-              >
-                <Plus className="size-4" />
-                Add item
-              </Button>
-            </div>
+              ))}
+            </NativeSelect>
           </div>
-        ) : null}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bundle-variant-value">
+              Variant Value
+            </Label>
+
+            <NativeSelect
+              id="bundle-variant-value"
+              value={variantValueFilter}
+              onChange={(event) =>
+                setVariantValueFilter(event.target.value)
+              }
+              disabled={variantsLoading}
+            >
+              <option value="">All variant values</option>
+
+              {variantValueOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="bundle-variant">
+            Variant Combination
+          </Label>
+
+          <NativeSelect
+            id="bundle-variant"
+            value={variantSkuId}
+            onChange={(event) =>
+              setVariantSkuId(event.target.value)
+            }
+            disabled={variantsLoading || filteredVariantSkus.length === 0}
+          >
+            <option value="">
+              {variantsLoading
+                ? 'Loading variants...'
+                : 'Select combination'}
+            </option>
+
+            {filteredVariantSkus.map((sku) => (
+              <option key={sku.id} value={sku.id}>
+                {sku.variantLabel || sku.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+
+        <Button
+          type="button"
+          variant="brand"
+          onClick={addItem}
+          disabled={!variantSkuId || variantsLoading}
+        >
+          <Plus className="size-4" />
+          Add Variant
+        </Button>
+
+      </div>
+    ) : null}
+
+  </div>
+) : null}
 
         <div className={cn(!isEdit && 'mt-4')}>
           {lineDetails.length === 0 ? (
@@ -1016,3 +1269,9 @@ export function BundleFormPage({ mode = 'create', initialBundle = null, loadingD
 }
 
 export default BundleFormPage
+
+
+
+
+
+	

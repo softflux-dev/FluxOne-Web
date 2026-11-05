@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ClipboardList } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
+import { ChevronDown, ClipboardList } from 'lucide-react'
 import { TableRowsSkeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
@@ -27,6 +27,10 @@ import { displayItemCode } from '@/lib/formatDisplayId'
 import { mapProduct, PRODUCT_STATUS } from '@/lib/products/mapProduct'
 import { formatShelfQuantity, getShelfStockStatus } from '@/lib/products/shelfStockStatus'
 import { variantSkuLabel } from '@/lib/products/variantDisplay'
+import { cn } from '@/lib/utils'
+import { formatMoney } from '@/lib/currency'
+import { getPricingBreakdown } from '@/lib/products/pricingBreakdown'
+import { PricingBreakdown } from '@/components/feature/branch/inventory/PricingBreakdown'
 
 async function fetchProductWithVariants(productId) {
   const res = await apiClient.get(endpoints.products.detail(productId))
@@ -47,6 +51,7 @@ export function BranchVariantStockDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
 
   const load = useCallback(async () => {
     if (!open || !product?.id) return
@@ -103,7 +108,7 @@ export function BranchVariantStockDialog({
             </p>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border">
-              <Table className="min-w-[36rem] text-sm">
+              <Table className="min-w-[46rem] text-sm">
                 <TableHeader>
                   <TableRow className="text-xs uppercase text-slate-500">
                     <TableHead className="px-3 py-3">Image</TableHead>
@@ -111,6 +116,8 @@ export function BranchVariantStockDialog({
                     <TableHead className="px-3 py-3">SKU</TableHead>
                     <TableHead className="px-3 py-3">Stock</TableHead>
                     <TableHead className="px-3 py-3">Status</TableHead>
+                    <TableHead className="px-3 py-3 whitespace-nowrap">Discount %</TableHead>
+                    <TableHead className="px-3 py-3 whitespace-nowrap">Final (Incl. Tax)</TableHead>
                     <TableHead className="px-3 py-3">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -120,46 +127,80 @@ export function BranchVariantStockDialog({
                     const stock = formatShelfQuantity(sku.quantity)
                     const status = getShelfStockStatus(sku.quantity, sku.reorderPoint)
                     const inactive = sku.status === PRODUCT_STATUS.INACTIVE
+                    const pricing = getPricingBreakdown(sku)
+                    const expanded = expandedId === sku.id
 
                     return (
-                      <TableRow key={sku.id} className={inactive ? 'opacity-60' : ''}>
-                        <TableCell className="px-3 py-3">
-                          <ProductImageCell src={sku.imageUrl || parentImage} name={label} />
-                        </TableCell>
-                        <TableCell className="px-3 py-3">
-                          <span className="inline-block whitespace-nowrap rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-900">
-                            {label}
-                          </span>
-                          {inactive ? (
-                            <p className="mt-1 text-[11px] font-medium text-slate-400">Inactive</p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="px-3 py-3 font-mono text-xs whitespace-nowrap text-slate-500">
-                          {displayItemCode(sku)}
-                        </TableCell>
-                        <TableCell className="px-3 py-3 font-mono font-bold whitespace-nowrap text-slate-900">
-                          {stock.display}
-                        </TableCell>
-                        <TableCell className="px-3 py-3">
-                          <Badge variant={status.variant} className={status.className}>
-                            {status.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-3 py-3">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={inactive}
-                            className="h-8 text-xs"
-                            onClick={() => onViewDemandRequests?.()}
-                          >
-                            <ClipboardList className="size-3" />
-                            Stock Request
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
+  <Fragment key={sku.id}>
+    <TableRow className={inactive ? 'opacity-60' : ''}>
+      <TableCell className="px-3 py-3">
+        <ProductImageCell src={sku.imageUrl || parentImage} name={label} />
+      </TableCell>
+      <TableCell className="px-3 py-3">
+        <span className="inline-block whitespace-nowrap rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-900">
+          {label}
+        </span>
+        {inactive ? (
+          <p className="mt-1 text-[11px] font-medium text-slate-400">Inactive</p>
+        ) : null}
+      </TableCell>
+      <TableCell className="px-3 py-3 font-mono text-xs whitespace-nowrap text-slate-500">
+        {displayItemCode(sku)}
+      </TableCell>
+      <TableCell className="px-3 py-3 font-mono font-bold whitespace-nowrap text-slate-900">
+        {stock.display}
+      </TableCell>
+      <TableCell className="px-3 py-3">
+        <Badge variant={status.variant} className={status.className}>
+          {status.label}
+        </Badge>
+      </TableCell>
+
+      <TableCell className="px-3 py-3 text-xs whitespace-nowrap">
+        {pricing.discountPct}%
+      </TableCell>
+      <TableCell className="px-3 py-3 font-mono text-xs font-bold whitespace-nowrap text-slate-900">
+        {formatMoney(pricing.final)}
+      </TableCell>
+
+      <TableCell className="px-3 py-3">
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={inactive}
+            className="h-8 text-xs"
+            onClick={() => onViewDemandRequests?.()}
+          >
+            <ClipboardList className="size-3" />
+            Stock Request
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-label="Toggle pricing breakdown"
+            aria-expanded={expanded}
+            onClick={() => setExpandedId(expanded ? null : sku.id)}
+            className="h-8 w-8 p-0"
+          >
+            <ChevronDown className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+
+    {expanded ? (
+      <TableRow>
+        <TableCell colSpan={8} className="bg-slate-50/60 px-3 py-3">
+          <PricingBreakdown pricing={pricing} />
+        </TableCell>
+      </TableRow>
+    ) : null}
+  </Fragment>
+)
+              
                   })}
                 </TableBody>
               </Table>
